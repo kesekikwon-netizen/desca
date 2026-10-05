@@ -22,7 +22,7 @@
 - `app/` → Qt 위젯 앱(moc 없이 람다로). 리본 탭: 파일/홈/보기/분석/추출/내보내기. View 1 `PlanView`(QOpenGLWidget, 위에서 본 정사 화면 + 단면선 편집), View 2 `SectionView`(QPainter, 보고서 형식 단면 도면).
 - `tools/` → `asec-section`(명령줄 단면: DXF + 입면 PNG + 단면선 CSV), `asec-make-synthetic`(합성 3MX 생성).
 - `tests/` → Catch2 시험 8개 파일(section, stitch, tmx, dxf, raster, pipeline, tiff, points) + `dxf_audit.py`(ezdxf 감사).
-- 관찰: 루트 `CMakeLists.txt` 는 `add_subdirectory(app)` 를 하지만 확인 시점에 `app/CMakeLists.txt` 가 없었고, `build-linux/CMakeCache.txt` 는 `ASEC_BUILD_APP=OFF` 였음 → 앱 빌드 구성은 1차 담당이 작업 중인 것으로 보임. `dist/` 는 아직 없음.
+- 빌드: 08:30 확인 때는 `app/CMakeLists.txt` 가 없었으나 08:33 KST 에 1차 담당이 추가(연구 문서 확인). Linux = `find_package(Qt6 …)`, Windows = MinGW 교차 빌드(`cmake/mingw-w64-x86_64.cmake`) + **Qt6 정적 라이브러리 직접 링크 + `-static`**. `build-linux` 는 `ASEC_BUILD_APP=OFF`, git 커밋 없음, `dist/` 아직 없음.
 
 **기능 (1차에 이미 있음)**
 | 영역 | 내용 |
@@ -35,8 +35,8 @@
 | 스레드 | 열기·내보내기 = 작업 스레드(`runTask`), 단면 = 전용 작업 스레드(마지막 요청 우선, 취소 플래그, 끌기 중엔 미리보기 해상도) |
 
 **좌표계·높이 (M0-A 관련 현황)**
-- 3MX: 루트 `.3mx` 의 `meshPyramid` 레이어에서 `SRS` 문자열과 `SRSOrigin`(double 3개)을 읽음. 실좌표 = 로컬 + SRSOrigin (`SrsInfo::toWorld`). 3MX 경로에서는 `metadata.xml` 을 보지 않음(OBJ 만 봄).
-- `SrsInfo::epsg()` 는 `"EPSG:"` 뒤를 `atoi` 로만 읽음 → `ENU:lat,lon`·WKT 는 0(미상). **`EPSG:5186+5193` 같은 복합 좌표계는 5186 만 남고 높이 기준이 조용히 버려짐**(코드상 추정, 시험 없음).
+- 3MX: 루트 `.3mx` 의 `meshPyramid` 레이어에서 `SRS` 문자열과 `SRSOrigin`(double 3개)을 읽음. **`readTmxScene` 은 첫 meshPyramid 레이어만 읽고 반환** → 레이어 여러 개로 합친 병합 3MX(Bentley KB: SRS·원점이 같은 프로덕션을 `layers[]` 에 나열)는 나머지 레이어가 조용히 빠짐(research/roadmap-tech-research.md ①). 실좌표 = 로컬 + SRSOrigin (`SrsInfo::toWorld`). 3MX 경로에서는 `metadata.xml` 을 보지 않음(OBJ 만 봄).
+- `SrsInfo::epsg()` 는 `"EPSG:"` 뒤를 `atoi` 로만 읽음 → **`ENU:lat,lon`·WKT 는 처리 안 됨**(0 = 미상인데도 GeoTIFF 등 내보내기는 EPSG 0/사용자 정의로 그냥 진행). **`EPSG:5186+5193` 같은 복합 좌표계는 5186 만 남고 높이 기준이 조용히 버려짐**(코드상 추정, 시험 없음).
 - 높이 기준(수직 좌표계) 이름을 어디에도 표시하지 않음. 상태줄은 `좌표계 EPSG:5186` 또는 `좌표계 미상(로컬)` 뿐, SRSOrigin 은 툴팁.
 - SRS 가 없거나 모를 때 경고 창·거부 없음(라벨만 “미상”). `SRSOrigin` 이 없어도 원점 0 으로 조용히 진행.
 - 정밀도: 메시는 float32 로컬 좌표(OpenCTM 과 같음). 화면용 메시는 장면 중심을 뺀 float. **평면 화면 커서 Z 는 화면용(최대 200만 삼각형으로 단순화된) 메시의 `HeightIndex` 로 구함 → 최고 해상도 표면 높이가 아님.** 단면 화면 Z 는 커서 위치의 (s, z) 좌표일 뿐, 표면에 붙잡는 피킹이 아님.
@@ -47,6 +47,7 @@
 - 화면 메시는 열 때 한 번만 고름(삼각형 200만 예산, 시점과 무관하게 고른 해상도) → 확대해도 더 자세해지지 않음. 시점 따라 페이징(SSE)·절두체 컬링·GPU 메모리 예산 없음. 전부 한 번에 GPU 로 올림.
 - 텍스처: 긴 변 1024 px 로 줄여 RGBA 비압축 + mipmap(`GL_LINEAR_MIPMAP_LINEAR`).
 - 그리기는 요청 때만(`update()`), 연속 루프 없음 → 가만히 있을 때 부담 없음.
+- **`TileCache::decode` 가 캐시 전체 뮤텍스를 쥔 채 CTM 디코드와 JPEG 디코드 콜백을 실행** → 여러 스레드로 읽어도 디코드가 한 줄로 서서(직렬화) 병렬 로딩 효과가 없음(research ①, M0-B 필수 수정).
 - 단면 미리보기도 잎(최고 해상도) 타일을 모음 → 큰 모델에서 끌기 중 결과가 늦게 따라올 수 있음(UI 는 안 멈춤). 프레임 시간 측정·로그 없음.
 
 **레벨·그리기 순서 현황**
@@ -70,6 +71,15 @@
 
 각 마일스톤 끝: `asec_tests` 전부 통과 + 새 시험 + `dist/` 빌드 + 큰 표본 성능 로그.
 
+**우선순위가 연구 문서와 다른 점**: research/roadmap-tech-research.md §8 은 시점 의존 LOD 페이징 + 스레드 로더를 P3(고도화)로 두었다. 이 로드맵은 사용자가 “끊김 없이 부드럽게”를 최우선으로 명시했으므로 **M0-B 에 그대로 둔다**. 연구 문서의 P0(좌표 정비, 잎 피킹, TileCache 잠금 개선)는 M0-A/M0-B 에 모두 들어 있다.
+
+### 라이브러리 기본 방침 (기본값, 사용자 확인 대기)
+- **GPL 제외**: CGAL(고수준 패키지), VCGlib, libdxfrw, dxflib 은 쓰지 않음(배포 바이너리 전체에 GPL 의무). MIT/BSD/BSL/MPL/zlib 계열만.
+- **DXF** = 1차 자체 `DxfWriter` 확장. **SHP** = shapelib(`shapefil.h` SPDX 상 MIT OR LGPL-2.0-or-later, 연구 문서 확인 — **MIT 쪽으로 쓰는지 최종 라이선스 확인 필요**). 다각형 클리핑은 필요할 때 Clipper2(BSL-1.0), 메시 연산은 필요할 때만 libigl(MPL-2.0, 하위 폴더 별도 라이선스 주의) — 둘 다 기본은 자체 구현 우선.
+- **2차에서 GDAL/PROJ 는 넣지 않음**. EPSG:5185–5188 변환은 **자체 TM 계산**(모두 GRS80·TM·원점위도 38°·축척 1.0·FE 200000·FN 600000, **중앙자오선만 125/127/129/131°E**로 다름 → 같은 측지계라 격자 불필요). 기준값은 PROJ 로 미리 계산한 표를 시험 데이터로만 씀(링크 안 함).
+- **보류(결정 후 착수)**: PROJ 도입, EPSG:5174(Bessel·FN 500000·7변수) 등 구 좌표계, 지오이드(KNGeoid18) 처리.
+
+
 ---
 
 ## M0-A. 좌표계 인식과 정확한 높이 (최우선)
@@ -79,14 +89,18 @@
 **범위**
 1. **SRS 해석** (`core/srs.hpp/.cpp` 새로, `SrsInfo` 확장)
    - 출처 우선순위: ① 루트 `.3mx` 의 `SRS`/`SRSOrigin` ② 같은 폴더·위 폴더의 `metadata.xml`(3MX 에도 적용, 둘이 다르면 경고) ③ OBJ 는 `metadata.xml`.
+   - **병합 3MX**: `layers[]` 의 meshPyramid 를 전부 읽어 MeshSource 여러 개(또는 묶음 소스)로. 레이어끼리 SRS·SRSOrigin 이 다르면 경고하고 열지 않거나 첫 레이어만(사용자 선택).
    - 형식: `EPSG:n`, 복합 `EPSG:h+v`(예: `EPSG:5186+5193`, 수평+수직), `ENU:lat,lon`, WKT(WKT1/WKT2), 그 밖 = 미상. ContextCapture 문서상 SRS 는 EPSG·WKT·`ENU:LAT,LON` 형식([Bentley ContextCapture 도움말](https://docs.bentley.com/LiveContent/web/ContextCapture%20Help-v17/en/GUID-87395EA8-1312-4888-9E68-C6AE68A39FEA.html)). 복합 `+` 표기를 3MX 가 실제로 쓰는지는 **(미검증)**, 표본 필요.
    - 구조: `horizontalEpsg`, `verticalEpsg`, `kind {Projected, CompoundProjected, ENU, WKT, Unknown}`, `horizontalName`, `verticalName`, `enuLat/Lon`, `hasOrigin`.
    - 이름표: 내장 표(의존 없음) 5185 서부 / 5186 중부 / 5187 동부 / 5188 동해 (Korea 2000 / … Belt 2010), 5179, 32651/32652, 수직 5193 **KVD1964 height**(옛 이름 Incheon height, 정표고 계열, [EPSG 5193](https://epsg.com.tr/en/5193)). WKT 는 `PROJCS/PROJCRS`, `VERT_CS/VERTCRS` 이름을 문자열로 뽑아냄(완전한 파서는 안 만듦).
 2. **높이 정의 = 모델 SRS 그대로**
    - 표시 Z = 로컬 z + SRSOrigin.z. **변환·지오이드 보정 안 함.**
    - 수직 기준 표시: 복합/WKT 에 수직 좌표계가 있으면 그 이름(예: “KVD1964 height”). 수평 EPSG 만 있으면 “**높이 기준: SRS 에 명시 안 됨**”이라고 그대로 보여 줌. ContextCapture 가 이 경우 타원체고를 쓰는지 **(미검증)** → 추측해서 “타원체고”라고 쓰지 않음.
-   - ENU: “로컬 ENU(원점 lat, lon), 높이 = 원점 기준 상대(미검증)”로 표시하고 레벨 라벨 옆에 “ENU” 표시.
-   - **사용자가 목표 좌표계를 고른 경우에만 변환**: “표시/내보내기 좌표계” 선택(기본 = 모델 SRS). 변환은 PROJ 로(선택 의존, `ASEC_WITH_PROJ`). KNGeoid 같은 지오이드 격자를 PROJ 로 쓸 수 있는지, 배포 가능 여부 **(미검증)**. 변환 중이면 상태줄에 “표시 좌표계 ≠ 모델 좌표계”를 늘 띄움.
+   - Bentley 문서상 ContextCapture 는 투영/지리 좌표계에서 **기본이 타원체고**이고, “Override vertical coordinate system”을 해야 지오이드 기반 높이가 됨(research ①·⑤). 그래서 수직 기준이 SRS 에 없을 때는 “높이 기준: SRS 에 명시 안 됨 (ContextCapture 기본은 타원체고 — Bentley 문서, 실제 표본 **미검증**)”으로 표시. 값은 그대로 두고 바꾸지 않음.
+   - **“그럴듯하게 틀린 높이” 위험**: 타원체고 모델을 정표고(해발) 기준점과 비교하면 지오이드고만큼(한국 대략 수십 m 규모, 정확한 값 **미검증**) 일정하게 어긋나지만 화면상으로는 정상처럼 보임. → 기준점 대조(6)에서 평균 ΔZ 가 크고 일정하면 “높이 기준 불일치 의심” 경고를 띄움. 자동 보정은 하지 않음.
+   - ENU: “로컬 ENU(원점 lat, lon), 높이 = 원점 기준 상대(미검증)”로 표시하고 레벨 라벨 옆에 “ENU” 표시. **EPSG 를 요구하는 내보내기(GeoTIFF GeoKey, SHP .prj, 3D DXF 실좌표)는 막거나 “로컬 좌표” 확인 창**. WKT 는 이름을 뽑아 표시하고, .prj 에는 원문 WKT 를 그대로 씀(EPSG 식별은 PROJ 없이는 안 함).
+   - **사용자가 목표 좌표계를 고른 경우에만 변환**: “표시/내보내기 좌표계” 선택(기본 = 모델 SRS). 2차 기본은 **5185↔5186↔5187↔5188 수평 변환만 자체 TM 계산**(`core/tm.hpp`, Krüger 급수, 위 라이브러리 방침). 높이는 변환하지 않음. PROJ·5174·지오이드는 결정 후. 변환 중이면 상태줄에 “표시 좌표계 ≠ 모델 좌표계”를 늘 띄움.
+   - **KNGeoid18**: 국토지리정보원 격자, 공공데이터포털 이용허락 “출처표시·변경금지(제3유형)” + “허락 없이 제3자에게 양여할 수 없음” 문구 → **설치본에 넣어 재배포하는 것은 법적으로 불확실(미검증, 국토지리정보원 문의 필요)**. 나중에 넣더라도 사용자가 직접 받은 파일을 지정하는 방식.
 3. **UI 늘 표시** (`app/mainwindow.cpp` 좌표줄)
    - `좌표계: EPSG:5186 (중부원점) · 높이: KVD1964 height` / `높이: SRS 에 명시 안 됨`.
    - 커서 X, Y, Z(mm, 3자리) + “Z 출처”(표면 피킹 / 단면 위치). 단면 화면 레벨 라벨에도 기준 이름을 제목줄에.
@@ -96,7 +110,7 @@
    - `SRSOrigin` 없음 + 좌표가 큼 → 정밀도 경고(아래).
 5. **double 정밀도**
    - 원칙: GPU 는 “장면 중심 기준 float”, CPU 계산·표시는 double(로컬 + SRSOrigin). 피킹은 GPU 깊이 버퍼를 쓰지 않고 **CPU 광선-삼각형 교차(double)** 로, **최고 해상도(잎) 메시**에 대해 수행(`core/pick.hpp` 새로: `pickSurface(MeshSource&, ray) → Vec3 world`). 화면용 `HeightIndex` 는 “대략값”으로만, 클릭·측정은 잎 피킹 결과 사용.
-   - 원 데이터 한계: OpenCTM 꼭짓점이 float32 이므로 로컬 좌표가 크면 원 데이터에서 이미 잘림. float32 간격은 |값| 8,192–16,384 m 에서 약 1 mm, 131,072–262,144 m 에서 약 1.6 cm, 524,288 m 이상에서 약 6 cm. → 메시 bbox 의 |x|,|y| 가 8,192 m 를 넘으면 “원점 미적용 모델 – mm 정밀도 보장 안 됨” 경고.
+   - 원 데이터 한계: OpenCTM 꼭짓점이 float32 이므로 로컬 좌표가 크면 원 데이터에서 이미 잘림. float32 간격은 |값| 8,192–16,384 m 에서 약 1 mm, 131,072–262,144 m 에서 약 1.6 cm, 524,288 m 이상에서 약 6 cm. **SRSOrigin 이 0 이면 한국 TM 좌표(N ≈ 50만 m대)가 그대로 float32 에 들어가 약 6 cm 단위로 잘림**(Bentley 문서 예시에도 `"SRSOrigin":[0,0,0]` 이 있음, research ①). → 메시 bbox 의 |x|,|y| 가 8,192 m 를 넘으면 “원점 미적용 모델 – mm 정밀도 보장 안 됨” 경고.
 6. **정확도 검증 절차** (측량앱 기준점과 대조)
    - 입력: 측량앱 기본 CSV(`point_id, position_type, memo, northing_N, easting_E, crs_epsg, height_ground_ellipsoidal, height_ground_msl, …, height_model`) 또는 hgis 기준점 CSV(`point_id,x,y,z,…`, x=동, y=북). 열 이름은 측량앱 소스(`export/Formats.kt`, `MoreFormats.kt`)에서 확인(읽기만). **기본 CSV 는 북(N)이 동(E)보다 먼저** 나오므로 열 이름으로 읽고, 열 순서로 짐작하지 않음.
    - 높이 열 고르기는 **모델 SRS 의 높이 기준에 맞춤**: KVD1964 등 정표고 계열 → `height_ground_msl`(측량앱이 쓴 지오이드 모델은 `height_model` 열로 표시), 타원체고로 명시 → `height_ground_ellipsoidal`, 명시 없음 → 사용자에게 고르게 하고 보고서에 적음.
@@ -109,6 +123,8 @@
    - 원점 없는 큰 좌표 모델 → 정밀도 경고 발생 확인.
    - 합성 기준점 CSV(두 양식, N/E 순서 포함) → 잔차 0 ± 1 mm, 일부러 2 cm 어긋난 점은 잔차 2 cm 로 보고.
    - 3MX 와 metadata.xml 이 다를 때 경고.
+   - 병합 3MX(레이어 2개, 같은/다른 SRS) → 모두 읽힘 / 경고.
+   - 자체 TM: 5185–5188 각 원점 부근·경계 점에서 PROJ 로 미리 계산한 기준값과 1 mm 이내, 왕복(정→역) 0.1 mm 이내.
 
 **완료 기준**
 - 위 시험 전부 통과. 실제 3MX 표본 1개 이상에서 측량앱 기준점 대조표가 나오고 합격선 판정(합격선 수치는 사용자 확인 후 고정).
@@ -117,7 +133,8 @@
 
 **위험·미검증**
 - 실제 현장 3MX 의 SRS 문자열 형태(복합/ WKT/ ENU)와 높이 기준 **(미검증, 표본 필요)**.
-- PROJ + proj.db 를 MinGW 교차 빌드 배포에 넣는 부담 **(미검증)** → M0-A 는 PROJ 없이 끝나게 설계(이름표 내장). 변환은 선택 기능.
+- PROJ(+ SQLite proj.db)를 MinGW **정적** 교차 빌드에 넣는 부담 **(미검증, MXE 패키지는 있음)** → M0-A 는 PROJ 없이 끝나게 설계(이름표·TM 내장).
+- 높이 기준 불일치(타원체고 vs 정표고)·축 순서(X=북)·5174/5181/5186 혼동(FN 50만 vs 60만)은 **보기엔 그럴듯하게 틀린 결과**를 냄 → 대조 QA 와 자동 경고가 유일한 방어선.
 - 측량앱 `height_ground_msl` 의 지오이드 모델과 3MX 생성 때 쓴 높이 기준이 서로 다를 수 있음 → 잔차에 체계 오차로 나옴. 보고서에 두 기준을 같이 적음.
 
 ---
@@ -127,7 +144,8 @@
 **목표**: 큰 발굴 현장 모델(수 GB 3MX)에서도 돌리기·확대·단면선 끌기가 멈추지 않음.
 
 **범위·구현** (`core/lod.*` 확장, `app/planview.*` 렌더 루프 교체)
-1. **시점 기반 LOD 페이징**: 3MX `maxScreenDiameter` 규칙(노드 화면 지름 > maxScreenDiameter 이면 자식으로)으로 매 프레임 필요한 노드 집합 계산 → 부족한 노드는 요청 큐에, 자식이 준비될 때까지 부모 표시(구멍 없음). 1차의 열 때 한 번 고르는 방식(200만 예산)은 대체.
+0. **필수 수정 — TileCache 전역 잠금**: 지금 `TileCache::decode` 는 캐시 전체 뮤텍스를 쥔 채 CTM·JPEG 디코드를 함 → 타일별 `std::once_flag`/뮤텍스로 바꾸고 디코드는 잠금 밖에서. 이게 안 되면 아래 2(배경 로딩)·M2 병렬 단면 효과가 없음. 시험: 스레드 4개로 타일 N개 디코드 시간이 1개 스레드 대비 줄어드는지 + 경쟁 상태 없음(TSan, 가능하면).
+1. **시점 기반 LOD 페이징**: 3MX `maxScreenDiameter` 규칙(노드 화면 지름 > maxScreenDiameter 이면 자식으로)으로 매 프레임 필요한 노드 집합 계산 → 부족한 노드는 요청 큐에, 자식이 준비될 때까지 부모 표시(구멍 없음). 1차의 열 때 한 번 고르는 방식(200만 예산)은 대체. 정사 화면의 화면 지름 = 경계구 지름 / (m/px). 공식 문서는 경계구를 쓰라고 하나 구하는 법은 명시 없음 → 1차처럼 AABB 대각선(보수적) 사용. 빈 노드(resources 없음)는 “부모를 숨기되 대체 안 함”, 자식 없는 노드는 계속 표시(3MX 명세). 참고 구현: osgPlugins-3mx(MIT, PagedLOD + PIXEL_SIZE_ON_SCREEN). 연구 문서는 이 항목을 P3 로 두었지만 사용자 요구(끊김 없음) 때문에 여기 둠.
 2. **배경 로딩·디코드**: 작업 스레드 풀(코어 수 − 1)에서 `.3mxb` 읽기 + OpenCTM 디코드 + JPG 디코드 + 법선 계산. 우선순위 = 화면 중심 가까움·화면 오차 큼. GUI 스레드는 준비된 버퍼를 프레임당 시간 예산(예: 4 ms) 안에서만 GPU 로 올림. **GUI 스레드 파일 I/O 금지**(시험: 열기·탐색 중 GUI 스레드 I/O 호출 없음 – 계측 훅).
 3. **GPU 메모리 예산 + LRU**: 예산(기본 1.5 GB, 설정 가능, GPU 메모리에 맞춰 조정 **(미검증)**) 넘으면 오래 안 보인 노드부터 해제. CPU `TileCache` 예산(1차 1.5 GB)과 별도 계측.
 4. **텍스처**: mipmap 유지(1차에 있음). 압축(BC1/DXT1 또는 GPU 드라이버 압축) 선택. Qt/OpenGL 에서 S3TC 확장 지원 여부·품질 **(미검증)** → 측정 후 결정. 축소 텍스처는 LOD 단계에 맞춰.
@@ -164,11 +182,11 @@
 
 **범위**
 - 거리: 3D 거리, 수평 거리, 높이차(ΔZ), 경사(%/도). 꺾은선 누적 길이.
-- 면적: 평면 다각형의 수평 면적(신발끈 공식) + (선택) 표면 면적(잎 메시를 다각형으로 잘라 삼각형 면적 합).
-- 체적: 다각형 안의 DEM 과 기준면 사이. 기준면 = ① 지정 표고 평면(예: 78.0) ② 다각형 경계점에 맞춘 최소제곱 평면 ③ 다른 시점 모델의 DEM(조사 전/후 비교, 선택). 채움/깎기 분리.
+- 면적: **투영(평면) 면적**(신발끈 공식)과 **표면적**(다각형 기둥 안으로 잘라 낸 잎 삼각형 면적 합)을 **나란히** 표시(혼동 방지).
+- 체적: **DSM 기준면 cut/fill**(권장) — 다각형 안 DSM 셀마다 (기준면 − DSM) × 셀 면적, 양수(깎기)/음수(채움) 따로 집계. 기준면 = ① 지정 표고 평면(예: 78.0) ② 다각형 경계점에 맞춘 최소제곱 평면 ③ 다른 시점 모델의 DSM(조사 전/후 비교, 선택). 닫힌 메시 부피(발산정리)는 수밀·다양체가 전제라 사진 실측(열린 표면)에는 쓰지 않음. 2.5D DSM 은 오버행(파고든 벽)을 못 담음 **(빈도 미검증)**.
 - 단면 화면에서도 거리·높이차(두 점 클릭, (s,z) 좌표).
 
-**구현**: `core/measure.hpp`(순수 계산, 시험 쉬움), 피킹은 M0-A `pickSurface`(잎 메시, double). 체적은 M3 의 DEM 래스터(`core/dem.hpp`)를 공유. 앱: 리본 “분석” 탭에 측정 도구, 결과 패널 + 평면 화면 겹쳐 그리기. 의존 추가 없음.
+**구현**: `core/measure.hpp`(순수 계산, 시험 쉬움). **측정값은 늘 잎 메시에서 다시 계산**: 화면 클릭은 표시 LOD 로 받되, 클릭 XY 주변 작은 띠/상자로 `collectLeafMeshes` → 연직 광선-삼각형 교차 중 **최대 Z**(지표) = M0-A `pickSurface`(double). 결과 옆에 “잎 사용 여부·대체 노드 수(`fallbackNodes`)” 기록. 표면적 클리핑은 자체 Sutherland–Hodgman(볼록) 또는 Clipper2(BSL-1.0). TM 평면 거리라 축척계수·표고 보정은 안 함(발굴 규모에선 무시 가능해 보이나 정량값 **미검증**). 체적은 M3 의 DEM 래스터(`core/dem.hpp`)를 공유. 앱: 리본 “분석” 탭에 측정 도구, 결과 패널 + 평면 화면 겹쳐 그리기. 의존 추가 없음.
 
 **입출력**: 입력 = 화면 클릭 점(실좌표). 출력 = 측정 목록 CSV(`id, 종류, 값, 단위, 점 좌표 목록, 좌표계, 높이 기준`) + DXF(측정선·문자, 레이어 `MEASURE`).
 
@@ -182,13 +200,13 @@
 
 **범위**: CSV 두 양식(측량앱 기본 CSV, hgis 기준점 CSV) 자동 판별(머리줄 열 이름), 일반 CSV 는 열 지정 대화상자. **축 순서 판별·경고**: EPSG:5186 등의 공식 축 순서는 northing, easting(X=북)이고 한국 측량 CSV 도 X=북 관례가 흔하지만 GIS 도구·hgis CSV 는 x=동 → 열 이름 + 값 범위(모델 bbox 와 겹치는지)로 판별, 뒤바뀐 것 같으면 경고(research/pc-section-tools.md §2.1·§7-3). 단면 근처 점은 **단면에 투영해 표시하고 각 점의 이격거리(offset)·좌/우**를 표에 보여 줌(같은 문서 §7-4). (선택) 측량앱 SHP(PointZ, `points_<EPSG>.shp`)·GeoJSON 은 후순위. 점 이름·종류(`position_type`)·메모 표시, 종류별 기호.
 
-**구현**: `core/points_io.hpp`(CSV 파서: UTF-8/BOM, CRLF, 따옴표 이스케이프), 좌표계 정합은 M0-A 규칙(같은 EPSG 만 바로, 다르면 경고 또는 사용자가 고른 변환). 화면 표시는 실좌표 → 로컬(− SRSOrigin) → 중심 기준 float. 측량앱 프로젝트에는 아무것도 쓰지 않음(읽기만).
+**구현**: `core/points_io.hpp`(CSV 파서: UTF-8/BOM, CRLF, 따옴표 이스케이프; 일반 CSV 열 지정 대화상자는 “X=북” 체크가 기본값), 값 범위 검사(N 이 약 50만대면 5174/5181(FN 500000) 의심 경고, X/Y 뒤바뀜 검사), SHP 점 읽기는 shapelib(후순위), 좌표계 정합은 M0-A 규칙(같은 EPSG 만 바로, 다르면 경고 또는 사용자가 고른 변환). 화면 표시는 실좌표 → 로컬(− SRSOrigin) → 중심 기준 float. 측량앱 프로젝트에는 아무것도 쓰지 않음(읽기만).
 
 **입출력**: 입력 CSV. 출력 = 대조표 CSV(M0-A), 점 레이어 DXF.
 
 **완료 기준**: 측량앱 소스의 머리줄과 같은 합성 CSV 두 개를 읽어 점 수·좌표·높이 정확히 일치(N/E 순서 시험 포함). EPSG 불일치 시 경고. 한글 점 이름 깨짐 없음.
 
-**위험·미검증**: 측량앱 CSV 형식이 버전에 따라 바뀔 수 있음 → 열 이름 기반으로 읽고 모르는 열은 무시. 측량앱 실제 출력 파일로 확인 **(미검증)**.
+**위험·미검증**: 연구 문서는 측량앱 폴더를 읽지 않아 형식을 “미확인”으로 적었고, 이 로드맵은 측량앱 소스 머리줄(읽기만)로 확인함. 공식 사양으로 고정할지는 측량앱 쪽 확인 필요. 측량앱 CSV 형식이 버전에 따라 바뀔 수 있음 → 열 이름 기반으로 읽고 모르는 열은 무시. 측량앱 실제 출력 파일로 확인 **(미검증)**.
 
 ---
 
@@ -203,7 +221,7 @@
 - 기울어진(비수직) 단면은 **후순위**: 1차 `SectionFrame` 은 수직 평면 전제 → 일반 평면으로 넓히는 코어 변경 필요.
 - 일괄 출력: 단면마다 DXF + 영상(PNG/TIFF) + CSV, 그리고 색인 평면도(단면선 위치·이름이 그려진 평면 GeoTIFF/DXF), 묶음 요약 CSV.
 
-**구현**: `core/engine` 의 `computeSection` 재사용, `core/batch.hpp`(단면 목록 생성·이름 규칙). 일괄은 작업 스레드에서 차례로(타일 캐시 공유, 띠가 겹치면 재사용), 취소·진행률. 앱: 평면 화면에 단면 묶음 레이어, 단면 화면은 목록에서 골라 보기. CLI `asec-section --batch spec.json`.
+**구현**: `core/engine` 의 `computeSection` 과 1차 `cutMesh`(부호 거리 + 정준 꼭짓점 순서 → 이웃 삼각형과 비트 단위로 같은 교점)·`stitchSegments`(용접 격자 해시)를 **그대로 재사용**, `core/batch.hpp`(단면 목록 생성·이름 규칙). 모든 단면은 **잎만** 사용(표시 LOD 금지), `fallbackNodes>0` 이면 결과·DXF 에 표기. 성능: 단면 N개 띠를 합친 영역으로 잎을 **한 번만** 수집 → 단면별 bbox 필터 → 단면별 병렬(스레드 풀, **M0-B 0번 잠금 수정 후**) → 공간 순서 처리로 캐시 스래싱 방지. 폴리라인 전개 단면은 꺾인 점에서 띠를 각의 이등분선으로 잘라야 함(1차 BandQuad 는 볼록 사각형 전제). 취소·진행률. 앱: 평면 화면에 단면 묶음 레이어, 단면 화면은 목록에서 골라 보기. CLI `asec-section --batch spec.json`.
 
 **완료 기준**: 합성 모델에서 0.5 m 간격 10개 단면이 각각 단일 단면 결과와 비트 단위로 같음. 20개 일괄 출력 중 UI 정지 없음(M0-B 로그). 색인도의 단면선 좌표가 각 DXF 의 A/A′ 실좌표와 일치.
 
@@ -219,7 +237,7 @@
 
 **범위**: 해상도 직접 지정(m/px) 또는 축척+DPI, 영역 = 화면/사각형/다각형 마스크, 큰 영상 타일 분할 렌더(메모리 한도), 알파(빈 곳 투명) 또는 흰 바탕, BigTIFF(4 GB 초과) **(미검증, 작성기 확장 필요)**. **DEM(float32 GeoTIFF)**: 같은 정사 렌더의 Z 버퍼를 높이로 저장(값 = 모델 SRS 높이 그대로, NoData 지정).
 
-**구현**: `core/raster.cpp` `renderPlan` 에 높이 출력 추가 → `core/dem.hpp`. `core/tiff.cpp` 에 float32 표본 형식·NoData(GDAL_NODATA 태그 42113) 추가. GDAL 의존 없이 유지, 시험에서만 gdalinfo 교차 확인(1차와 같은 방식).
+**구현**: `core/raster.cpp` `renderPlan` 의 Z 버퍼를 **float32 DSM** 으로 함께 출력 → `core/dem.hpp`(정사영상과 같은 GeoRef → 픽셀 정확히 일치). `core/tiff.cpp` 확장: `SampleFormat=3`(IEEE float)·`BitsPerSample=32`, NoData = GDAL 태그 **42113**(ASCII), 출력 영역을 타일(예: 4096²)로 나눠 타일마다 `collectMeshesForResolution` → 렌더 → 스트립 단위 스트리밍 쓰기, **4 GB 넘으면 BigTIFF**(자체 작성기 확장; libtiff(BSD 계열)는 대안). GPU 오프스크린 렌더는 코어 Qt 무관 원칙과 충돌 → 기본은 CPU 유지, 필요 시 옵션. 잎 텍셀보다 잘게 해도 정보는 안 늘어남(텍셀 크기 추정 방법은 **미검증**). GDAL 의존 없이 유지, 시험에서만 gdalinfo 교차 확인(1차와 같은 방식).
 
 **입출력**: GeoTIFF(RGB/RGBA) + `.tfw` + `.prj`(선택) / DEM GeoTIFF(float32). 수직 좌표계 GeoKey(VerticalCSTypeGeoKey) 기록은 모델 SRS 에 수직 EPSG 가 있을 때만 **(GDAL 해석 미검증)**.
 
@@ -233,9 +251,9 @@
 
 **목표**: 유적 지형도·유구 평면 등고선(기본 0.1 m), hgis/CAD 에 그대로 겹침.
 
-**범위**: 간격 기본 0.1 m(M0-C 공용 설정), 계곡선(주곡선) 0.5 m / 1 m 강조, 표고 라벨 소수 1자리. 영역 = 다각형/사각형. 평활(선택), 작은 고리 제거(최소 길이).
+**범위**: 간격 기본 0.1 m(M0-C 공용 설정), 계곡선(주곡선) 0.5 m / 1 m 강조, 표고 라벨은 M0-C 와 같이 0.5 m 마다 소수 1자리(78.5/79.0, 라벨 선 조금 굵게). 영역 = 다각형/사각형. 평활(선택), 작은 고리 제거(최소 길이).
 
-**구현**: M3 DEM → `core/contour.hpp` 마칭 스퀘어(안장점 처리), 레벨 값은 cm 정수 산술(1차 `levelLines` 와 같은 방식), 선 잇기·단순화는 1차 단면 정리 함수(`stitchSegments`, `simplifyDP`) 재사용. 넓은 현장에서 0.1 m 간격은 매우 촘촘 → 범위·간격 경고.
+**구현**: M3 DSM → **먼저 DSM 을 평활**(가우시안 σ 1–2 px 정도; 선을 평활하면 등고선끼리 교차할 수 있음) → `core/contour.hpp` 마칭 스퀘어(픽셀 중심 선형 보간, 안장점·NoData 규칙은 GDAL `GDALContourGenerateEx` 문서와 같게), 레벨 값은 cm 정수 산술(1차 `levelLines` 와 같은 방식), 선 잇기·단순화는 1차 단면 정리 함수(`stitchSegments`, `simplifyDP`) 재사용. 넓은 현장에서 0.1 m 간격은 매우 촘촘 → 범위·간격 경고. 라벨은 계곡선 위 접선 방향, 글자 뒤집힘 방지(“높은 쪽이 오른쪽” 방향 규칙), DXF `text(…, rotDeg)` 사용. 유구 하나 범위는 메시 직접 수평 절단 “정밀 모드”(선택).
 
 **입출력**: DXF(레이어 `CONTOUR_MINOR/MAJOR/INDEX`, LWPOLYLINE 에 elevation = 표고, 3D 선택), SHP(PolylineZ 또는 Polyline + `ELEV` 속성, `.prj` `.cpg`). 좌표 = 모델 SRS 실좌표.
 
@@ -247,7 +265,7 @@
 
 **범위**: 평면 화면에서 다각형/선 그리기(꼭짓점은 잎 표면 피킹 Z 포함), 단면선 위 경계 표시(단면 화면), 편집·저장(작업 파일 JSON). 속성: `유구번호, 종류, 층위, 메모, 작성자, 날짜`(사용자 정의 가능).
 
-**구현**: `core/features.hpp`(형상+속성 모델), `core/shp.hpp` 새 SHP 작성기(PolygonZ/PolylineZ/PointZ, DBF UTF-8 + `.cpg`, `.prj` = ESRI WKT `KGD2002_*_Belt_2010`). 측량앱이 같은 방식으로 SHP 를 직접 쓰고 GDAL 로 확인했다는 기록(`survey-app/build-reports/hgis-shp-export-0.1.19.md`)을 참고, 코드는 C++ 로 새로 작성(측량앱 프로젝트는 건드리지 않음). 대안: shapelib(MIT/LGPL) **(라이선스·빌드 검토 필요)**. DXF 는 1차 `DxfWriter` 확장: 종류별 레이어(예: `FEAT_PIT`, `FEAT_DWELLING`), 속성은 유구번호 TEXT + (선택) XDATA **(CAD 별 표시 미검증)**. 1차 주석대로 DXF 레이어 이름은 ASCII 권장 → 한글 종류는 SHP 속성에, DXF 레이어는 영문 코드.
+**구현**: `core/features.hpp`(형상+속성 모델). **SHP = shapelib**(`core/shp.hpp` 얇은 감쌈): `SHPT_POLYGONZ`/`ARCZ`/`POINTZ`, 링 방향(외곽 시계 방향) 준수, `DBFCreateEx(path, "UTF-8")` 또는 `"CP949"` 로 `.cpg` 생성(shapelib 은 문자열을 변환 안 하므로 앱이 해당 바이트로 넣고, 필드 폭은 **바이트** 단위: UTF-8 한글 3바이트·CP949 2바이트), DBF 필드명 영문 10바이트 이하(`FID_NO, NAME, TYPE, AREA_2D, AREA_3D, Z_MIN, Z_MAX, DATE` 예). **`.prj` = EPSG 5185–5188 ESRI WKT 고정 문자열 내장**(예: `PROJCS["KGD2002_Central_Belt_2010",…]`, PROJ 불필요). 측량앱이 같은 방식(.prj/.cpg)으로 SHP 를 쓰고 GDAL 로 확인한 기록(`survey-app/build-reports/hgis-shp-export-0.1.19.md`)도 참고(측량앱 프로젝트는 건드리지 않음). **DXF** = 1차 `DxfWriter` 확장: 닫힌 `LWPOLYLINE`(70=1)+고도(38) / 3D `POLYLINE`, 레이어는 ASCII 영문 코드(예: `FEATURE_OUTLINE`, `FEATURE_LABEL`, `FEAT_PIT`). DXF 엔 속성 테이블이 없으므로 유구번호는 TEXT 라벨(+선택 XDATA, **CAD 별 표시 미검증**)로 붙이고 같은 이름의 SHP 를 함께 냄. **한글 문자**: R2000 은 `$DWGCODEPAGE` 기반 → `$DWGCODEPAGE=ANSI_949` + CP949 바이트, 또는 `\U+nnnn` 이스케이프(ezdxf 문서). 레이어명에 `\U+` 가 되는지는 **미검증** → 레이어는 ASCII 유지.
 
 추가: 그린 유구 다각형과 단면선의 교차를 단면 화면에 유구 범위로 표시(qProf 의 폴리곤 교차 아이디어, research/pc-section-tools.md §2.3·§7-9).
 
@@ -255,28 +273,30 @@
 
 **완료 기준**: 합성 다각형 왕복(쓰기 → ogrinfo 읽기) 꼭짓점·속성·EPSG 일치, 한글 속성 깨짐 없음. DXF 감사 통과, 닫힌 다각형 = 닫힘 플래그.
 
-**위험·미검증**: DBF 필드 이름 10바이트 제한(한글 필드명 불가 → 영문 필드명 + 별칭 표). DXF 한글 문자 인코딩(R2000 은 코드페이지 의존) **(미검증)**.
+**위험·미검증**: DBF 필드 이름 10바이트 제한(한글 필드명 불가 → 영문 필드명 + 별칭 표). 국내 실무 SW 가 UTF-8 `.cpg` 를 제대로 읽는지 **미검증** → UTF-8/CP949 선택 옵션. AutoCAD·캐디안 등에서 ANSI_949/`\U+` 한글 표시 **미검증**.
 
 ---
 
 ## 3. 공통 사항
 
-- **라이선스·의존**: 기본 빌드는 지금처럼 GDAL/PROJ 없이. PROJ 는 “목표 좌표계 변환” 선택 기능으로만(`ASEC_WITH_PROJ`). 시험에서만 gdalinfo/ogrinfo/ezdxf 를 있으면 사용.
+- **라이선스·의존**: 위 “라이브러리 기본 방침”(GPL 제외, GDAL/PROJ 없음, 자체 DXF·TIFF·TM + shapelib, 필요 시 Clipper2/libigl). 시험에서만 gdalinfo/ogrinfo/ezdxf/PROJ 기준값을 있으면 사용.
+- **배포 위험**: Windows 빌드는 Qt6 를 **정적 링크(`-static`)** 함 → Qt 를 LGPL 로 쓰면 재링크 허용 등 LGPL 의무를 어떻게 이행할지 **미검증(법무 확인 권장)**. 나중에 GDAL/PROJ 를 넣는다면 SQLite 등까지 MinGW 정적 교차 빌드가 필요(MXE 에 패키지는 있으나 이 툴체인에서 빌드되는지 **미검증**).
 - **코어 재사용**: 새 계산은 전부 `core/`(Qt 무관)에 두고 `tools/` CLI 로도 노출 → 시험·일괄 처리·향후 MDL 플러그인 재사용.
 - **배포**: `/workspace/section-viewer/dist/` 에만. 측량앱 폴더에 쓰지 않음.
 
 ## 4. 열린 질문 (사용자 확인 필요)
 
-1. 실제 현장 3MX 표본의 SRS 문자열(복합 좌표계로 내보내는지, 높이 기준이 무엇인지).
-2. 정확도 합격선(제안: 수평·수직 RMSE ≤ 3 cm, 최대 ΔZ ≤ 5 cm).
-3. 성능 목표 대상 PC 사양(GPU·메모리)과 대표 대형 표본.
-4. 목표 좌표계 변환(PROJ, 지오이드)을 2차에 넣을지, 안 넣을지.
-5. 유구 속성 필드 목록과 DXF 레이어 이름 규칙.
-6. 연속 단면 도판의 축척·표고 범위 통일 규칙.
+1. **GDAL/PROJ 도입 여부** — 기본값: 2차엔 안 넣음(자체 TM 5185–5188). 넣으면 5174·WKT 식별·지오이드까지 가능하나 정적 교차 빌드·배포 부담.
+2. **GPL 라이브러리 제외** — 기본값: 제외(CGAL 고수준, VCGlib, libdxfrw, dxflib). shapelib 을 MIT 조건으로 쓰는지 확인. Qt 정적 링크 LGPL 의무 이행 방법.
+3. **측량앱 CSV 사양** — 지금은 측량앱 소스 머리줄(기본 CSV: northing_N 먼저 + 높이 열 2종 + height_model / hgis CSV: x=동)로 맞춤. 공식 사양으로 고정할지, 인코딩·좌표계 표기 확정.
+4. **실제 3MX 표본** — 최신 iTwin Capture Modeler 출력, 병합본(레이어 여러 개), SRS 문자열(복합/WKT/ENU), SRSOrigin 값, 높이 기준(타원체고/override).
+5. **정확도 합격선** — 제안: 수평·수직 RMSE ≤ 3 cm, 최대 |ΔZ| ≤ 5 cm.
+6. **대상 PC** — GPU·메모리 사양과 대표 대형 표본(프레임 p95 < 16.7 ms 목표 확정).
+7. 유구 속성 필드 목록과 DXF 레이어 이름 규칙 / 연속 단면 도판의 축척·표고 범위 통일 규칙 / KNGeoid18 사용 시 재배포 문의.
 
 ## 5. 참고
 
 - `research/pc-section-tools.md`(PC 단면 도구 비교, 08:3x KST 확인) 반영: 축 순서(X=북) 판별, 점 투영 이격거리 표시, 유구 다각형×단면 교차, 십자 단면. 그 밖 후보(2차 범위 밖, 사용자 판단): 수평/수직 축척 독립(높이 과장, 눈금은 실제 표고 유지), 고고학 도면 관례(“EL. xx.xxx m” 기준선, A–A′ 기호, 방위, 표제란), 벡터 PDF/SVG 출력(M0-C 그리기 순서 규칙 적용), 점 코드 → 토층선 자동 연결.
-- `research/roadmap-tech-research.md` 는 이 문서 작성 시점(2026-10-06 08:33 KST)에 아직 없었음 → 나오면 각 마일스톤 “구현”·“위험” 칸에 반영.
+- `research/roadmap-tech-research.md` 반영(2026-10-06 08:4x KST): 1차 결함 3건(병합 3MX 첫 레이어만, WKT/ENU 미처리, TileCache 전역 잠금), 라이브러리 방침, 기능별 구현 세부(잎 재피킹, 투영+표면 면적, DSM cut/fill, DXF 한글, .cpg/.prj, float32 DSM·42113·BigTIFF, DSM 평활 후 마칭 스퀘어, cutMesh/stitchSegments 재사용), 위험(float32 6 cm, 높이 기준, Qt 정적 LGPL, MinGW GDAL, KNGeoid18). 우선순위는 사용자 요구에 따라 LOD 페이징을 M0-B 에 유지(연구 문서는 P3).
 - 측량앱 내보내기 형식 근거(읽기만): `survey-app/app/src/main/kotlin/kr/archsurvey/export/Formats.kt`(기본 CSV 머리줄), `MoreFormats.kt`(hgis CSV·SHP), `build-reports/hgis-shp-export-0.1.19.md`, `itwin-capture-xml-export-0.1.26.md`.
 - 3MX SRS 형식: Bentley ContextCapture 도움말(EPSG / WKT / `ENU:LAT,LON`). KVD1964 height = EPSG:5193.
