@@ -5,6 +5,8 @@
 #pragma once
 #include <filesystem>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include "asec/geom.hpp"
 
 namespace asec {
@@ -36,12 +38,15 @@ struct TmxNode {
     std::vector<fs::path> children;  // 자식 .3mxb 절대 경로(비어 있으면 최고 해상도 = 잎)
     std::vector<std::string> resourceIds;
     std::vector<MeshPtr> meshes;     // decodeNode 후 채워짐
-    bool decoded = false;
+    bool decoded = false;            // 지오메트리 디코드됨
+    bool ready = false;              // TileCache::decode 완료(텍스처까지). TmxTile::mu 아래에서만 읽고 쓴다
     bool isLeaf() const { return children.empty(); }
 };
 
 struct TmxTile {
     fs::path path;
+    /// 타일 단위 잠금(TileCache 가 디코드 때 사용). 서로 다른 타일은 동시에 디코드된다
+    std::shared_ptr<std::mutex> mu = std::make_shared<std::mutex>();
     std::vector<TmxNode> nodes;
     // 내부: 원본 바이트와 리소스 위치(지연 디코드용)
     std::vector<uint8_t> bytes;

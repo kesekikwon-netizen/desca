@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <queue>
+#include <thread>
 
 namespace asec {
 
@@ -19,45 +20,73 @@ std::shared_ptr<TmxTile> TileCache::get(const fs::path& p, std::string* err) {
         if (it != tiles_.end()) { lastUse_[p] = ++clock_; return it->second; }
     }
     auto t = std::make_shared<TmxTile>();
-    if (!readTmxTile(p, *t, err)) return nullptr;
+    if (!readTmxTile(p, *t, err)) return nullptr;  // 파일 읽기는 잠금 밖
     std::lock_guard<std::mutex> lk(mu_);
     auto it = tiles_.find(p);
     if (it != tiles_.end()) return it->second;
     tiles_[p] = t;
     lastUse_[p] = ++clock_;
+    bytes_[p] = t->bytes.size();
     evictLocked();
     return t;
 }
 
 bool TileCache::decode(const std::shared_ptr<TmxTile>& t, size_t node, std::string* err) {
+    if (!t || node >= t->nodes.size()) return false;
+    std::vector<TexturePtr> todo;
     {
-        std::lock_guard<std::mutex> lk(mu_);
-        if (node < t->nodes.size() && t->nodes[node].decoded) return true;
+        std::lock_guard<std::mutex> lk(*t->mu);  // 이 타일만 잠금
+        TmxNode& N = t->nodes[node];
+        if (N.ready) return true;
+        if (!decodeNode(*t, node, err)) return false;
+        if (textureDecoder)
+            for (auto& m : N.meshes)
+                if (m->texture && m->texture->rgba.empty() && !m->texture->encoded.empty() &&
+                    std::find(todo.begin(), todo.end(), m->texture) == todo.end())
+                    todo.push_back(m->texture);
+        if (todo.empty()) N.ready = true;
     }
-    // 같은 타일을 두 스레드가 동시에 디코드하지 않도록 타일 단위 잠금 대신 전체 잠금(디코드는 짧다)
+    if (!todo.empty()) {
+        // JPG 디코드(가장 비싼 부분)는 잠금 없이 사본에 → 잠금 안에서 비어 있을 때만 옮김.
+        // 준비된(ready) 노드가 가진 텍스처는 이미 차 있으므로 그 노드를 읽는 스레드와 겹쳐 쓰지 않는다.
+        std::vector<RgbaImage> imgs(todo.size());
+        for (size_t k = 0; k < todo.size(); ++k) {
+            Texture tmp;
+            tmp.format = todo[k]->format; tmp.filePath = todo[k]->filePath; tmp.encoded = todo[k]->encoded;
+            textureDecoder(tmp);
+            imgs[k] = std::move(tmp.rgba);
+        }
+        std::lock_guard<std::mutex> lk(*t->mu);
+        for (size_t k = 0; k < todo.size(); ++k)
+            if (todo[k]->rgba.empty() && !imgs[k].empty()) todo[k]->rgba = std::move(imgs[k]);
+        t->nodes[node].ready = true;
+    }
+    size_t b;
+    {
+        std::lock_guard<std::mutex> lk(*t->mu);
+        b = tileBytes(*t);
+    }
     std::lock_guard<std::mutex> lk(mu_);
-    if (!decodeNode(*t, node, err)) return false;
-    if (textureDecoder)
-        for (auto& m : t->nodes[node].meshes)
-            if (m->texture && m->texture->rgba.empty() && !m->texture->encoded.empty()) textureDecoder(*m->texture);
+    auto it = tiles_.find(t->path);
+    if (it != tiles_.end() && it->second == t) { bytes_[t->path] = b; evictLocked(); }
     return true;
 }
 
 size_t TileCache::loadedBytes() const {
     std::lock_guard<std::mutex> lk(mu_);
     size_t b = 0;
-    for (auto& kv : tiles_) b += tileBytes(*kv.second);
+    for (auto& kv : bytes_) b += kv.second;
     return b;
 }
 
 void TileCache::clear() {
     std::lock_guard<std::mutex> lk(mu_);
-    tiles_.clear(); lastUse_.clear();
+    tiles_.clear(); lastUse_.clear(); bytes_.clear();
 }
 
 void TileCache::evictLocked() {
     size_t total = 0;
-    for (auto& kv : tiles_) total += tileBytes(*kv.second);
+    for (auto& kv : bytes_) total += kv.second;
     while (total > budget_ && tiles_.size() > 1) {
         auto victim = tiles_.end(); uint64_t best = UINT64_MAX;
         for (auto it = tiles_.begin(); it != tiles_.end(); ++it) {
@@ -66,13 +95,50 @@ void TileCache::evictLocked() {
             if (u < best) { best = u; victim = it; }
         }
         if (victim == tiles_.end()) break;
-        total -= tileBytes(*victim->second);
+        total -= bytes_[victim->first];
         lastUse_.erase(victim->first);
+        bytes_.erase(victim->first);
         tiles_.erase(victim);
     }
 }
 
-static bool collectRec(TileCache& c, const fs::path& p, const BandQuad& band, std::vector<MeshPtr>& out, LeafStats& st, std::string* err, int depth,
+namespace {
+struct Job { std::shared_ptr<TmxTile> tile; size_t node; };
+
+/// 모은 노드를 여러 스레드로 디코드(타일 단위 잠금이라 서로 다른 타일·노드가 동시에 진행).
+bool decodeJobs(TileCache& c, const std::vector<Job>& jobs, std::string* err, const std::atomic<bool>* cancel) {
+    if (jobs.empty()) return true;
+    unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+    size_t nth = std::min<size_t>({jobs.size(), size_t(hw), size_t(8)});
+    std::atomic<size_t> next{0};
+    std::atomic<bool> failed{false};
+    std::mutex emu; std::string firstErr;
+    auto run = [&] {
+        for (;;) {
+            if (failed.load() || (cancel && cancel->load())) return;
+            size_t k = next++;
+            if (k >= jobs.size()) return;
+            std::string e;
+            if (!c.decode(jobs[k].tile, jobs[k].node, &e)) {
+                std::lock_guard<std::mutex> lk(emu);
+                if (!failed.exchange(true)) firstErr = e;
+            }
+        }
+    };
+    if (nth <= 1) run();
+    else {
+        std::vector<std::thread> th;
+        for (size_t i = 1; i < nth; ++i) th.emplace_back(run);
+        run();
+        for (auto& t : th) t.join();
+    }
+    if (failed) { if (err) *err = firstErr; return false; }
+    if (cancel && cancel->load()) return false;
+    return true;
+}
+}  // namespace
+
+static bool collectRec(TileCache& c, const fs::path& p, const BandQuad& band, std::vector<Job>& out, LeafStats& st, std::string* err, int depth,
                        const std::atomic<bool>* cancel) {
     if (cancel && cancel->load()) return false;
     auto t = c.get(p, err);
@@ -94,14 +160,7 @@ static bool collectRec(TileCache& c, const fs::path& p, const BandQuad& band, st
                 }
             }
         }
-        if (useSelf) {
-            if (!c.decode(t, i, err)) return false;
-            st.leafNodes++;
-            for (auto& m : t->nodes[i].meshes) {
-                if (m->bbox.valid() && !bandIntersectsBox(band, m->bbox)) continue;
-                out.push_back(m); st.meshes++; st.triangles += m->triangleCount();
-            }
-        }
+        if (useSelf) { out.push_back({t, i}); st.leafNodes++; }
     }
     return true;
 }
@@ -109,7 +168,15 @@ static bool collectRec(TileCache& c, const fs::path& p, const BandQuad& band, st
 bool collectLeafMeshes(TileCache& c, const fs::path& root, const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string* err,
                        const std::atomic<bool>* cancel) {
     LeafStats s;
-    bool ok = collectRec(c, root, band, out, s, err, 0, cancel);
+    std::vector<Job> jobs;
+    bool ok = collectRec(c, root, band, jobs, s, err, 0, cancel);
+    if (ok) ok = decodeJobs(c, jobs, err, cancel);
+    if (ok)
+        for (auto& j : jobs)
+            for (auto& m : j.tile->nodes[j.node].meshes) {
+                if (m->bbox.valid() && !bandIntersectsBox(band, m->bbox)) continue;
+                out.push_back(m); s.meshes++; s.triangles += m->triangleCount();
+            }
     if (st) *st = s;
     return ok;
 }
@@ -118,7 +185,7 @@ static bool boxOverlapXY(const Box3& a, const Box3& b) {
     return a.valid() && b.valid() && !(a.mx.x < b.mn.x || a.mn.x > b.mx.x || a.mx.y < b.mn.y || a.mn.y > b.mx.y);
 }
 
-static bool resRec(TileCache& c, const fs::path& p, const Box3& area, double res, std::vector<MeshPtr>& out, LeafStats& st, std::string* err, int depth,
+static bool resRec(TileCache& c, const fs::path& p, const Box3& area, double res, std::vector<Job>& out, LeafStats& st, std::string* err, int depth,
                    const std::atomic<bool>* cancel) {
     if (cancel && cancel->load()) return false;
     auto t = c.get(p, err);
@@ -139,11 +206,7 @@ static bool resRec(TileCache& c, const fs::path& p, const Box3& area, double res
                 }
             }
         }
-        if (useSelf) {
-            if (!c.decode(t, i, err)) return false;
-            st.leafNodes++;
-            for (auto& m : t->nodes[i].meshes) { out.push_back(m); st.meshes++; st.triangles += m->triangleCount(); }
-        }
+        if (useSelf) { out.push_back({t, i}); st.leafNodes++; }
     }
     return true;
 }
@@ -151,7 +214,12 @@ static bool resRec(TileCache& c, const fs::path& p, const Box3& area, double res
 bool collectMeshesForResolution(TileCache& c, const fs::path& root, const Box3& area, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err,
                                 const std::atomic<bool>* cancel) {
     LeafStats s;
-    bool ok = resRec(c, root, area, res, out, s, err, 0, cancel);
+    std::vector<Job> jobs;
+    bool ok = resRec(c, root, area, res, jobs, s, err, 0, cancel);
+    if (ok) ok = decodeJobs(c, jobs, err, cancel);
+    if (ok)
+        for (auto& j : jobs)
+            for (auto& m : j.tile->nodes[j.node].meshes) { out.push_back(m); s.meshes++; s.triangles += m->triangleCount(); }
     if (st) *st = s;
     return ok;
 }

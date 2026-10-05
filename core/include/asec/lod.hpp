@@ -13,15 +13,17 @@ class TileCache {
 public:
     explicit TileCache(size_t byteBudget = size_t(1536) << 20) : budget_(byteBudget) {}
     std::shared_ptr<TmxTile> get(const fs::path& p, std::string* err);
-    /// 노드 디코드(+선택: 텍스처 디코드 콜백)
+    /// 노드 디코드(+선택: 텍스처 디코드 콜백). 스레드 안전: 타일 단위 잠금으로 지오메트리를 디코드하고,
+    /// 텍스처(JPG) 디코드는 잠금 밖에서 한다. 돌려준 뒤에는 그 노드의 메시·텍스처가 완성되어 있다.
     bool decode(const std::shared_ptr<TmxTile>& t, size_t node, std::string* err);
-    std::function<void(Texture&)> textureDecoder;  // 앱이 JPG→RGBA 를 채움
+    std::function<void(Texture&)> textureDecoder;  // 앱이 JPG→RGBA 를 채움(여러 스레드에서 동시에 불릴 수 있음)
     size_t loadedBytes() const;
     void clear();
 private:
     mutable std::mutex mu_;
     std::map<fs::path, std::shared_ptr<TmxTile>> tiles_;
     std::map<fs::path, uint64_t> lastUse_;
+    std::map<fs::path, size_t> bytes_;  // 타일별 메모리(디코드 때 갱신) — 다른 스레드가 디코드 중인 타일을 훑지 않으려고 따로 둠
     uint64_t clock_ = 0;
     size_t budget_;
     void evictLocked();
