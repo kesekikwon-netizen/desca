@@ -11,7 +11,8 @@
 ## 구조
 ```
 core/include/asec, core/src   Qt 무관 코어 (tmx, section, lod, stream, schedule, pick, srs, raster, dxf, export, tiff, pointcloud, obj, engine)
-app/                          Qt 앱 (mainwindow, planview[OpenGL], sectionview[QPainter], theme)
+app/                          Qt 앱 (mainwindow[작업·내보내기], mainwindow_ui[화면 구성·시작 화면·단면 목록·되돌리기],
+                              sheetexport[도면 창·PDF], planview[OpenGL], sectionview[QPainter], theme[Strata QSS·아이콘])
 tools/                        asec-section(명령줄 단면), asec-info(3MX 점검·성능), asec-make-synthetic(합성 3MX), synth
 tests/                        Catch2 단위 시험 + dxf_audit.py(ezdxf)
 packaging/                    아이콘·NSIS·라이선스·리소스
@@ -39,6 +40,32 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
 — 열기 시간, 좌표계 판별(수평 EPSG/높이 기준/경고), 원점·위경도·float32 정밀도, 트리(타일·노드·잎·깊이), 잎 전체
 디코드(삼각형 수, 실제 Z 범위), 피킹 시간, 단면 미리보기/최종 차가움·따뜻 시간(입면 영상 포함, 텍스처 디코드 기본 켬 —
 `--notex` 로 끔). GUI 없이 성능 비교용.
+
+- 1.2 시험용: `--settings DIR`(설정을 DIR 의 INI 로 — 사용자 설정 안 건드림), `--export-pdf|sheet-png|sheet-tiff|sheet-dxf 파일`
+  `[--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split]`(도면 용지 내보내기), `--export-dialog-shot 파일`(도면 창 캡처),
+  `--undo-test`(두께·반전·레벨선 바꾼 뒤 되돌리기×3 / 다시×3 이 원래 상태와 같은지), `--ctx-shot 파일`(그리는 중 지금 도구 줄),
+  `--lod-shot 파일`(평면 확대 직후 디테일 카드), `--extra-line AX AY BX BY`(단면 목록에 추가, 반복), `--section-scale N`(단면 화면 1:N),
+  `--start-shot 파일`(파일 없이 시작 화면)
+
+## 1.2 화면(Strata) · 사용자 중심 개선 P0 + 단면 목록
+- 디자인: `research/ui-ref/UI-SPEC.md` §4 토큰(ground #FAF9F5, ink #141413, 주 단추 흙색 #B5573A 은 「도면」 하나), 본문 13 px 고딕,
+  리본 탭 파일·홈·보기·측정·내보내기(옛 분석→측정, 추출→내보내기), 44 px 타일. 영어 병기는 기본 끔(보기 › English). 고대비(보기).
+- 높이 배지: 단면 머리 + 상태줄. ok「높이 EGM96 EPSG:5773 · 지정함」/ warn「▲ 높이 타원체고 표기 · 확인」「▲ 높이 기준 모름」/ error「● 좌표계 없음」.
+  누르면 높이 기준 지정. 좌표계 경고는 리본 아래 한 줄 알림(「높이 기준 지정…」「자세히」 ×).
+- 핵심 흐름: 최근 파일(파일 › 최근, Ctrl+Shift+O, 시작 화면 「이어서 열기」 — 모델별 마지막 단면선·두께·화면·단면 목록 복원),
+  뒤 깊이 칩 0.5/1/2/5 m + 숫자키 1–5(0.5/1/2/3/5), 평행 이동 [ ] 0.1 m · { } 1 m, 그리는 중 지금 도구 줄(길이·방위·Shift/Enter/Esc).
+- LOD: 평면 왼쪽 아래 「디테일 불러오는 중 n / N」 카드, 단면 정보 띠 「미리보기(거친) → 최종 계산 중…」/「✓ 최종(잎)」, 상태줄 Z 출처.
+- 평면 단면선: 흰 3 px 테두리 위 빨강(#FF0000) — 어떤 영상 위에서도 보임. A/A′ 흰 칩.
+- 되돌리기 Ctrl+Z / 다시 Ctrl+Y(Ctrl+Shift+Z): 단면선·두께(1.5 초 안 연속 변경은 하나로)·표시 켜기/끄기·높이 기준·현재 단면 (QUndoStack, 200단계).
+- 도면(Ctrl+P, `app/sheetexport.cpp`, 코어 `asec/sheet.hpp`): A4/A3 가로/세로, 1:10/20/40/100/맞춤, 실제 비율 미리보기, 넘침 경고와 추천
+  (같은 용지에 들어가는 표준 축척 · A3 · 방향 · N장 나눠 붙이기), 표제란(도면명·축척·용지·보는 방향·날짜·수평 EPSG·높이 기준), 축척 막대,
+  기준선 EL, 넣을 것(단면선·영상·레벨선·표제란), PDF(QPdfWriter, 여러 쪽)/DXF(모델 공간 1:N)/PNG/TIFF(나누면 _1, _2 …).
+  인쇄 단추는 없음(QtPrintSupport 미사용 — PDF 로 인쇄).
+- 시작 화면: 이어서 하기 카드, 최근 모델 표(좌표계·높이·단면 수·마지막으로 연 때, 원본 없으면 ●), 끌어 놓기, 세 걸음·자주 쓰는 키.
+- 단면 목록(P1-1, 왼쪽 232 px): A–A′, B–B′ … 이름·메모·썸네일(메모리에만), 누르면 그 단면, 두 번 = 이름, N = 새 단면.
+  QSettings `model/<경로 해시>/`(모델 폴더가 읽기 전용이어도 됨), 파일 › 단면 목록 내보내기/가져오기 = `.sections.json`.
+- 성능: 평면 타일 텍스처 업로드를 프레임당 예산(기본 3 MB · 5 ms, `view/uploadBudgetKB`, 환경 `SECTIONVIEWER_UPLOAD_KB`, 0 = 옛 방식)으로
+  나눔, 밉맵은 작업 스레드에서, 같은 크기 텍스처 재사용 풀(96 MB). `plan/PERF-M0.md` 1.2 절.
 
 ## 입면·레벨선·휠 (1.1.1)
 - 입면 깊이 0–5 m(「5 m」 단추 + ▾ 0.5/1/2/3/5 m). 그리기 순서 레벨선 → 입면 영상 → 단면선. 끄는 동안은 화면 LOD

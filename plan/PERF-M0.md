@@ -39,3 +39,18 @@ Windows 1.1.0 exe 를 wine(소프트웨어 GL)에서 같은 모델로 실행: �
 `asec-info <3mx> --section AX AY BX BY --back 5`.
 
 Windows 1.1.1 휴대용 zip 을 wine 에서: 열기·피킹 Z=56.7652(잎)·단면·뒤 5 m 입면·휠 시험(오차 0 px)·PNG/DXF(ezdxf 감사 오류 0) 정상, asec_tests.exe 92건(91 통과·1 건너뜀).
+
+## 1.2.0 평면 텍스처 업로드 프레임 예산 (2026-10-06, 같은 모델, Xvfb + llvmpipe, load 2–4)
+업로드를 프레임마다 예산(3 MB · 5 ms)으로 나누고, 밉맵은 작업 스레드에서 만들고, 밉 거르기를 `glTexImage2D` 전에 정해
+Mesa 의 단계별 재할당을 없애고, 내보낸 같은 크기 텍스처를 다시 씀(풀 96 MB). 새 텍스처 할당이 생기면 그 프레임 예산은 끝.
+| 항목 | 1.1.1(옛 방식) | 1.2.0 |
+|---|---|---|
+| `--wheel-test` 평면 확대 6칸 최악 프레임(애니+정착) | 38.5 ms | **9.7 / 14.5 / 15.0 ms**(3회), 축소 10.1–14.6 ms, 커서 고정 오차 0 px |
+| `--perf-log` 평면 경로 240프레임 paintGL(업로드 포함) 최악 | 222 ms(벽시계) | **19.1 / 22.3 / 26.8 ms**, p99 18–24 ms |
+| 같은 경로 벽시계 프레임 최악 | 222 ms | 60.2 / 64.8 / 69.7 ms — 그 프레임들의 paintGL 은 2–6 ms, 나머지는 paintGL 밖(Xvfb·llvmpipe 창 합성, 중앙값 15–18 ms) |
+| 한 프레임 업로드 최대 | — | 15–23 ms(새 텍스처 할당 1건, llvmpipe 0 채움) |
+| 단면선 끌기 60프레임 | — | 미리보기 56–58회(26–35/s), 그리기 평균 4.5–4.9 ms·최악 14.5–17.8 ms, 놓은 뒤 최종 516–532 ms |
+
+실제 GPU(Windows)에서는 할당·합성이 훨씬 싸므로 더 낮을 것으로 보지만 **실제 GPU 측정은 아직 안 함**.
+다시 재는 법: `SectionViewer <3mx> --settings /tmp/s --line … --back 5 --wheel-test --perf-log perf.csv --log run.log --quit`
+(CSV 열 `paint_ms` = paintGL, `upload_kb/upload_ms/staging` = 그 프레임 업로드).

@@ -234,7 +234,7 @@ QWidget* MainWindow::buildRibbon() {
 
     recentMenu_ = new QMenu(this);
     auto recentTile = [&]() {
-        auto* b = tile(action("recent"), I::Recent, TileNormal, QStringLiteral("최근 ▾"));
+        auto* b = tile(action("recent"), I::Recent, TileNormal, QStringLiteral("최근"));
         b->setMenu(recentMenu_); b->setPopupMode(QToolButton::InstantPopup);
         return b;
     };
@@ -642,6 +642,7 @@ void MainWindow::syncCurrentSection() {
     SavedSection& s = sections_[size_t(current_)];
     s.ax = l.a.x + o.x; s.ay = l.a.y + o.y; s.bx = l.b.x + o.x; s.by = l.b.y + o.y;
     s.front = front_->value(); s.back = back_->value();
+    if (!thumbs_.count(current_) && section_->hasResult() && lastFinal_) thumbs_[current_] = makeThumb();
     refreshSectionList();
 }
 
