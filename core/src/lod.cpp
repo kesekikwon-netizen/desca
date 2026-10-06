@@ -73,6 +73,20 @@ bool TileCache::decode(const std::shared_ptr<TmxTile>& t, size_t node, std::stri
     return true;
 }
 
+bool TileCache::decodeGeometry(const std::shared_ptr<TmxTile>& t, size_t node, std::string* err) {
+    if (!t || node >= t->nodes.size()) return false;
+    {
+        std::lock_guard<std::mutex> lk(*t->mu);
+        if (!decodeNode(*t, node, err)) return false;   // 이미 했으면 바로 돌아옴(decoded)
+    }
+    size_t b;
+    { std::lock_guard<std::mutex> lk(*t->mu); b = tileBytes(*t); }
+    std::lock_guard<std::mutex> lk(mu_);
+    auto it = tiles_.find(t->path);
+    if (it != tiles_.end() && it->second == t) { bytes_[t->path] = b; evictLocked(); }
+    return true;
+}
+
 size_t TileCache::loadedBytes() const {
     std::lock_guard<std::mutex> lk(mu_);
     size_t b = 0;
@@ -107,10 +121,10 @@ namespace {
 struct Job { std::shared_ptr<TmxTile> tile; size_t node; };
 
 /// 모은 노드를 여러 스레드로 디코드(타일 단위 잠금이라 서로 다른 타일·노드가 동시에 진행).
-bool decodeJobs(TileCache& c, const std::vector<Job>& jobs, std::string* err, const std::atomic<bool>* cancel) {
+bool decodeJobs(TileCache& c, const std::vector<Job>& jobs, std::string* err, const std::atomic<bool>* cancel, bool textures = true, size_t maxThreads = 8) {
     if (jobs.empty()) return true;
     unsigned hw = std::max(1u, std::thread::hardware_concurrency());
-    size_t nth = std::min<size_t>({jobs.size(), size_t(hw), size_t(8)});
+    size_t nth = std::min<size_t>({jobs.size(), size_t(hw), std::max<size_t>(1, maxThreads)});
     std::atomic<size_t> next{0};
     std::atomic<bool> failed{false};
     std::mutex emu; std::string firstErr;
@@ -120,7 +134,7 @@ bool decodeJobs(TileCache& c, const std::vector<Job>& jobs, std::string* err, co
             size_t k = next++;
             if (k >= jobs.size()) return;
             std::string e;
-            if (!c.decode(jobs[k].tile, jobs[k].node, &e)) {
+            if (!(textures ? c.decode(jobs[k].tile, jobs[k].node, &e) : c.decodeGeometry(jobs[k].tile, jobs[k].node, &e))) {
                 std::lock_guard<std::mutex> lk(emu);
                 if (!failed.exchange(true)) firstErr = e;
             }
@@ -167,11 +181,11 @@ static bool collectRec(TileCache& c, const fs::path& p, const BandQuad& band, st
 }
 
 bool collectLeafMeshes(TileCache& c, const fs::path& root, const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string* err,
-                       const std::atomic<bool>* cancel) {
+                       const std::atomic<bool>* cancel, bool textures, size_t maxThreads) {
     LeafStats s;
     std::vector<Job> jobs;
     bool ok = collectRec(c, root, band, jobs, s, err, 0, cancel);
-    if (ok) ok = decodeJobs(c, jobs, err, cancel);
+    if (ok) ok = decodeJobs(c, jobs, err, cancel, textures, maxThreads);
     if (ok)
         for (auto& j : jobs)
             for (auto& m : j.tile->nodes[j.node].meshes) {

@@ -5,6 +5,7 @@
 #include <cstring>
 #include "asec/engine.hpp"
 #include "asec/obj.hpp"
+#include "asec/sheet.hpp"
 #include "stb_image.h"
 #include "stb_image_write.h"
 
@@ -19,10 +20,10 @@ static void decodeTex(Texture& t) {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 6) { std::fprintf(stderr, "usage: asec-section <scene.3mx|mesh.obj> AX AY BX BY [--local] [--front m] [--back m] [--res m] [--scale N] [--out prefix] [--world3d]\n"); return 2; }
+    if (argc < 6) { std::fprintf(stderr, "usage: asec-section <scene.3mx|mesh.obj> AX AY BX BY [--local] [--front m] [--back m(기본 3)] [--res m] [--scale N] [--out prefix] [--world3d]\n"); return 2; }
     fs::path in = fs::u8path(argv[1]);
     double ax = std::atof(argv[2]), ay = std::atof(argv[3]), bx = std::atof(argv[4]), by = std::atof(argv[5]);
-    bool local = false, w3 = false; double front = 0, back = 0.5, res = 0.004, scale = 20; std::string out = "section";
+    bool local = false, w3 = false; double front = 0, back = kDefaultBackDepth, res = 0.004, scale = 20; std::string out = "section";
     for (int i = 6; i < argc; ++i) {
         std::string a = argv[i];
         auto nx = [&]() { return i + 1 < argc ? argv[++i] : (char*)"0"; };

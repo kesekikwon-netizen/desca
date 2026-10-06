@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <thread>
 #include "asec/engine.hpp"
 
 namespace asec {
@@ -38,6 +40,12 @@ bool TmxSource::leafMeshes(const BandQuad& band, std::vector<MeshPtr>& out, Leaf
     return eachRoot(scene, st, [&](const fs::path& r, LeafStats* s) { return collectLeafMeshes(*cache, r, band, out, s, err, cancel); });
 }
 
+bool TmxSource::cutMeshes(const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) {
+    // 미리보기 잘린 면: 지오메트리만(사진 디코드 없음), 코어 절반까지(2–4) — 화면 스레드·평면 스트리밍 몫을 남김
+    const size_t nth = std::clamp<size_t>(std::thread::hardware_concurrency() / 2, 2, 4);
+    return eachRoot(scene, st, [&](const fs::path& r, LeafStats* s) { return collectLeafMeshes(*cache, r, band, out, s, err, cancel, false, nth); });
+}
+
 bool TmxSource::bandMeshes(const BandQuad& band, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) {
     return eachRoot(scene, st, [&](const fs::path& r, LeafStats* s) { return collectBandMeshesForResolution(*cache, r, band, res, out, s, err, cancel); });
 }
@@ -66,12 +74,23 @@ bool computeSection(MeshSource& src, const SectionRequest& rq, SectionOutput& ou
     if (rq.line.front + rq.line.back < 1e-6) band = sectionBand(SectionLine{rq.line.a, rq.line.b, 0.001, 0.001}, 0.0);
     out.previewLod = rq.meshRes > 0;
     if (!(out.previewLod ? src.bandMeshes(band, rq.meshRes, meshes, &out.stats, err, cancel) : src.leafMeshes(band, meshes, &out.stats, err, cancel))) return false;
+    // 잘린 면은 언제나 최고 해상도 잎: 최종은 위 잎 메시 그대로, 미리보기는 단면 평면 ±1 mm 얇은 띠의 잎을 따로 모음
+    std::vector<MeshPtr> cutMeshes;
+    const std::vector<MeshPtr>* cutSrc = &meshes;
+    out.cutStats = out.stats;
+    out.cutFromLeaf = !out.previewLod;
+    if (out.previewLod && rq.leafProfileAlways) {
+        const BandQuad thin = sectionBand(SectionLine{rq.line.a, rq.line.b, 0.001, 0.001}, 0.0);
+        LeafStats cs;
+        if (!src.cutMeshes(thin, cutMeshes, &cs, err, cancel)) return false;
+        out.cutStats = cs; cutSrc = &cutMeshes; out.cutFromLeaf = true;
+    }
     out.msCollect = msSince(t0);
     if (cancel && cancel->load()) return false;
 
     auto t1 = clk::now();
     std::vector<CutSeg> segs;
-    for (auto& m : meshes) cutMesh(*m, f, 0.0, 0.0, f.L, segs);
+    for (auto& m : *cutSrc) cutMesh(*m, f, 0.0, 0.0, f.L, segs);
     out.result.line = rq.line;
     out.result.srs = src.srs;
     out.result.rawSegments = segs.size();

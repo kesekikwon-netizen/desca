@@ -108,6 +108,14 @@ std::vector<std::string> pushRecent(const std::vector<std::string>& list, const 
 
 #include "json.hpp"
 namespace asec {
+double resolveBackDepth(bool hasStored, double stored, bool userSet) {
+    if (!hasStored || !(stored >= 0)) return kDefaultBackDepth;
+    stored = std::min(stored, kMaxBackDepth);
+    if (userSet) return stored;
+    if (std::fabs(stored - kLegacyDefaultBackDepth) < 1e-6) return kDefaultBackDepth;   // 옛 기본값 → 새 기본값
+    return stored;
+}
+
 std::string sectionsToJson(const std::vector<SavedSection>& v, const std::string& model, const std::string& srsLabel, int current) {
     nlohmann::json j;
     j["format"] = "ExcavSection.sections";
@@ -118,7 +126,7 @@ std::string sectionsToJson(const std::vector<SavedSection>& v, const std::string
     j["coords"] = "world (SRSOrigin applied), metres";
     auto& a = j["sections"] = nlohmann::json::array();
     for (auto& s : v)
-        a.push_back({{"name", s.name}, {"a", {s.ax, s.ay}}, {"b", {s.bx, s.by}}, {"front", s.front}, {"back", s.back}, {"note", s.note}});
+        a.push_back({{"name", s.name}, {"a", {s.ax, s.ay}}, {"b", {s.bx, s.by}}, {"front", s.front}, {"back", s.back}, {"backUserSet", s.backUserSet}, {"note", s.note}});
     return j.dump(2);
 }
 
@@ -133,7 +141,9 @@ bool sectionsFromJson(const std::string& text, std::vector<SavedSection>& out, i
             auto A = e.at("a"), B = e.at("b");
             s.ax = A.at(0).get<double>(); s.ay = A.at(1).get<double>();
             s.bx = B.at(0).get<double>(); s.by = B.at(1).get<double>();
-            s.front = e.value("front", 0.0); s.back = e.value("back", 0.5);
+            s.front = e.value("front", 0.0);
+            s.backUserSet = e.value("backUserSet", false);
+            s.back = resolveBackDepth(e.contains("back") && e["back"].is_number(), e.value("back", kDefaultBackDepth), s.backUserSet);
             s.note = e.value("note", std::string());
             out.push_back(s);
         }

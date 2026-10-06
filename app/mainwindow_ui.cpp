@@ -247,15 +247,16 @@ QWidget* MainWindow::buildRibbon() {
     front_ = new QDoubleSpinBox; back_ = new QDoubleSpinBox;
     for (auto* sp : {front_, back_}) { sp->setRange(0, kMaxBandDepth); sp->setDecimals(2); sp->setSingleStep(0.05); sp->setSuffix(" m"); sp->setFixedWidth(80); sp->setAlignment(Qt::AlignRight); }
     front_->setToolTip(QStringLiteral("단면선 앞쪽(보는 사람 쪽) 두께, 0–5 m"));
-    back_->setToolTip(QStringLiteral("단면선 뒤쪽(보는 방향) 깊이 — 입면 영상에 보이는 깊이, 0–5 m. 숫자키 1–5 = 0.5 / 1 / 2 / 3 / 5 m"));
+    back_->setToolTip(QStringLiteral("단면선 뒤쪽(보는 방향) 깊이 — 입면 영상(배경)에 보이는 깊이, 0–5 m, 기본 3 m(입면도용). 숫자키 1–5 = 0.5 / 1 / 2 / 3 / 5 m"));
     auto* chips = new QWidget; { auto* h = new QHBoxLayout(chips); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(0);
-        const double vals[4] = {0.5, 1, 2, 5};
-        for (int i = 0; i < 4; ++i) {
+        // 칩 = 숫자키 1–5 (0.5 / 1 / 2 / 3 / 5 m). 3 m 가 기본(입면도)
+        const double vals[5] = {0.5, 1, 2, 3, 5};
+        for (int i = 0; i < 5; ++i) {
             auto* c = new QToolButton; c->setObjectName("chip"); c->setCheckable(true); c->setFocusPolicy(Qt::NoFocus);
-            c->setText(i == 3 ? QStringLiteral("5 m") : QString::number(vals[i], 'g', 2));
-            c->setToolTip(QStringLiteral("뒤 깊이 %1 m (숫자키 %2)").arg(vals[i], 0, 'g', 2).arg(i == 3 ? 5 : i + 1));
+            c->setText(i == 4 ? QStringLiteral("5 m") : QString::number(vals[i], 'g', 2));
+            c->setToolTip(QStringLiteral("뒤 깊이 %1 m (숫자키 %2)%3").arg(vals[i], 0, 'g', 2).arg(i + 1).arg(i == 3 ? QStringLiteral(" — 기본, 입면도용") : QString()));
             if (i == 0) c->setProperty("pos", "first");
-            if (i == 3) c->setProperty("pos", "last");
+            if (i == 4) c->setProperty("pos", "last");
             double v2 = vals[i];
             QObject::connect(c, &QToolButton::clicked, this, [this, v2] { setBackDepth(v2); });
             depthChip_[i] = c; h->addWidget(c);
@@ -534,7 +535,7 @@ void MainWindow::updateHeader() {
         double d = section_->screenDenom();
         QString ds = (d >= 100 || std::fabs(d - std::round(d)) < 0.05) ? QString::number(std::round(d)) : QString::number(d, 'f', 1);
         stripScale_->setText(QStringLiteral("화면 축척 ") + monoB.arg(QStringLiteral("1:") + ds));
-        stripState_->setText(last_.previewLod || !lastFinal_ ? QStringLiteral("<span style='color:#7A5A00'>미리보기(거친) → 최종 계산 중…</span>")
+        stripState_->setText(last_.previewLod || !lastFinal_ ? (last_.cutFromLeaf ? QStringLiteral("<span style='color:#7A5A00'>단면선 정확 · 배경 미리보기 → 최종 계산 중…</span>") : QStringLiteral("<span style='color:#7A5A00'>미리보기(거친) → 최종 계산 중…</span>"))
                                                              : QStringLiteral("<span style='color:#3F6B31'>✓</span> 최종(잎)"));
         LevelPlan lp = sectionLevelPlan(section_->xf().ppmZ(), 1.0, false);
         lvLine_->setText(QStringLiteral("%1 m").arg(lp.lineCm / 100.0, 0, 'f', 2));
@@ -686,7 +687,7 @@ void MainWindow::syncCurrentSection() {
     }
     SavedSection& s = sections_[size_t(current_)];
     s.ax = l.a.x + o.x; s.ay = l.a.y + o.y; s.bx = l.b.x + o.x; s.by = l.b.y + o.y;
-    s.front = front_->value(); s.back = back_->value();
+    s.front = front_->value(); s.back = back_->value(); s.backUserSet = backUserSet_;
     if (!thumbs_.count(current_) && section_->hasResult() && lastFinal_) thumbs_[current_] = makeThumb();
     refreshSectionList();
 }
@@ -700,6 +701,7 @@ void MainWindow::selectSection(int i) {
     SectionLine l; l.a = {s.ax - o.x, s.ay - o.y}; l.b = {s.bx - o.x, s.by - o.y}; l.front = s.front; l.back = s.back;
     applyingState_ = true;
     { QSignalBlocker b1(front_), b2(back_); front_->setValue(s.front); back_->setValue(s.back); }
+    backUserSet_ = s.backUserSet;
     plan_->setBand(s.front, s.back);
     plan_->setLine(l, true);
     applyingState_ = false;
@@ -716,7 +718,8 @@ void MainWindow::addSection() {
     syncCurrentSection();
     std::vector<std::string> used; for (auto& s : sections_) used.push_back(s.name);
     int k = 0; while (std::find(used.begin(), used.end(), sectionLetterName(k)) != used.end()) ++k;
-    SavedSection s; s.name = sectionLetterName(k); s.front = front_->value(); s.back = back_->value();
+    SavedSection s; s.name = sectionLetterName(k); s.front = front_->value();
+    s.back = backUserSet_ ? back_->value() : kDefaultBackDepth; s.backUserSet = backUserSet_;   // 새 단면: 기본 3 m(사용자가 고른 값이 있으면 그 값)
     sections_.push_back(s); current_ = int(sections_.size()) - 1;
     applyingState_ = true;
     plan_->setLine(SectionLine(), false); section_->clear(); last_ = SectionOutput();
@@ -879,7 +882,7 @@ void MainWindow::saveModelState() {
     QSettings st; const QString k = modelKey(path_);
     const Vec3 o = srs().origin;
     st.setValue(k + "path", QFileInfo(path_).absoluteFilePath());
-    st.setValue(k + "front", front_->value()); st.setValue(k + "back", back_->value());
+    st.setValue(k + "front", front_->value()); st.setValue(k + "back", back_->value()); st.setValue(k + "backUserSet", backUserSet_);
     st.setValue(k + "hasLine", plan_->hasLine());
     if (plan_->hasLine()) {
         const SectionLine& l = plan_->line();
@@ -907,7 +910,10 @@ void MainWindow::restoreModelState() {
     }
     if (st.contains(k + "front")) {
         QSignalBlocker b1(front_), b2(back_);
-        front_->setValue(st.value(k + "front").toDouble()); back_->setValue(st.value(k + "back").toDouble());
+        const bool us = st.value(k + "backUserSet", false).toBool();
+        front_->setValue(st.value(k + "front").toDouble());
+        back_->setValue(resolveBackDepth(true, st.value(k + "back").toDouble(), us));   // 옛 0.5(기본값) → 3 m
+        backUserSet_ = us;
         plan_->setBand(front_->value(), back_->value());
     }
     if (st.value(k + "hasLine").toBool()) {
@@ -1040,7 +1046,7 @@ void MainWindow::rebuildStartPage() {
     auto* steps = new QFrame; steps->setObjectName("cardSide"); steps->setAttribute(Qt::WA_StyledBackground);
     { auto* v = new QVBoxLayout(steps); v->setContentsMargins(18, 14, 18, 14); v->setSpacing(10);
         v->addWidget(lab(QStringLiteral("세 걸음으로 단면도"), "sectionHead"));
-        const char* st3[3][2] = {{"모델 열기", "3MX 는 대략 모양이 먼저 뜨고 디테일이 이어서 옵니다"}, {"단면선 긋기  S", "평면에서 시작점 A, 끝점 A′ 를 클릭. 뒤 깊이는 숫자키 1–5"}, {"도면 만들기  Ctrl+P", "축척·용지를 고르면 넘치는지 미리 보여 줍니다"}};
+        const char* st3[3][2] = {{"모델 열기", "3MX 는 대략 모양이 먼저 뜨고 디테일이 이어서 옵니다"}, {"단면선 긋기  S", "평면에서 시작점 A, 끝점 A′ 를 클릭. 뒤 깊이 기본 3 m(숫자키 1–5)"}, {"도면 만들기  Ctrl+P", "축척·용지를 고르면 넘치는지 미리 보여 줍니다"}};
         for (int i = 0; i < 3; ++i) {
             auto* row = new QHBoxLayout; row->setSpacing(10);
             auto* n = lab(QString::number(i + 1), "stepNum"); n->setFixedSize(24, 24); n->setAlignment(Qt::AlignCenter);
@@ -1054,7 +1060,7 @@ void MainWindow::rebuildStartPage() {
     auto* keys = new QFrame; keys->setObjectName("cardSide"); keys->setAttribute(Qt::WA_StyledBackground);
     { auto* g = new QGridLayout(keys); g->setContentsMargins(18, 14, 18, 14); g->setHorizontalSpacing(12); g->setVerticalSpacing(6);
         g->addWidget(lab(QStringLiteral("자주 쓰는 키"), "sectionHead"), 0, 0, 1, 2);
-        const char* kk[][2] = {{"Ctrl+O", "열기"}, {"Ctrl+Shift+O", "최근 모델 다시 열기"}, {"S", "단면선 그리기"}, {"1 – 5", "뒤 깊이 0.5 / 1 / 2 / 3 / 5 m"},
+        const char* kk[][2] = {{"Ctrl+O", "열기"}, {"Ctrl+Shift+O", "최근 모델 다시 열기"}, {"S", "단면선 그리기"}, {"1 – 5", "뒤 깊이 0.5 / 1 / 2 / 3(기본) / 5 m"},
                                {"[  ]", "평행 이동 0.1 m"}, {"R", "방향 반전"}, {"Ctrl+Z / Ctrl+Y", "되돌리기 / 다시"}, {"Ctrl+P", "도면"}, {"F1", "모든 단축키"}};
         int r = 1;
         for (auto& k : kk) { g->addWidget(kbd(QString::fromUtf8(k[0])), r, 0, Qt::AlignLeft); g->addWidget(lab(QString::fromUtf8(k[1])), r, 1); ++r; }
@@ -1078,14 +1084,16 @@ void MainWindow::showStart(bool on) {
 // ---------------------------------------------------------------- 작은 동작
 void MainWindow::setBackDepth(double v) {
     if (!back_) return;
+    backUserSet_ = true;
+    QSettings().setValue("section/backUserSet", true);
     back_->setValue(std::clamp(v, 0.0, kMaxBandDepth));
     updateDepthChips();
     showStatus(QStringLiteral("뒤 깊이 %1 m — 입면 영상에 단면선 뒤 %1 m 까지 보입니다").arg(back_->value(), 0, 'g', 3));
 }
 
 void MainWindow::updateDepthChips() {
-    const double vals[4] = {0.5, 1, 2, 5};
-    for (int i = 0; i < 4; ++i) if (depthChip_[i]) depthChip_[i]->setChecked(std::fabs(back_->value() - vals[i]) < 1e-6);
+    const double vals[5] = {0.5, 1, 2, 3, 5};
+    for (int i = 0; i < 5; ++i) if (depthChip_[i]) depthChip_[i]->setChecked(std::fabs(back_->value() - vals[i]) < 1e-6);
 }
 
 void MainWindow::shiftLine(double d) {
@@ -1119,7 +1127,7 @@ void MainWindow::dlgKeys() {
     const char* rows[][2] = {
         {"Ctrl+O", "모델 열기"}, {"Ctrl+Shift+O", "최근 모델 다시 열기(마지막 단면선·화면 그대로)"}, {"S", "단면선 그리기 — A 클릭, A′ 클릭"},
         {"Shift (그리는 중)", "동서·남북으로 고정"}, {"Enter (그리는 중)", "A/A′ 좌표 직접 입력"}, {"Esc", "그리기 취소"},
-        {"1 2 3 4 5", "뒤 깊이 0.5 / 1 / 2 / 3 / 5 m"}, {"[  ]", "평행 이동 −0.1 / +0.1 m (보는 쪽 +)"}, {"{  }", "평행 이동 −1 / +1 m"},
+        {"1 2 3 4 5", "뒤 깊이 0.5 / 1 / 2 / 3 / 5 m (기본 3 m — 입면도용 배경)"}, {"[  ]", "평행 이동 −0.1 / +0.1 m (보는 쪽 +)"}, {"{  }", "평행 이동 −1 / +1 m"},
         {"X", "세로 과장 ×1 → ×2 → ×5 → ×10 (화면만 · 도면은 1:1)"},
         {"R", "방향 반전(A↔A′)"}, {"N", "새 단면 추가"}, {"I · L · V", "입면 영상 · 단면선 · 레벨선 켜기/끄기"},
         {"Ctrl+Z / Ctrl+Y", "되돌리기 / 다시(단면선·두께·표시·높이 기준)"}, {"Ctrl+P", "도면(축척·용지 미리보기 → PDF/DXF/PNG/TIFF)"},
@@ -1257,7 +1265,11 @@ MainWindow::MainWindow() {
     setActiveView(0);
 
     front_->setValue(QSettings().value("section/front", 0.0).toDouble());
-    back_->setValue(QSettings().value("section/back", 0.5).toDouble());
+    {   // 뒤 깊이: 기본 3 m. 1.2.0 까지 저장된 0.5(옛 기본값)는 사용자가 바꾼 표시가 없으면 새 기본값으로
+        QSettings st;
+        backUserSet_ = st.value("section/backUserSet", false).toBool();
+        back_->setValue(resolveBackDepth(st.contains("section/back"), st.value("section/back").toDouble(), backUserSet_));
+    }
     plan_->setBand(front_->value(), back_->value());
     if (auto g = QSettings().value("ui/geometry").toByteArray(); !g.isEmpty()) restoreGeometry(g);
     else resize(1600, 950);
@@ -1378,6 +1390,7 @@ MainWindow::MainWindow() {
     QObject::connect(action("lang"), &QAction::toggled, this, [this](bool on) { bilingual_ = on; QSettings().setValue("ui/bilingual", on); retranslate(); });
     auto bandChanged = [this] {
         plan_->setBand(front_->value(), back_->value());
+        if (!applyingState_) { backUserSet_ = true; QSettings().setValue("section/backUserSet", true); }   // 사용자가 바꿈
         QSettings().setValue("section/front", front_->value()); QSettings().setValue("section/back", back_->value());
         if (plan_->hasLine()) { SectionLine l = plan_->line(); l.front = front_->value(); l.back = back_->value(); plan_->setLine(l, true); requestSection(true); }
         updateDepthChips();

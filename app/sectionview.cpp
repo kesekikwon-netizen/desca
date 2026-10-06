@@ -141,23 +141,6 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         p.drawLine(QPointF(X(0), pr.top()), QPointF(X(0), pr.bottom()));
         p.drawLine(QPointF(X(f.L), pr.top()), QPointF(X(f.L), pr.bottom()));
     }
-    // 5) 단면선: 순수 빨강 약 2 px, 안티에일리어싱, 둥근 이음. 닫힌 고리(나무·돌 덩어리)는 닫아서 그림
-    if (st_.showLine) {
-        p.setBrush(Qt::NoBrush);
-        // 화면: 설정 굵기(기본 2 px) / 인쇄: 0.35 mm
-        const double lw = forExport ? 0.35 / 25.4 * 96.0 * ui : std::clamp(st_.lineWidthPx, 1.0, 4.0) * ui;
-        p.setPen(QPen(theme::ProfileRed, lw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        for (auto& pl : r_.profile) {
-            if (pl.size() < 2) continue;
-            const bool closed = pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9;
-            QPainterPath path;
-            path.moveTo(X(pl[0].x), Y(pl[0].y + oz));
-            const size_t n = closed ? pl.size() - 1 : pl.size();
-            for (size_t i = 1; i < n; ++i) path.lineTo(X(pl[i].x), Y(pl[i].y + oz));
-            if (closed) path.closeSubpath();
-            p.drawPath(path);
-        }
-    }
     // 5b) 기준선 EL(점선, 맨 위)
     if (st_.showBaseline && st_.baselineEl > zVis0 && st_.baselineEl < zVis1) {
         double y = Y(st_.baselineEl);
@@ -176,6 +159,49 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         QRectF vr(pr.left() + 8 * ui, pr.top() + 8 * ui, fm.horizontalAdvance(vt) + 16 * ui, fm.height() + 8 * ui);
         p.setPen(QPen(QColor(0xC9, 0x8A, 0x1B), 1.0 * ui)); p.setBrush(QColor(0xFF, 0xF4, 0xD6, 235)); p.drawRoundedRect(vr, 5 * ui, 5 * ui);
         p.setPen(QColor(0x7A, 0x5A, 0x00)); p.drawText(vr, Qt::AlignCenter, vt);
+    }
+    // 10) 축척 막대(그림 안 오른쪽 아래) — 단면선 밑에 그림
+    if (st_.plotScaleBar) {
+        double len = niceStep(110 * ui / xf.ppm, 1);
+        double px = len * xf.ppm;
+        QRectF sb(pr.right() - px - 14 * ui, pr.bottom() - 22 * ui, px, 5 * ui);
+        p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 220));
+        p.drawRoundedRect(sb.adjusted(-8 * ui, -16 * ui, 8 * ui, 8 * ui), 4 * ui, 4 * ui);
+        p.setPen(QPen(theme::Ink, 1.0 * ui)); p.setBrush(Qt::white); p.drawRect(sb);
+        p.setBrush(theme::Ink);
+        for (int i = 0; i < 4; i += 2) p.drawRect(QRectF(sb.x() + px * i / 4, sb.y(), px / 4, sb.height()));
+        p.setFont(small); p.setPen(theme::Ink);
+        QString lab = len >= 1 ? QString::number(len, 'g', 4) + " m" : QString::number(len * 100, 'g', 4) + " cm";
+        p.drawText(QRectF(sb.left(), sb.top() - 15 * ui, px, 13 * ui), Qt::AlignHCenter | Qt::AlignBottom, lab);
+    }
+    if (!forExport && busy_) {   // 「최종 계산 중」 상자도 단면선 밑
+        p.setFont(small);
+        QRectF b(pr.right() - 110 * ui, pr.top() + 8 * ui, 100 * ui, 22 * ui);
+        p.setPen(QPen(theme::Edge, 1)); p.setBrush(Qt::white); p.drawRoundedRect(b, 6 * ui, 6 * ui);
+        p.setPen(theme::Ink); p.drawText(b, Qt::AlignCenter, QStringLiteral("최종 계산 중…"));
+    }
+    // 5) 단면선(잘린 면): 그림 칸 안에서 맨 마지막 — 입면 배경·기준선·축척 막대·안내 상자가 절대 가리지 않음.
+    //    순수 빨강 약 2 px(인쇄 0.35 mm), 안티에일리어싱, 둥근 이음. 닫힌 고리(나무·돌 덩어리)는 닫아서 그림
+    if (st_.showLine) {
+        p.setBrush(Qt::NoBrush);
+        // 화면: 설정 굵기(기본 2 px) / 인쇄: 0.35 mm
+        const double lw = forExport ? 0.35 / 25.4 * 96.0 * ui : std::clamp(st_.lineWidthPx, 1.0, 4.0) * ui;
+        p.setPen(QPen(theme::ProfileRed, lw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        // 화면만: 0.1 px 보다 작은 굴곡은 그려도 보이지 않으므로 화면 좌표 0.1 px 허용으로 점을 솎아 그림(모든 꼭짓점이 선 중심에서 0.1 px 안 —
+        // 화소 단위로 같은 그림, 끌기 중 다시 그리기가 빨라짐). 내보내기(PDF·DXF·영상)는 꼭짓점 전부 그대로
+        const double screenTolM = forExport ? 0.0 : kScreenProfileTolPx / std::max(xf.ppm, ppmZ);
+        for (const auto& pl0 : r_.profile) {
+            if (pl0.size() < 2) continue;
+            const bool closed = pl0.size() > 3 && (pl0.front() - pl0.back()).len() < 1e-9;
+            const Polyline simp = screenTolM > 0 ? simplifyDP(pl0, screenTolM) : Polyline();
+            const Polyline& pl = screenTolM > 0 && simp.size() >= 2 ? simp : pl0;
+            QPainterPath path;
+            path.moveTo(X(pl[0].x), Y(pl[0].y + oz));
+            const size_t n = closed && pl.size() > 3 ? pl.size() - 1 : pl.size();
+            for (size_t i = 1; i < n; ++i) path.lineTo(X(pl[i].x), Y(pl[i].y + oz));
+            if (closed) path.closeSubpath();
+            p.drawPath(path);
+        }
     }
     p.restore();  // clip
 
@@ -226,20 +252,6 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         p.setPen(theme::SectionRed);
         p.drawText(tr, Qt::AlignCenter, k ? QStringLiteral("A′") : QStringLiteral("A"));
     }
-    // 10) 축척 막대(그림 안 오른쪽 아래)
-    if (st_.plotScaleBar) {
-        double len = niceStep(110 * ui / xf.ppm, 1);
-        double px = len * xf.ppm;
-        QRectF sb(pr.right() - px - 14 * ui, pr.bottom() - 22 * ui, px, 5 * ui);
-        p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 220));
-        p.drawRoundedRect(sb.adjusted(-8 * ui, -16 * ui, 8 * ui, 8 * ui), 4 * ui, 4 * ui);
-        p.setPen(QPen(theme::Ink, 1.0 * ui)); p.setBrush(Qt::white); p.drawRect(sb);
-        p.setBrush(theme::Ink);
-        for (int i = 0; i < 4; i += 2) p.drawRect(QRectF(sb.x() + px * i / 4, sb.y(), px / 4, sb.height()));
-        p.setFont(small); p.setPen(theme::Ink);
-        QString lab = len >= 1 ? QString::number(len, 'g', 4) + " m" : QString::number(len * 100, 'g', 4) + " cm";
-        p.drawText(QRectF(sb.left(), sb.top() - 15 * ui, px, 13 * ui), Qt::AlignHCenter | Qt::AlignBottom, lab);
-    }
     // 11) 제목(내보내기 영상만 — 화면은 보기 머리·정보 띠가 대신, 도면은 표제란이 대신)
     if (titleRow) {
     p.setFont(title); p.setPen(theme::Ink);
@@ -256,12 +268,6 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     if (!footer.isEmpty()) {
         p.setPen(theme::Idle);
         p.drawText(QRectF(area.left() + 12 * ui, area.bottom() - fm.height() - 4 * ui, area.width() - 24 * ui, fm.height()), Qt::AlignRight, footer);
-    }
-    if (!forExport && busy_) {
-        p.setFont(small);
-        QRectF b(pr.right() - 110 * ui, pr.top() + 8 * ui, 100 * ui, 22 * ui);
-        p.setPen(QPen(theme::Edge, 1)); p.setBrush(Qt::white); p.drawRoundedRect(b, 6 * ui, 6 * ui);
-        p.setPen(theme::Ink); p.drawText(b, Qt::AlignCenter, QStringLiteral("최종 계산 중…"));
     }
     p.restore();
 }

@@ -110,6 +110,7 @@ public:
     bool hasSection() const;
     void setLineLocal(const asec::SectionLine& l);
     void setThickness(double front, double back);
+    double frontDepth() const; double backDepth() const; bool backUserSet() const { return backUserSet_; }
     void setDepthFade(bool on);
     const asec::SrsInfo& srs() const;
     const asec::SrsReport& srsReport() const { return srsReport_; }
@@ -161,7 +162,8 @@ private:
     QWidget *planTitle_ = nullptr, *secTitleBar_ = nullptr;
     QComboBox* scaleCombo_ = nullptr;
     QLabel *lvLine_ = nullptr, *lvLabel_ = nullptr;
-    QToolButton* depthChip_[4] = {};
+    QToolButton* depthChip_[5] = {};
+    bool backUserSet_ = false;   // 뒤 깊이를 사용자가 직접 고름(아니면 기본 3 m 를 따름)
     QMenu* recentMenu_ = nullptr;
     QUndoStack* undo_ = nullptr;
     QWidget* sidePanel_ = nullptr;

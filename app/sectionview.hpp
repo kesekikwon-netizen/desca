@@ -16,6 +16,9 @@ struct SectionStyle {
 };
 
 /// 단면 도면 한 장을 그리는 데 필요한 모든 것(스레드 사이 복사용 스냅숏)
+// 화면 단면선 그리기 허용 오차(px): 꼭짓점이 그려진 선 중심에서 이만큼 안(눈에 안 보임). 내보내기는 솎지 않음
+constexpr double kScreenProfileTolPx = 0.1;
+
 struct SectionDoc {
     asec::SectionResult r;
     SectionStyle st;

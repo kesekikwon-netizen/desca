@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
     fs::path in = fs::u8path(argv[1]);
     bool tree = false, decode = false, local = false;
     std::vector<std::pair<double, double>> picks;
-    bool haveSec = false; double sa[4] = {}; double secFront = 0, secBack = 0.5; bool tex = true;
+    bool haveSec = false; double sa[4] = {}; double secFront = 0, secBack = 3.0; bool tex = true;   // 뒤 기본 3 m(앱과 같음)
     std::string csvPath;
     for (int i = 2; i < argc; ++i) {
         std::string a = argv[i];

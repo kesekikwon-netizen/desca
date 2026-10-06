@@ -62,10 +62,19 @@ std::vector<std::string> pushRecent(const std::vector<std::string>& list, const 
 
 namespace asec {
 /// 단면 목록 한 줄(실좌표 = SRSOrigin 적용, 앞/뒤 m). 설정(모델 경로 키)과 .sections.json 공용
+/// 뒤 깊이(입면 배경) 기본값: 입면도를 그릴 수 있게 3 m(1.2.1~). 1.2.0 까지는 0.5 m
+constexpr double kDefaultBackDepth = 3.0;
+constexpr double kLegacyDefaultBackDepth = 0.5;
+constexpr double kMaxBackDepth = 5.0;
+/// 저장된 뒤 깊이 → 쓸 값. userSet = 사용자가 직접 고른 값이라는 표시(1.2.1~ 저장).
+/// 저장 없음 → 기본 3 m. 표시 있음 → 그 값. 표시 없는 옛 기록: 옛 기본값 0.5 면 새 기본 3 m, 다른 값이면 사용자가 바꾼 것이므로 유지.
+double resolveBackDepth(bool hasStored, double stored, bool userSet);
+
 struct SavedSection {
     std::string name;      // "A–A′"
     double ax = 0, ay = 0, bx = 0, by = 0;
-    double front = 0, back = 0.5;
+    double front = 0, back = kDefaultBackDepth;
+    bool backUserSet = false;   // 뒤 깊이를 사용자가 직접 고름(아니면 기본값을 따름)
     std::string note;
 };
 std::string sectionsToJson(const std::vector<SavedSection>& v, const std::string& model, const std::string& srsLabel, int current);

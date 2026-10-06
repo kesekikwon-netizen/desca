@@ -9,7 +9,7 @@ namespace asec {
 struct SectionLine {
     Vec2 a, b;
     double front = 0.0;  // 관찰자 쪽(앞) 두께
-    double back = 0.5;   // 보는 방향(뒤) 두께
+    double back = 3.0;   // 보는 방향(뒤) 깊이 — 입면 배경. 기본 3 m(입면도용, 1.2.1~; asec::kDefaultBackDepth 와 같음)
 };
 
 /// 단면 좌표계. s = A 에서의 거리(수평), d = 평면에서의 거리(+ = 보는 방향), z = 높이.

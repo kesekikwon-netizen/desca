@@ -12,9 +12,12 @@
 //   1.2: --settings DIR(설정을 DIR 의 INI 로 — 시험용) --export-pdf f / --export-sheet-png f / --export-sheet-tiff f / --export-sheet-dxf f
 //        [--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split] --export-dialog-shot f --undo-test --ctx-shot f
 //        --extra-line AX AY BX BY(단면 목록에 더함, 반복 가능) --start-shot f(파일 없이: 시작 화면)
+//   --cut-check: 잘린 면 정확도(단면선 윗면 vs 잎 연직 피킹, 미리보기 vs 최종) + 단면선이 배경 위에 순수 빨강으로 그려졌는지(화면·내보내기)
 //   --vex N: 단면 화면 세로 과장(1·2·5·10, 화면만) / 창 제목 중복 검사는 항상 로그(window-title=…)
 //   --plan-cam X Y mpp: 캡처 전에 평면 카메라를 실좌표 중심·m/px 로(평면-단면 정합 확인)
 #include <QApplication>
+#include <QPainter>
+#include <algorithm>
 #include <QDialog>
 #include <QSettings>
 #include <array>
@@ -37,6 +40,93 @@ extern const char* const kVersion;
 static void processFor(int ms) {
     auto t0 = std::chrono::steady_clock::now();
     while (std::chrono::steady_clock::now() - t0 < std::chrono::milliseconds(ms)) { QApplication::processEvents(QEventLoop::AllEvents, 20); }
+}
+
+// --cut-check: 잘린 면이 정확한지(잎 피킹 대비 mm), 미리보기(거친 배경)에서도 단면선은 잎인지, 단면선이 배경 위에 그려지는지
+template <class LogFn>
+static void runCutCheck(MainWindow& w, LogFn log) {
+    auto src = w.source();
+    const SectionDoc d = w.sectionDoc();
+    const SectionResult& r = d.r;
+    const Vec3 o = r.srs.origin;
+    const SectionFrame fr(r.line);
+    // 1) 1 cm 간격 s 마다: 단면선(모든 선분 보간)의 가장 높은 점 vs 그 XY 의 잎 메시 연직 피킹(윗면). 닫힌 고리(덤불 수관) 포함
+    std::vector<double> diff; size_t steep = 0;
+    for (double sx = 0.005; sx < fr.L; sx += 0.01) {
+        double zTop = -1e300, slope = 0;
+        for (auto& pl : r.profile)
+            for (size_t i = 1; i < pl.size(); ++i) {
+                const Vec2 a = pl[i - 1], b = pl[i];
+                const double lo = std::min(a.x, b.x), hi = std::max(a.x, b.x);
+                if (sx < lo || sx > hi || hi - lo < 1e-9) continue;
+                const double z = a.y + (b.y - a.y) * (sx - a.x) / (b.x - a.x);
+                if (z > zTop) { zTop = z; slope = std::fabs((b.y - a.y) / (b.x - a.x)); }
+            }
+        if (zTop < -1e299) continue;
+        if (slope > 3) { ++steep; continue; }   // 거의 수직인 벽: 연직 피킹으로 비교할 수 없음
+        const Vec2 xy = fr.planXY(sx, 0);
+        PickResult pr; std::string e;
+        if (pickVertical(*src, xy.x, xy.y, pr, &e) && pr.hit) {
+            const double dd = std::fabs(pr.local.z - zTop);
+            diff.push_back(dd);
+            if (dd > 0.005) log(QStringLiteral("cut-accuracy outlier: s=%1 profile-top=%2 pick=%3 (Δ %4 mm)").arg(sx, 0, 'f', 3).arg(zTop + o.z, 0, 'f', 3).arg(pr.world.z, 0, 'f', 3).arg(dd * 1000, 0, 'f', 1));
+        }
+    }
+    std::sort(diff.begin(), diff.end());
+    auto q = [&](double f) { return diff.empty() ? 0.0 : diff[size_t(f * (diff.size() - 1))]; };
+    size_t n5 = 0, n1 = 0; for (double x : diff) { n5 += x <= 0.005; n1 += x <= 0.001; }
+    std::vector<double> in5(diff.begin(), diff.begin() + n5);   // 5 mm 안 표본(이탈은 위에 하나씩 기록)
+    auto q5 = [&](double f) { return in5.empty() ? 0.0 : in5[size_t(f * (in5.size() - 1))]; };
+    log(QStringLiteral("cut-accuracy: back=%1m samples=%2@1cm (walls>3:1 skipped %3) |profile-top − leaf-pick| median=%4mm p95=%5mm p99=%6mm max=%7mm")
+            .arg(r.line.back, 0, 'f', 2).arg(diff.size()).arg(steep).arg(q(0.5) * 1000, 0, 'f', 2).arg(q(0.95) * 1000, 0, 'f', 2).arg(q(0.99) * 1000, 0, 'f', 2).arg(q(1.0) * 1000, 0, 'f', 2));
+    log(QStringLiteral("cut-accuracy: within1mm=%1/%2 within5mm=%3/%2 outliers>5mm=%4 max-within5mm=%5mm")
+            .arg(n1).arg(diff.size()).arg(n5).arg(diff.size() - n5).arg(q5(1.0) * 1000, 0, 'f', 2));
+    // 2) 미리보기(배경 거친 LOD) 단면선 = 최종(잎) 단면선?
+    {
+        SectionRequest rq; rq.line = r.line; rq.meshRes = std::max(0.008, fr.L / 700.0); rq.imageRes = rq.meshRes; rq.wantImage = true;
+        SectionOutput pre; std::string e;
+        rq.meshRes = rq.imageRes;
+        if (computeSection(*src, rq, pre, &e)) {
+            size_t nA = 0, nB = 0; double dmax = 0;
+            for (auto& pl : r.profile) nA += pl.size();
+            for (auto& pl : pre.result.profile) nB += pl.size();
+            if (nA == nB) { auto ia = r.profile.begin(); for (auto& pl : pre.result.profile) { for (size_t i = 0; i < pl.size(); ++i) dmax = std::max(dmax, (pl[i] - (*ia)[i]).len()); ++ia; } }
+            log(QStringLiteral("cut-preview: image-lod-depth=%1 cut-from-leaf=%2 cut-depth=%3 vertices preview=%4 final=%5 max-diff=%6mm")
+                    .arg(pre.stats.maxDepth).arg(pre.cutFromLeaf ? 1 : 0).arg(pre.cutStats.maxDepth).arg(nB).arg(nA).arg(nA == nB ? QString::number(dmax * 1000, 'f', 3) : QStringLiteral("n/a")));
+        }
+    }
+    // 3) 단면선이 배경 위(순수 빨강)인지: 화면 그림과 내보내기 그림에서 단면선 꼭짓점 자리 픽셀
+    auto onTop = [&](const QImage& im, const SectionXf& xf, bool exp, int& n) {
+        int red = 0; n = 0;
+        const double ppmZ = exp ? xf.ppm : xf.ppmZ();
+        for (auto& pl : r.profile)
+            for (size_t i = 1; i + 1 < pl.size(); ++i) {
+                const double x = xf.plot.left() + (pl[i].x - xf.s0) * xf.ppm, y = xf.plot.top() + (xf.zTop - (pl[i].y + o.z)) * ppmZ;
+                if (!xf.plot.adjusted(2, 2, -2, -2).contains(QPointF(x, y))) continue;
+                ++n; bool hit = false;
+                for (int dy = -1; dy <= 1 && !hit; ++dy) for (int dx = -1; dx <= 1 && !hit; ++dx) {
+                    QRgb c = im.pixel(int(x) + dx, int(y) + dy);
+                    hit = qRed(c) >= 250 && qGreen(c) <= 8 && qBlue(c) <= 8;
+                }
+                red += hit;
+            }
+        return red;
+    };
+    {
+        SectionView* sv = w.sectionView();
+        QImage im = sv->grab().toImage().convertToFormat(QImage::Format_RGB32);
+        const double dpr = im.devicePixelRatio();
+        SectionXf xf = sv->xf();
+        if (dpr != 1.0) { xf.plot = QRectF(xf.plot.topLeft() * dpr, xf.plot.size() * dpr); xf.ppm *= dpr; }
+        int n = 0; int red = onTop(im, xf, false, n);
+        log(QStringLiteral("cut-on-top screen: vertices=%1 pure-red=%2 (%3%)").arg(n).arg(red).arg(n ? 100.0 * red / n : 0, 0, 'f', 1));
+        SectionXf ex; const double ppm = 1000.0 / 40 / 25.4 * 150;   // 1:40, 150 dpi
+        QSize sz = sectionExportLayout(d, ppm, 150 / 96.0, ex);
+        QImage img(sz, QImage::Format_RGB32); img.fill(Qt::white);
+        { QPainter p(&img); SectionImgGeo g{d.imgS0, d.imgZ1, d.imgRes}; paintSectionDoc(p, d, QRectF(QPointF(0, 0), QSizeF(sz)), ex, 150 / 96.0, d.img, true, QString(), &g); }
+        int n2 = 0; int red2 = onTop(img, ex, true, n2);
+        log(QStringLiteral("cut-on-top export(1:40,150dpi): vertices=%1 pure-red=%2 (%3%) image=%4x%5").arg(n2).arg(red2).arg(n2 ? 100.0 * red2 / n2 : 0, 0, 'f', 1).arg(sz.width()).arg(sz.height()));
+    }
 }
 
 int main(int argc, char** argv) {
@@ -66,6 +156,7 @@ int main(int argc, char** argv) {
     bool undoTest = false, split = false; double sheetScale = 0, sectionScale = 0;
     QString lodShot;
     double camX = 0, camY = 0, camMpp = 0, vexArg = 0;
+    bool cutCheck = false;
     std::vector<std::array<double, 4>> extraLines;
     bool haveLine = false, local = false, quit = false;
     double ax = 0, ay = 0, bx = 0, by = 0, front = -1, back = -1, denom = 20, dpi = 300, spacing = 0;
@@ -100,6 +191,7 @@ int main(int argc, char** argv) {
         else if (s == "--pick" && i + 2 < a.size()) { picks.push_back({a[i + 1].toDouble(), a[i + 2].toDouble()}); i += 2; }
         else if (s == "--hover") hover = true;
         else if (s == "--vex") vexArg = nx().toDouble();
+        else if (s == "--cut-check") cutCheck = true;
         else if (s == "--plan-cam" && i + 3 < a.size()) { camX = a[i + 1].toDouble(); camY = a[i + 2].toDouble(); camMpp = a[i + 3].toDouble(); i += 3; }
         else if (s == "--settings") nx();
         else if (s == "--export-dialog-shot") dialogShot = nx();
@@ -155,7 +247,7 @@ int main(int argc, char** argv) {
         if (d == VDatum::Unknown) log("height-datum: unknown key " + heightDatum);
         else w.setHeightDeclaration(d, false);
     }
-    if (front >= 0 || back >= 0) w.setThickness(front >= 0 ? front : 0.0, back >= 0 ? back : 0.5);  // 성능 기록(단면 끌기)도 이 두께로
+    if (front >= 0 || back >= 0) w.setThickness(front >= 0 ? front : w.frontDepth(), back >= 0 ? back : w.backDepth());  // 성능 기록(단면 끌기)도 이 두께로
     if (!depthFade.isEmpty()) w.setDepthFade(depthFade != "off" && depthFade != "0");
     {
         const SrsReport& r = w.srsReport();
@@ -282,6 +374,7 @@ int main(int argc, char** argv) {
     if (tab >= 0) w.selectRibbonTab(tab);
     processFor(300);
     log("window-" + w.windowTitleCheck());
+    log(QStringLiteral("depth: front=%1m back=%2m backUserSet=%3").arg(w.frontDepth(), 0, 'f', 2).arg(w.backDepth(), 0, 'f', 2).arg(w.backUserSet() ? 1 : 0));
     if (haveLine) {
         Vec3 o = local ? Vec3() : w.srs().origin;
         SectionLine l; l.a = Vec2(ax - o.x, ay - o.y); l.b = Vec2(bx - o.x, by - o.y);
@@ -294,6 +387,7 @@ int main(int argc, char** argv) {
             log(QStringLiteral("vex-suggest: relief=%1cm visible1to1=%2m suggest=x%3").arg(w.vexRelief() * 100, 0, 'f', 1)
                     .arg(w.sectionView()->fitVisibleHeight(), 0, 'f', 2).arg(w.vexSuggestion()));
             if (vexArg > 0) { w.setVex(vexArg); log(QStringLiteral("vex: x%1 (화면만)").arg(w.sectionView()->verticalExaggeration(), 0, 'g', 3)); }
+            if (cutCheck) { processFor(300); runCutCheck(w, log); }
         }
     }
     processFor(400);

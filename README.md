@@ -28,7 +28,7 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
 `SectionViewer <파일.3mx> --line AX AY BX BY [--local] [--front m] [--back m] [--scale N] [--dpi N]
  [--export-png|tiff|geotiff|dxf|plan|xyz|las|csv 파일] [--area whole|band|view] [--spacing m] [--shot 파일.png] [--log 파일]
  [--pick X Y]... [--hover] [--perf-log 파일.csv] [--wheel-test] [--depth-fade on|off] [--quit]`
-- `--front/--back m`: 두께 띠(0–5 m). 입면 영상은 뒤 깊이까지 그림. `--depth-fade on|off`: 깊이 음영
+- `--front/--back m`: 두께 띠(0–5 m, 뒤 기본 3 m). 입면 영상은 뒤 깊이까지 그림. 단면선(잘린 면)은 미리보기 때도 언제나 최고 해상도 잎으로 자름. `--depth-fade on|off`: 깊이 음영
 - `--wheel-test`: 평면·단면에 실제 휠 이벤트(화면 비중심 지점)를 보내 애니메이션이 끝난 뒤 커서 아래 지점 이동(px),
   애니메이션 시간, 프레임 최악 시간, LOD 깊이·스트리밍 대기 여부와 레벨선 간격(화면/1:20·1:40·1:100 내보내기)을 로그
 - `--pick X Y`: 실좌표(또는 `--local`)에서 잎 메시 연직 정밀 피킹 → 로그에 Z·출처·시간
@@ -47,6 +47,8 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
   `--lod-shot 파일`(평면 확대 직후 디테일 카드), `--extra-line AX AY BX BY`(단면 목록에 추가, 반복), `--section-scale N`(단면 화면 1:N),
   `--start-shot 파일`(파일 없이 시작 화면)
 - 1.2.1 시험용: `--vex N`(단면 화면 세로 과장 1·2·5·10 — 화면만), `--plan-cam X Y mpp`(캡처 전 평면 카메라를 실좌표·m/px 로 — 평면-단면 정합 확인).
+  `--cut-check`(단면선 정확도: 1 cm 간격 단면선 윗면 ↔ 잎 연직 피킹 차이, 미리보기 ↔ 최종 차이, 화면·내보내기에서 단면선 꼭짓점이 순수 빨강으로 맨 위에 그려졌는지 기록).
+  환경 변수 `SECTIONVIEWER_COARSE_PREVIEW_CUT=1`: 미리보기 단면선을 옛 방식(거친 LOD)으로 — 성능 비교용만.
   로그에 `window-title=… appended=0|1`(창 제목에 표시 이름이 덧붙는지), `vex-suggest: relief=… suggest=x…`.
   Windows 패키지: `./build-win.sh --no-package`(빌드·배포 폴더만), zip 은 `packaging/mkzip.py`(UTF-8 이름 플래그).
 
@@ -56,7 +58,7 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
 - 높이 배지: 단면 머리 + 상태줄. ok「높이 EGM96 EPSG:5773 · 지정함」/ warn「▲ 높이 타원체고 표기 · 확인」「▲ 높이 기준 모름」/ error「● 좌표계 없음」.
   누르면 높이 기준 지정. 좌표계 경고는 리본 아래 한 줄 알림(「높이 기준 지정…」「자세히」 ×).
 - 핵심 흐름: 최근 파일(파일 › 최근, Ctrl+Shift+O, 시작 화면 「이어서 열기」 — 모델별 마지막 단면선·두께·화면·단면 목록 복원),
-  뒤 깊이 칩 0.5/1/2/5 m + 숫자키 1–5(0.5/1/2/3/5), 평행 이동 [ ] 0.1 m · { } 1 m, 그리는 중 지금 도구 줄(길이·방위·Shift/Enter/Esc).
+  뒤 깊이 칩 0.5/1/2/3/5 m = 숫자키 1–5(1.2.1~ 기본 3 m — 입면도용 배경, 1.2.0 은 0.5 m), 평행 이동 [ ] 0.1 m · { } 1 m, 그리는 중 지금 도구 줄(길이·방위·Shift/Enter/Esc).
 - LOD: 평면 왼쪽 아래 「디테일 불러오는 중 n / N」 카드, 단면 정보 띠 「미리보기(거친) → 최종 계산 중…」/「✓ 최종(잎)」, 상태줄 Z 출처.
 - 평면 단면선: 흰 3 px 테두리 위 빨강(#FF0000) — 어떤 영상 위에서도 보임. A/A′ 흰 칩.
 - 되돌리기 Ctrl+Z / 다시 Ctrl+Y(Ctrl+Shift+Z): 단면선·두께(1.5 초 안 연속 변경은 하나로)·표시 켜기/끄기·높이 기준·현재 단면 (QUndoStack, 200단계).

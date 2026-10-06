@@ -352,6 +352,8 @@ void MainWindow::dropEvent(QDropEvent* e) {
 // ---------------------------------------------------------------- 단면 계산(작업 스레드, 마지막 요청 우선)
 void MainWindow::setLineLocal(const SectionLine& l) { plan_->setLine(l, true); }
 void MainWindow::setThickness(double f, double b) { front_->setValue(f); back_->setValue(b); }
+double MainWindow::frontDepth() const { return front_->value(); }
+double MainWindow::backDepth() const { return back_->value(); }
 void MainWindow::setDepthFade(bool on) { action("fade")->setChecked(on); }
 
 static SectionRequest makeRequest(const SectionLine& line, bool smooth, bool final, bool fade) {
@@ -364,6 +366,9 @@ static SectionRequest makeRequest(const SectionLine& line, bool smooth, bool fin
     rq.maxImagePixels = final ? size_t(24) << 20 : size_t(3) << 20;
     // 미리보기: 영상 해상도에 충분한 거친 LOD(빠름). 최종: 최고 해상도 잎
     rq.meshRes = final ? 0.0 : rq.imageRes;
+    // 잘린 면은 미리보기에서도 잎(정확). 성능 비교용으로만 끔: SECTIONVIEWER_COARSE_PREVIEW_CUT=1
+    static const bool coarseCut = qEnvironmentVariableIntValue("SECTIONVIEWER_COARSE_PREVIEW_CUT") == 1;
+    rq.leafProfileAlways = !coarseCut;
     return rq;
 }
 
@@ -415,7 +420,7 @@ void MainWindow::onSectionDone(SectionOutput&& out, uint64_t gen, bool final, co
             vexHint = QStringLiteral(" · 기복 %1 cm 라 평평해 보이면 X: 세로 ×%2 과장(화면만)").arg(vexRelief_ * 100, 0, 'f', 0).arg(vexSuggest_);
         showStatus(QStringLiteral("%1 단면 %2 m 완료 — 다음: Ctrl+P 「도면」, 숫자키 1–5 뒤 깊이, [ ] 평행 이동%3").arg(sectionName()).arg(L, 0, 'f', 2).arg(vexHint));
         if (current_ >= 0) { thumbs_[current_] = makeThumb(); refreshSectionList(); }
-    } else showStatus(QStringLiteral("미리보기(거친 LOD) — 최종(잎) 계산 중…"));
+    } else showStatus(last_.cutFromLeaf ? QStringLiteral("미리보기 — 단면선은 잎(정확), 배경 영상만 거친 LOD · 최종 계산 중…") : QStringLiteral("미리보기(거친 LOD) — 최종(잎) 계산 중…"));
     msg_->setToolTip(detail);
     updateEnabled();
     updateHeader();
