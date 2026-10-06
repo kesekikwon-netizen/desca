@@ -93,7 +93,7 @@ bool exportPoints(const std::function<bool(const std::function<bool(const MeshPt
     LasHeader H;
     if (o.format == PointFormat::LAS) {
         std::snprintf(H.software, sizeof H.software, "Excavation Section Viewer");
-        std::snprintf(H.sysId, sizeof H.sysId, "%s", srs.srs.empty() ? "ExcavSection" : srs.srs.c_str());
+        std::snprintf(H.sysId, sizeof H.sysId, "%s", srs.srs.empty() ? "ExcavSection" : srs.shortLabel().c_str());
         // 오프셋 = 원점(정수 m) → int32 범위·mm 정밀도 유지
         H.ox = std::floor(srs.origin.x); H.oy = std::floor(srs.origin.y); H.oz = std::floor(srs.origin.z);
         // GeoKeyDirectory VLR(LASF_Projection 34735): 수평 EPSG + (있으면) 수직 EPSG — 높이 값은 그대로

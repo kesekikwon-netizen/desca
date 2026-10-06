@@ -1,4 +1,5 @@
 #include "asec/obj.hpp"
+#include <cstring>
 
 #include <cstdlib>
 #include <fstream>
@@ -110,7 +111,17 @@ static std::string tagText(const std::string& x, const std::string& tag) {
     a += tag.size() + 2;
     auto b = x.find("</" + tag + ">", a);
     if (b == std::string::npos) return "";
-    return trim(x.substr(a, b - a));
+    std::string t = trim(x.substr(a, b - a)), r;  // XML 엔터티 풀기(WKT 의 &quot; 등)
+    for (size_t i = 0; i < t.size(); ++i) {
+        if (t[i] == '&') {
+            static const char* ent[][2] = {{"&quot;", "\""}, {"&apos;", "'"}, {"&lt;", "<"}, {"&gt;", ">"}, {"&amp;", "&"}};
+            bool hit = false;
+            for (auto& e : ent) if (t.compare(i, std::strlen(e[0]), e[0]) == 0) { r += e[1]; i += std::strlen(e[0]) - 1; hit = true; break; }
+            if (hit) continue;
+        }
+        r += t[i];
+    }
+    return r;
 }
 
 bool parseMetadataXml(const std::string& xml, SrsInfo& out) {

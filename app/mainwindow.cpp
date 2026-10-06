@@ -333,6 +333,7 @@ QWidget* MainWindow::buildCoordBar() {
     cx_ = field("X"); cy_ = field("Y"); cz_ = field("Z");
     cx_->setFixedWidth(126); cy_->setFixedWidth(126); cz_->setFixedWidth(82);
     msg_ = new QLabel; msg_->setObjectName("statusMsg");
+    msg_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);  // 긴 상태 문구가 창 폭을 늘리지 않게(잘림, 전체는 툴팁)
     h->addWidget(msg_, 1);
     info_ = new QLabel; info_->setObjectName("statusInfo"); h->addWidget(info_);
     progress_ = new QProgressBar; progress_->setRange(0, 1000); progress_->setVisible(false); progress_->setFixedWidth(140); h->addWidget(progress_);
@@ -413,7 +414,11 @@ MainWindow::MainWindow() {
     split_->addWidget(planFrame_); split_->addWidget(sectionFrame_);
     split_->setStretchFactor(0, 5); split_->setStretchFactor(1, 6);
     split_->setChildrenCollapsible(false);
-    auto* wrap = new QWidget; auto* wl = new QVBoxLayout(wrap); wl->setContentsMargins(4, 4, 4, 4); wl->addWidget(split_);
+    auto* wrap = new QWidget; auto* wl = new QVBoxLayout(wrap); wl->setContentsMargins(4, 4, 4, 4);
+    srsBanner_ = new QLabel; srsBanner_->setWordWrap(true); srsBanner_->setVisible(false); srsBanner_->setTextFormat(Qt::RichText);
+    srsBanner_->setStyleSheet("QLabel{background:#FFF4C2;color:#5A4500;border:1px solid #E0C050;padding:4px 8px;}");
+    wl->addWidget(srsBanner_);
+    wl->addWidget(split_);
     v->addWidget(wrap, 1);
     v->addWidget(buildCoordBar());
     setCentralWidget(central);
@@ -518,7 +523,7 @@ SectionStyle MainWindow::secStyle() const {
     return s;
 }
 
-void MainWindow::showStatus(const QString& s) { msg_->setText(s); }
+void MainWindow::showStatus(const QString& s) { msg_->setText(s); msg_->setToolTip(s); }
 
 void MainWindow::report(bool ok, const QString& m) {
     if (ok) QMessageBox::information(this, QStringLiteral("내보내기 완료"), m);
@@ -589,16 +594,14 @@ void MainWindow::applyScene(OpenedScene&& s) {
     if (!s.streamRoots.empty()) plan_->setStreamingScene(s.streamRoots, s.center, s.bounds, src_->srs, std::move(s.display));
     else plan_->setScene(std::move(s.display), s.center, s.bounds, src_->srs);
     streaming_ = !s.streamRoots.empty();
-    const SrsInfo& r = src_->srs;
-    QString srsTxt = r.srs.empty() ? QStringLiteral("좌표계 미상(로컬)")
-                   : r.verticalEpsg() > 0 ? QStringLiteral("좌표계 EPSG:%1 · 높이 EPSG:%2").arg(r.epsg()).arg(r.verticalEpsg())
-                                          : QStringLiteral("좌표계 %1").arg(qs(r.srs));
-    srsLabel_->setText(srsTxt);
-    srsLabel_->setToolTip(QStringLiteral("SRSOrigin = %1, %2, %3").arg(r.origin.x, 0, 'f', 3).arg(r.origin.y, 0, 'f', 3).arg(r.origin.z, 0, 'f', 3));
+    srsReport_ = analyzeSrs(src_->srs, s.bounds);
+    applySrsReport();
     info_->setText(streaming_ ? QStringLiteral("%1 · LOD 스트리밍").arg(kind_)
                               : QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
     setWindowTitle(QStringLiteral("%1 — 발굴 단면뷰어").arg(QFileInfo(path_).fileName()));
-    showStatus(QStringLiteral("열림. 「단면선 그리기」(S)로 A, A′ 두 점을 찍으세요"));
+    QString note = srsReport_.desc.vertKind == VertKind::Ellipsoidal ? QStringLiteral(" · 높이 '타원체고' 표기 — 기준점 대조 권장(오른쪽 좌표계 표시에 마우스)")
+                 : srsReport_.desc.vertKind == VertKind::Unspecified ? QStringLiteral(" · 높이 기준이 SRS 에 없음 — 기준점과 대조하세요") : QString();
+    showStatus(QStringLiteral("열림. 「단면선 그리기」(S)로 A, A′ 두 점을 찍으세요") + note);
     updateEnabled();
 }
 
@@ -607,7 +610,8 @@ void MainWindow::closeScene() {
     secFloorGen_ = secWorker_->cancelAll();
     src_.reset();
     plan_->clearScene(); section_->clear(); last_ = SectionOutput();
-    srsLabel_->setText(QStringLiteral("좌표계 —")); info_->clear();
+    srsLabel_->setText(QStringLiteral("좌표계 —")); srsLabel_->setToolTip(QString()); srsLabel_->setStyleSheet(QString()); info_->clear();
+    srsBanner_->setVisible(false); srsReport_ = SrsReport();
     setWindowTitle(QStringLiteral("발굴 단면뷰어"));
     updateEnabled();
 }
@@ -733,7 +737,7 @@ bool MainWindow::exportSectionImage(const SectionDoc& doc0, MeshSource& src, con
         if (!canvas.convertToFormat(QImage::Format_RGB32).save(path, "PNG")) { if (msg) *msg = QStringLiteral("PNG 저장 실패: %1").arg(path); return false; }
     } else {
         TiffOptions o; o.dpi = p.dpi; o.alpha = false;
-        o.description = "Section " + doc.r.srs.srs;
+        o.description = "Section " + doc.r.srs.shortLabel();
         if (p.format == 2) {
             // 왼쪽 위 픽셀 모서리의 (거리, 표고): 여백까지 포함해 정확히
             o.geo = sectionGeoRef(doc.r, xf.s0 - xf.plot.left() / ppm, xf.zTop + xf.plot.top() / ppm, res);
@@ -825,7 +829,7 @@ bool MainWindow::exportPlan(MeshSource& src, const PlanParams& p, const SectionL
     }
     TiffOptions o; o.dpi = p.dpi; o.alpha = true;
     o.geo = planGeoRef(src.srs, x0, y1, res);
-    o.description = "Plan orthophoto " + src.srs.srs;
+    o.description = "Plan orthophoto " + src.srs.shortLabel();
     std::string err;
     if (!writeTiff(toFs(path), img, o, &err)) { if (msg) *msg = qs(err); return false; }
     writeWorldFile(toFs(fileStem(path) + ".tfw"), o.geo, &err);
@@ -1029,8 +1033,7 @@ void MainWindow::dlgPlan() {
         int epsg = src_->srs.epsg();
         calc->setText(QStringLiteral("픽셀 크기(지상 해상도) <b>%1 mm</b> · 영상 <b>%2 × %3 px</b> (%4 m × %5 m)<br>좌표계 %6 · GeoKey + ModelTiepoint + ModelPixelScale, .tfw 함께")
                           .arg(mm(res)).arg(W, 0, 'f', 0).arg(H, 0, 'f', 0).arg(w, 0, 'f', 2).arg(h, 0, 'f', 2)
-                          .arg(epsg > 0 ? QStringLiteral("EPSG:%1").arg(epsg) + (src_->srs.verticalEpsg() > 0 ? QStringLiteral(" + 수직 EPSG:%1").arg(src_->srs.verticalEpsg()) : QString())
-                                        : QStringLiteral("미상(") + qs(src_->srs.srs) + ")"));
+                          .arg(epsg > 0 ? qs(src_->srs.describe().labelKo()) : QStringLiteral("⚠ EPSG 미확인 — ") + qs(src_->srs.describe().labelKo())));
     };
     QObject::connect(area, &QComboBox::currentIndexChanged, d.get(), [&](int) { upd(); });
     sr = addScaleRows(f, "plan", 100, 200, upd);
@@ -1067,7 +1070,7 @@ void MainWindow::dlgPoints(int presetFormat) {
     auto* rgb = new QCheckBox(QStringLiteral("텍스처에서 색(RGB) 추출")); rgb->setChecked(true);
     f->addRow(QString(), rgb);
     calc->setText(QStringLiteral("최고 해상도(잎) 타일의 꼭짓점 · 좌표 = 로컬 + SRSOrigin (실좌표 %1)<br>타일 경계의 같은 점은 한 번만 기록. 큰 모델은 수 분 걸릴 수 있습니다.")
-                      .arg(src_->srs.srs.empty() ? QStringLiteral("미상") : qs(src_->srs.srs)));
+                      .arg(qs(src_->srs.describe().labelKo())));
     if (d->exec() != QDialog::Accepted) return;
     QSettings().setValue("points/spacingIdx", sp->currentIndex());
     PointParams p;
@@ -1125,7 +1128,7 @@ void MainWindow::dlgInfo() {
         .arg(r.rawSegments).arg(r.profile.size()).arg(nc).arg(nv)
         .arg(last_.image.img.w).arg(last_.image.img.h).arg(mm(last_.image.res))
         .arg(int(last_.msCollect)).arg(int(last_.msCut)).arg(int(last_.msImage))
-        .arg(r.srs.srs.empty() ? QStringLiteral("미상") : qs(r.srs.srs)).arg(r.srs.origin.x, 0, 'f', 3).arg(r.srs.origin.y, 0, 'f', 3).arg(r.srs.origin.z, 0, 'f', 3);
+        .arg(qs(r.srs.describe().labelKo())).arg(r.srs.origin.x, 0, 'f', 3).arg(r.srs.origin.y, 0, 'f', 3).arg(r.srs.origin.z, 0, 'f', 3);
     QMessageBox mb(this); mb.setWindowTitle(QStringLiteral("단면 정보 (Section Info)")); mb.setTextFormat(Qt::RichText); mb.setText(t); mb.exec();
 }
 
@@ -1138,4 +1141,19 @@ void MainWindow::dlgAbout() {
                               "<small>Qt %2 (LGPLv3, 동적 링크) · OpenCTM (zlib) · stb (공개 도메인/MIT) · nlohmann/json (MIT)<br>"
                               "3MX 는 공개 형식 사양에 따라 직접 읽습니다.</small>").arg(kVersion).arg(qVersion()));
     mb.exec();
+}
+
+// ---------------------------------------------------------------- 좌표계 표시(늘 수평 + 높이 기준, 경고는 노란 띠)
+void MainWindow::applySrsReport() {
+    const SrsReport& r = srsReport_;
+    bool warn = !r.warnings.empty();
+    srsLabel_->setText((warn ? QStringLiteral("⚠ ") : QString()) + qs(r.labelKo));
+    srsLabel_->setToolTip(qs(r.tooltipKo));
+    srsLabel_->setStyleSheet(warn ? QStringLiteral("QLabel{background:#FFF4C2;color:#5A4500;padding:0 4px;}") : QString());
+    if (warn) {
+        QString html = QStringLiteral("<b>좌표계 확인 필요</b> — %1").arg(qs(r.labelKo).toHtmlEscaped());
+        for (auto& w : r.warnings) html += QStringLiteral("<br>⚠ ") + qs(w).toHtmlEscaped();
+        srsBanner_->setText(html);
+    }
+    srsBanner_->setVisible(warn);
 }

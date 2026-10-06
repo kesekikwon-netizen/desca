@@ -86,7 +86,7 @@ bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const f
     T(d, "SECTION_TITLE", s0, zhi + th * 1.2, "A", 1, 1);
     T(d, "SECTION_TITLE", s1, zhi + th * 1.2, "A'", 1, 1);
     char tb[256];
-    std::snprintf(tb, sizeof tb, "%s  L=%.2fm  %s  1:%g", o.title.c_str(), f.L, r.srs.srs.empty() ? "SRS?" : r.srs.srs.c_str(), o.scaleDenom);
+    std::snprintf(tb, sizeof tb, "%s  L=%.2fm  %s  1:%g", o.title.c_str(), f.L, r.srs.shortLabel().c_str(), o.scaleDenom);
     T(d, "SECTION_TITLE", (s0 + s1) / 2, zhi + th * 3.2, tb, 1, 1);
     if (w3) {
         Vec3 a = r.srs.toWorld(Vec3(r.line.a.x, r.line.a.y, r.zMin)), b = r.srs.toWorld(Vec3(r.line.b.x, r.line.b.y, r.zMin));
@@ -104,7 +104,7 @@ GeoRef planGeoRef(const SrsInfo& srs, double x0, double y1, double res) {
     g.scaleX = g.scaleY = res;
     g.epsg = srs.epsg();
     g.vertEpsg = srs.verticalEpsg();
-    g.citation = "ExcavSection plan orthophoto " + (srs.srs.empty() ? std::string("(unknown SRS)") : srs.srs);
+    g.citation = "ExcavSection plan orthophoto " + srs.shortLabel();
     return g;
 }
 
@@ -122,7 +122,7 @@ GeoRef sectionGeoRef(const SectionResult& r, double s0, double zTop, double res)
     Vec3 A = r.srs.toWorld(Vec3(r.line.a.x, r.line.a.y, 0)), B = r.srs.toWorld(Vec3(r.line.b.x, r.line.b.y, 0));
     char b[512];
     std::snprintf(b, sizeof b, "ExcavSection local section: X=distance from A (m), Y=elevation (m). %s A=(%.3f,%.3f) A'=(%.3f,%.3f) az=%.2f deg",
-                  r.srs.srs.empty() ? "SRS?" : r.srs.srs.c_str(), A.x, A.y, B.x, B.y, sectionAzimuthDeg(r.line));
+                  r.srs.shortLabel().c_str(), A.x, A.y, B.x, B.y, sectionAzimuthDeg(r.line));
     g.citation = b;
     return g;
 }
@@ -134,6 +134,14 @@ bool writeSectionSidecar(const fs::path& p, const SectionResult& r, const GeoRef
     json j;
     j["type"] = "ExcavSection section image";
     j["srs"] = r.srs.srs;
+    {
+        SrsDesc sd = r.srs.describe();
+        j["srs_label"] = sd.shortAscii();
+        j["horizontal_epsg"] = sd.horizontalEpsg;
+        j["vertical_reference"] = sd.vertKind == VertKind::Ellipsoidal ? "ellipsoidal" : sd.vertKind == VertKind::Gravity ? "gravity-related" : sd.vertKind == VertKind::LocalEnu ? "local-enu" : "unspecified";
+        if (sd.verticalEpsg) j["vertical_epsg"] = sd.verticalEpsg;
+        j["height_note"] = "Z = model SRS height as-is (no geoid conversion)";
+    }
     j["A"] = {{"X", A.x}, {"Y", A.y}};
     j["A_prime"] = {{"X", B.x}, {"Y", B.y}};
     j["length_m"] = f.L;

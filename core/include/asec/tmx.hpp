@@ -8,22 +8,44 @@
 #include <memory>
 #include <mutex>
 #include "asec/geom.hpp"
+#include "asec/srs.hpp"
 
 namespace asec {
 namespace fs = std::filesystem;
 
 struct SrsInfo {
-    std::string srs;      // 예: "EPSG:5186" (없으면 빈 문자열)
-    Vec3 origin;          // SRSOrigin. 실좌표 = 로컬 + origin
+    std::string srs;      // 원문: "EPSG:5186", "EPSG:5186+5193", "ENU:lat,lon", WKT1/WKT2 (없으면 빈 문자열)
+    Vec3 origin;          // SRSOrigin. 실좌표 = 로컬 + origin (x=동 E, y=북 N, z=높이 — 모델 SRS 그대로)
     bool hasOrigin = false;
+    std::string metadataSrs;  // 같은/위 폴더 metadata.xml 의 <SRS>(3MX 일 때 대조용, 없으면 빈 문자열)
     Vec3 toWorld(const Vec3& local) const { return local + origin; }
     Vec3 toLocal(const Vec3& world) const { return world - origin; }
-    /// 수평 좌표계: "EPSG:5186" 또는 복합 "EPSG:5186+5711" → 5186, 아니면 0
+    /// 해석 결과(asec/srs.hpp). WKT·ENU·복합 모두
+    SrsDesc describe() const { return describeSrs(srs); }
+    /// 수평 EPSG(WKT 는 ID·REMARK·이름·TM 매개변수로 판별). 모르면 0
     int epsg() const;
-    /// 수직 기준(복합 좌표계의 '+' 뒤): "EPSG:5186+5711" / "EPSG:5186+EPSG:5711" → 5711, 없으면 0.
+    /// 수직 기준 EPSG(복합 "EPSG:h+v" 또는 WKT COMPOUNDCRS 의 VERTCRS ID). 타원체고·없음은 0.
     /// 높이 값은 바꾸지 않는다(모델 SRS 그대로) — 이 번호는 메타데이터(GeoTIFF·LAS 키, 표시)로만 전달
     int verticalEpsg() const;
+    /// 파일(DXF 제목·JSON·LAS) 용 짧은 표기
+    std::string shortLabel() const { return describe().shortAscii(); }
 };
+
+/// 모델 좌표계 점검 결과(표시·경고용). 높이 값은 절대 바꾸지 않는다.
+struct SrsReport {
+    SrsDesc desc;
+    std::string labelKo;                 // "수평 EPSG:5186 / 높이 타원체고(GRS80)"
+    std::string tooltipKo;               // 여러 줄(원점·위경도·정밀도·경고 포함)
+    std::vector<std::string> warnings;   // desc.warnings + 원점·정밀도·축 순서·metadata 불일치
+    bool hasLatLon = false; double lat = 0, lon = 0;  // 모델 중심의 대략 위경도(TM 역계산, x=E y=N)
+    double maxLocalXY = 0;               // 로컬 |x|,|y| 최대(m)
+    double float32StepMm = 0;            // 그 크기에서 float32 간격(mm)
+    bool precisionWarning = false;       // 로컬 좌표가 커서(> 8192 m) mm 정밀도 보장 안 됨
+};
+/// localBounds = 모델 로컬 상자(SRSOrigin 빼기 전)
+SrsReport analyzeSrs(const SrsInfo& s, const Box3& localBounds);
+/// float32 로 v(m)를 저장할 때 간격(m)
+double float32Step(double v);
 
 struct TmxScene {
     std::string name, description;

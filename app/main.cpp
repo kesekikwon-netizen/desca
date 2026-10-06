@@ -89,11 +89,18 @@ int main(int argc, char** argv) {
     auto t0 = std::chrono::steady_clock::now();
     if (!MainWindow::loadScene(file, sc, &err)) { log("open-error: " + err); return 2; }
     log(QStringLiteral("open-ok: %1 kind=%2 displayTris=%3 srs=%4 origin=%5,%6,%7 ms=%8").arg(file, sc.kind).arg(sc.displayTris)
-            .arg(QString::fromStdString(sc.src->srs.srs)).arg(sc.src->srs.origin.x, 0, 'f', 3).arg(sc.src->srs.origin.y, 0, 'f', 3).arg(sc.src->srs.origin.z, 0, 'f', 3)
+            .arg(QString::fromStdString(sc.src->srs.shortLabel())).arg(sc.src->srs.origin.x, 0, 'f', 3).arg(sc.src->srs.origin.y, 0, 'f', 3).arg(sc.src->srs.origin.z, 0, 'f', 3)
             .arg(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(), 0, 'f', 0));
     auto tApply = std::chrono::steady_clock::now();
     auto msSince = [](std::chrono::steady_clock::time_point t) { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count(); };
     w.applyScene(std::move(sc));
+    {
+        const SrsReport& r = w.srsReport();
+        QString ws;
+        for (auto& x : r.warnings) ws += " | " + QString::fromStdString(x);
+        log(QStringLiteral("srs-report: %1 latlon=%2,%3 maxLocalXY=%4 f32step-mm=%5 warnings=%6%7").arg(QString::fromStdString(r.labelKo))
+                .arg(r.lat, 0, 'f', 6).arg(r.lon, 0, 'f', 6).arg(r.maxLocalXY, 0, 'f', 1).arg(r.float32StepMm, 0, 'f', 3).arg(r.warnings.size()).arg(ws));
+    }
     {   // LOD 스트리밍: 거친 모델이 처음 보일 때까지 / 현재 시점 세부가 다 찰 때까지
         double first = -1;
         while (msSince(tApply) < 60000) {

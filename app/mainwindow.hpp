@@ -71,6 +71,7 @@ public:
     void setLineLocal(const asec::SectionLine& l);
     void setThickness(double front, double back);
     const asec::SrsInfo& srs() const;
+    const asec::SrsReport& srsReport() const { return srsReport_; }
     PlanView* plan() const { return plan_; }
     SectionView* sectionView() const { return section_; }
     void selectRibbonTab(int i);
@@ -89,7 +90,8 @@ private:
     QTabBar* tabs_ = nullptr;
     QStackedWidget* pages_ = nullptr;
     QLineEdit *cx_ = nullptr, *cy_ = nullptr, *cz_ = nullptr;
-    QLabel *msg_ = nullptr, *info_ = nullptr, *srsLabel_ = nullptr;
+    QLabel *msg_ = nullptr, *info_ = nullptr, *srsLabel_ = nullptr, *srsBanner_ = nullptr;
+    asec::SrsReport srsReport_;   // 열린 모델의 좌표계 점검(표시·경고)
     QProgressBar* progress_ = nullptr;
     QDoubleSpinBox *front_ = nullptr, *back_ = nullptr;
     QSlider* opacity_ = nullptr;
@@ -140,4 +142,5 @@ private:
     QString askSavePath(const QString& key, const QString& suggested, const QString& filter);
     SectionStyle secStyle() const;
     void report(bool ok, const QString& m);
+    void applySrsReport();
 };

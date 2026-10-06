@@ -1,4 +1,5 @@
 #include "asec/tmx.hpp"
+#include "asec/obj.hpp"
 
 #include <cstring>
 #include <fstream>
@@ -8,22 +9,8 @@
 namespace asec {
 using json = nlohmann::json;
 
-int SrsInfo::epsg() const {
-    auto p = srs.find("EPSG:");
-    if (p == std::string::npos) return 0;
-    return std::atoi(srs.c_str() + p + 5);  // '+' 앞에서 멈춤 = 수평 부분
-}
-
-int SrsInfo::verticalEpsg() const {
-    auto p = srs.find("EPSG:");
-    if (p == std::string::npos) return 0;
-    auto plus = srs.find('+', p + 5);
-    if (plus == std::string::npos) return 0;
-    const char* q = srs.c_str() + plus + 1;
-    while (*q == ' ') ++q;
-    if (std::strncmp(q, "EPSG:", 5) == 0) q += 5;
-    return std::atoi(q);
-}
+int SrsInfo::epsg() const { return describe().horizontalEpsg; }
+int SrsInfo::verticalEpsg() const { return describe().verticalEpsg; }
 
 bool readFileBytes(const fs::path& p, std::vector<uint8_t>& out) {
     std::ifstream f(p, std::ios::binary);
@@ -128,6 +115,8 @@ bool readTmxScene(const fs::path& file3mx, TmxScene& out, std::string* err) {
         if (root.empty()) continue;
         out.rootFile = (file3mx.parent_path() / fs::u8path(root)).lexically_normal();
         if (out.name.empty()) out.name = L.value("name", "");
+        SrsInfo meta;
+        if (findMetadataXml(file3mx, meta)) out.srs.metadataSrs = meta.srs;
         return true;
     }
     setErr(err, "3MX: meshPyramid 레이어 없음");

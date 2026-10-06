@@ -207,7 +207,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     p.setFont(small); p.setPen(theme::InkSub);
     QString t2 = QStringLiteral("길이 %1 m  ·  두께 앞 %2 / 뒤 %3 m  ·  %4  ·  가로:세로 1:1")
                      .arg(f.L, 0, 'f', 2).arg(r_.line.front, 0, 'f', 2).arg(r_.line.back, 0, 'f', 2)
-                     .arg(r_.srs.srs.empty() ? QStringLiteral("좌표계 미상") : QString::fromStdString(r_.srs.srs));
+                     .arg(QString::fromStdString(r_.srs.describe().labelKo()));
     p.drawText(QRectF(area.left() + 12 * ui + QFontMetricsF(title).horizontalAdvance(t1) + 12 * ui, area.top() + 8 * ui, area.width(), 20 * ui), Qt::AlignLeft | Qt::AlignVCenter, t2);
     if (!footer.isEmpty()) {
         p.setPen(theme::Idle);
