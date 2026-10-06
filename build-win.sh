@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT=$PWD
 QT=${QT_WIN:-$HOME/qt/6.8.3/mingw_64}
-VER=1.1.1
+VER=1.2.0
 cmake -S . -B build-win -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake -DCMAKE_BUILD_TYPE=Release \
       -DASEC_QT_WIN_DIR="$QT" -DASEC_BUILD_TESTS=ON -DASEC_BUILD_TOOLS=ON >/dev/null
 ninja -C build-win
