@@ -45,6 +45,7 @@ struct SectionRequest {
     double imageRes = 0.004;   // m/px
     size_t maxImagePixels = size_t(24) << 20;
     double zMargin = 0.25;     // 표시 범위 위아래 여유
+    double depthFade = 0;      // 입면 깊이 음영(0 = 끔). 먼 면일수록 옅게
     double meshRes = 0;        // >0: 미리보기 — 이 해상도(m)에 충분한 거친 LOD 로 계산(빠름). 0: 최고 해상도 잎(최종)
 };
 

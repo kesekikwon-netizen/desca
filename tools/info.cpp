@@ -1,5 +1,5 @@
 // asec-info: 3MX 모델 점검·성능 측정(코어만, GPU 없음)
-//   asec-info <scene.3mx> [--tree] [--decode] [--pick X Y]... [--section AX AY BX BY] [--local] [--csv out.csv]
+//   asec-info <scene.3mx> [--tree] [--decode] [--pick X Y]... [--section AX AY BX BY [--front m] [--back m]] [--local] [--notex] [--csv out.csv]
 //   --tree    : 모든 타일 머리를 읽어 노드·깊이·잎 수, 잎 경계 상자 Z 범위
 //   --decode  : 잎을 모두 디코드해 삼각형 수·실제 꼭짓점 Z 범위·디코드 시간(스레드 병렬)
 //   --pick    : 실좌표(--local 이면 로컬) 연직 잎 피킹(차가운/따뜻한 캐시 시간)
@@ -13,8 +13,16 @@
 #include <set>
 #include "asec/engine.hpp"
 #include "asec/pick.hpp"
+#include "stb_image.h"
 
 using namespace asec;
+static void decodeTex(Texture& t) {  // 앱과 같은 JPG→RGBA(현실적인 시간). --notex 면 끔
+    int w, h, c;
+    unsigned char* p = stbi_load_from_memory(t.encoded.data(), int(t.encoded.size()), &w, &h, &c, 4);
+    if (!p) return;
+    t.rgba.w = w; t.rgba.h = h; t.rgba.px.assign(p, p + size_t(w) * h * 4);
+    stbi_image_free(p);
+}
 using clk = std::chrono::steady_clock;
 static double ms(clk::time_point t) { return std::chrono::duration<double, std::milli>(clk::now() - t).count(); }
 
@@ -25,17 +33,20 @@ struct Csv {
 };
 
 int main(int argc, char** argv) {
-    if (argc < 2) { std::fprintf(stderr, "usage: asec-info <scene.3mx> [--tree] [--decode] [--pick X Y]... [--section AX AY BX BY] [--local] [--csv out.csv]\n"); return 2; }
+    if (argc < 2) { std::fprintf(stderr, "usage: asec-info <scene.3mx> [--tree] [--decode] [--pick X Y]... [--section AX AY BX BY [--front m] [--back m]] [--local] [--notex] [--csv out.csv]\n"); return 2; }
     fs::path in = fs::u8path(argv[1]);
     bool tree = false, decode = false, local = false;
     std::vector<std::pair<double, double>> picks;
-    bool haveSec = false; double sa[4] = {};
+    bool haveSec = false; double sa[4] = {}; double secFront = 0, secBack = 0.5; bool tex = true;
     std::string csvPath;
     for (int i = 2; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--tree") tree = true;
         else if (a == "--decode") decode = tree = true;
         else if (a == "--local") local = true;
+        else if (a == "--notex") tex = false;
+        else if (a == "--front" && i + 1 < argc) secFront = std::atof(argv[++i]);
+        else if (a == "--back" && i + 1 < argc) secBack = std::atof(argv[++i]);
         else if (a == "--pick" && i + 2 < argc) { picks.push_back({std::atof(argv[i + 1]), std::atof(argv[i + 2])}); i += 2; }
         else if (a == "--section" && i + 4 < argc) { for (int k = 0; k < 4; ++k) sa[k] = std::atof(argv[i + 1 + k]); i += 4; haveSec = true; }
         else if (a == "--csv" && i + 1 < argc) csvPath = argv[++i];
@@ -44,6 +55,7 @@ int main(int argc, char** argv) {
     std::string err;
     auto t0 = clk::now();
     TmxSource src;
+    if (tex) src.cache->textureDecoder = decodeTex;
     if (!src.open(in, &err)) { std::fprintf(stderr, "open failed: %s\n", err.c_str()); return 1; }
     double openMs = ms(t0);
     SrsReport rep = analyzeSrs(src.srs, src.bounds);
@@ -99,7 +111,7 @@ int main(int argc, char** argv) {
             double decMs = ms(td);
             Box3 vb; size_t verts = 0;
             for (auto& m : ms_) { vb.add(m->bbox); verts += m->vertexCount(); }
-            std::printf("[디코드] 잎 노드 %zu, 메시 %zu, 삼각형 %zu, 꼭짓점 %zu, %.0f ms (지오메트리만 — 텍스처 디코드 제외, 최대 8 스레드)\n", st.leafNodes, st.meshes, st.triangles, verts, decMs);
+            std::printf("[디코드] 잎 노드 %zu, 메시 %zu, 삼각형 %zu, 꼭짓점 %zu, %.0f ms (%s, 최대 8 스레드)\n", st.leafNodes, st.meshes, st.triangles, verts, decMs, tex ? "지오메트리+텍스처" : "지오메트리만");
             if (vb.valid()) std::printf("  실제 Z(실) %.4f ~ %.4f  (모델 SRS 높이 그대로)\n", vb.mn.z + src.srs.origin.z, vb.mx.z + src.srs.origin.z);
             csv.add("leaf_triangles", double(st.triangles), ""); csv.add("decode_all_ms", decMs, "ms");
             if (vb.valid()) { csv.add("z_min", vb.mn.z + src.srs.origin.z, "m"); csv.add("z_max", vb.mx.z + src.srs.origin.z, "m"); }
@@ -118,10 +130,10 @@ int main(int argc, char** argv) {
     }
     if (haveSec) {
         SectionRequest rq;
-        rq.line.a = Vec2(sa[0] - o.x, sa[1] - o.y); rq.line.b = Vec2(sa[2] - o.x, sa[3] - o.y); rq.line.front = 0; rq.line.back = 0.5;
+        rq.line.a = Vec2(sa[0] - o.x, sa[1] - o.y); rq.line.b = Vec2(sa[2] - o.x, sa[3] - o.y); rq.line.front = secFront; rq.line.back = secBack;
         double L = SectionFrame(rq.line).L;
         struct Run { const char* name; bool final; };
-        TmxSource cold; cold.open(in, &err);
+        TmxSource cold; if (tex) cold.cache->textureDecoder = decodeTex; cold.open(in, &err);
         for (int pass = 0; pass < 2; ++pass)
             for (Run run : {Run{"미리보기", false}, Run{"최종", true}}) {
                 SectionRequest q = rq;
@@ -130,7 +142,7 @@ int main(int argc, char** argv) {
                 q.meshRes = run.final ? 0.0 : q.imageRes;
                 SectionOutput out;
                 auto ts = clk::now();
-                MeshSource& s = pass == 0 ? static_cast<MeshSource&>(cold) : static_cast<MeshSource&>(src);
+                MeshSource& s = cold;  // 0: 차가운 캐시, 1: 같은 소스 다시(따뜻)
                 if (!computeSection(s, q, out, &err)) { std::fprintf(stderr, "section failed: %s\n", err.c_str()); return 1; }
                 double tms = ms(ts);
                 size_t nv = 0; for (auto& pl : out.result.profile) nv += pl.size();

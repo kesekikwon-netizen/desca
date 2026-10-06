@@ -51,7 +51,7 @@ if(ASEC_BUILD_TOOLS)
   add_executable(asec-section tools/section_cli.cpp)
   target_link_libraries(asec-section asec_synth)
   add_executable(asec-info tools/info.cpp)
-  target_link_libraries(asec-info archsection)
+  target_link_libraries(asec-info archsection asec_stb)
 endif()
 
 if(ASEC_BUILD_TESTS)

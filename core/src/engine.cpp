@@ -93,7 +93,7 @@ bool computeSection(MeshSource& src, const SectionRequest& rq, SectionOutput& ou
         auto t2 = clk::now();
         RasterRequest rr;
         rr.s0 = 0; rr.s1 = f.L; rr.z0 = out.result.zMin; rr.z1 = out.result.zMax;
-        rr.res = rq.imageRes; rr.dNear = -rq.line.front; rr.dFar = rq.line.back; rr.maxPixels = rq.maxImagePixels;
+        rr.res = rq.imageRes; rr.dNear = -rq.line.front; rr.dFar = rq.line.back; rr.maxPixels = rq.maxImagePixels; rr.depthFade = rq.depthFade;
         if (rr.dFar - rr.dNear < 1e-4) rr.dFar = rr.dNear + 0.01;
         renderElevation(meshes, f, rr, out.image, cancel);
         out.msImage = msSince(t2);

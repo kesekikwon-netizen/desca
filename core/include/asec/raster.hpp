@@ -20,6 +20,9 @@ struct RasterRequest {
     double res = 0.005;                      // m/px
     double dNear = 0, dFar = 0.5;            // 두께 띠(+d = 보는 방향)
     size_t maxPixels = size_t(60) << 20;     // 안전 한도
+    double depthFade = 0;                    // 깊이 음영 세기(0 = 끔, 0.6 = 가장 먼 면을 흰색 쪽으로 60%)
+    double fadeRef = 2.0;                    // 음영 기준 깊이(m): max(dFar, fadeRef) 에서 최대 — 얇은 띠에서는 약하게
+    int threads = 0;                         // 0 = 자동(최대 8), 1 = 단일 스레드
 };
 
 /// meshes 를 단면 좌표계로 정사 투영. 텍스처(rgba)가 없으면 법선 음영 회색.
