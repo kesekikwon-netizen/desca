@@ -458,6 +458,18 @@ bool PlanView::screenToLocalXY(const QPointF& sp, Vec2& out) const {
     return true;
 }
 
+bool PlanView::screenRayLocal(const QPointF& sp, Vec3& o, Vec3& d) const {
+    bool inv = false;
+    QMatrix4x4 m = (proj_ * view_).inverted(&inv);
+    if (!inv || width() <= 0 || height() <= 0) return false;
+    float nx = float(sp.x() / width() * 2 - 1), ny = float(1 - sp.y() / height() * 2);
+    QVector3D A = (m * QVector4D(nx, ny, -1, 1)).toVector3DAffine(), B = (m * QVector4D(nx, ny, 1, 1)).toVector3DAffine();
+    // 화면 행렬은 장면 중심 기준 float → 로컬은 double 로 중심을 더함
+    o = Vec3(double(A.x()) + center_.x, double(A.y()) + center_.y, double(A.z()) + center_.z);
+    d = Vec3(double(B.x()) - A.x(), double(B.y()) - A.y(), double(B.z()) - A.z());
+    return d.x * d.x + d.y * d.y + d.z * d.z > 0;
+}
+
 void PlanView::paintEmpty(QPainter& p) {
     QRectF r(0, 0, std::min(440, width() - 40), 150);
     r.moveCenter(QPointF(width() / 2.0, height() / 2.0));

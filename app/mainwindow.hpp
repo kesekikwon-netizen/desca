@@ -11,6 +11,7 @@
 #include "asec/engine.hpp"
 #include "asec/pointcloud.hpp"
 #include "asec/schedule.hpp"
+#include "asec/pick.hpp"
 #include "asec/tiff.hpp"
 #include "planview.hpp"
 #include "theme.hpp"
@@ -74,6 +75,7 @@ public:
     void setThickness(double front, double back);
     const asec::SrsInfo& srs() const;
     const asec::SrsReport& srsReport() const { return srsReport_; }
+    QString cursorText() const;   // 자동화 로그: 좌표줄 X/Y/Z + Z 출처
     PlanView* plan() const { return plan_; }
     SectionView* sectionView() const { return section_; }
     void selectRibbonTab(int i);
@@ -110,6 +112,13 @@ private:
 
     // 단면 작업(asec::CoalescingWorker): 끄는 동안 미리보기는 합치고(거친 LOD), 놓으면 잎으로 최종 계산
     std::unique_ptr<asec::CoalescingWorker> secWorker_;
+    // 커서 정밀 Z: 잎 메시 CPU 피킹(마지막 요청만 계산)
+    std::unique_ptr<asec::CoalescingWorker> pickWorker_;
+    asec::ResultGate pickGate_;
+    uint64_t pickFloorGen_ = 0;
+    QLabel* zSrc_ = nullptr;
+    void requestPick(const QPointF& screen);
+    void showZSource(asec::ZSource s, const QString& detail);
     asec::ResultGate secGate_;   // GUI 스레드 소유: 이미 보여준 것보다 새 세대만 받음
     uint64_t secFloorGen_ = 0;   // 장면 바꿈/닫기 이후 세대만 받음
     asec::SectionOutput last_;  // GUI 스레드 소유(마지막 완료 결과)

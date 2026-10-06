@@ -23,7 +23,7 @@ endif()
 
 # ---- archsection 코어 (Qt 무관, MDL 재사용 대상) ----
 add_library(archsection STATIC
-  core/src/tmx.cpp core/src/srs.cpp core/src/section.cpp core/src/lod.cpp core/src/stream.cpp core/src/schedule.cpp core/src/raster.cpp
+  core/src/tmx.cpp core/src/srs.cpp core/src/section.cpp core/src/lod.cpp core/src/stream.cpp core/src/schedule.cpp core/src/pick.cpp core/src/raster.cpp
   core/src/dxf.cpp core/src/export.cpp core/src/tiff.cpp core/src/pointcloud.cpp core/src/obj.cpp core/src/engine.cpp)
 target_include_directories(archsection PUBLIC core/include PRIVATE third_party)
 find_package(ZLIB REQUIRED)
@@ -55,7 +55,7 @@ endif()
 if(ASEC_BUILD_TESTS)
   enable_testing()
   add_executable(asec_tests tests/test_section.cpp tests/test_stitch.cpp tests/test_tmx.cpp tests/test_dxf.cpp tests/test_raster.cpp
-                 tests/test_pipeline.cpp tests/test_tiff.cpp tests/test_points.cpp tests/test_cache_parallel.cpp tests/test_stream.cpp tests/test_schedule.cpp tests/test_srs.cpp tests/test_layers.cpp third_party/catch_amalgamated.cpp)
+                 tests/test_pipeline.cpp tests/test_tiff.cpp tests/test_points.cpp tests/test_cache_parallel.cpp tests/test_stream.cpp tests/test_schedule.cpp tests/test_srs.cpp tests/test_layers.cpp tests/test_pick.cpp third_party/catch_amalgamated.cpp)
   target_include_directories(asec_tests PRIVATE third_party)
   target_link_libraries(asec_tests asec_synth)
   add_test(NAME core COMMAND asec_tests)

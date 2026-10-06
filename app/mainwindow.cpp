@@ -333,6 +333,9 @@ QWidget* MainWindow::buildCoordBar() {
         return e;
     };
     cx_ = field("X"); cy_ = field("Y"); cz_ = field("Z");
+    zSrc_ = new QLabel(QStringLiteral("—")); zSrc_->setObjectName("statusInfo"); zSrc_->setMinimumWidth(150);
+    zSrc_->setToolTip(QStringLiteral("Z 출처: 잎 표면(최고 해상도, CPU double 피킹) / 대략(화면 LOD) / 단면 커서 위치"));
+    h->addWidget(zSrc_);
     cx_->setFixedWidth(126); cy_->setFixedWidth(126); cz_->setFixedWidth(82);
     msg_ = new QLabel; msg_->setObjectName("statusMsg");
     msg_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);  // 긴 상태 문구가 창 폭을 늘리지 않게(잘림, 전체는 툴팁)
@@ -488,19 +491,25 @@ MainWindow::MainWindow() {
     plan_->onOpenRequest = [this] { chooseOpen(); };
     auto fmt = [](double v, int dec) { return QString::number(v, 'f', dec); };
     plan_->onCursor = [this, fmt](double X, double Y, double Z, bool hasZ, bool valid) {
-        if (!valid) { cx_->clear(); cy_->clear(); cz_->clear(); return; }
+        if (!valid) { cx_->clear(); cy_->clear(); cz_->clear(); pickFloorGen_ = pickWorker_->cancelAll(); showZSource(ZSource::None, QString()); return; }
+        // 즉시: 화면용 거친 메시(대략값). 이어서 잎 메시 정밀 피킹 결과로 바꿈
         cx_->setText(fmt(X, 3)); cy_->setText(fmt(Y, 3)); cz_->setText(hasZ ? fmt(Z, 3) : QStringLiteral("—"));
+        showZSource(hasZ ? ZSource::Coarse : ZSource::None, QStringLiteral("정밀 피킹 계산 중…"));
+        requestPick(plan_->lastMousePos());
     };
     section_->onCursor = [this, fmt](double s, double zAbs, double X, double Y, bool valid) {
         if (!valid) { cx_->clear(); cy_->clear(); cz_->clear(); msg_->clear(); return; }
         cx_->setText(fmt(X, 3)); cy_->setText(fmt(Y, 3)); cz_->setText(fmt(zAbs, 3));
+        showZSource(ZSource::SectionCursor, QStringLiteral("단면 화면의 커서 위치(s, z)입니다. 표면을 피킹한 값이 아닙니다."));
         msg_->setText(QStringLiteral("단면 거리 %1 m · 표고 %2 m").arg(fmt(s, 3), fmt(zAbs, 3)));
     };
     secWorker_ = std::make_unique<CoalescingWorker>();
+    pickWorker_ = std::make_unique<CoalescingWorker>();
     updateEnabled();
 }
 
 MainWindow::~MainWindow() {
+    pickWorker_.reset();
     secWorker_.reset();  // 실행 중인 단면 취소 + 합류
     cancelTask_ = true;
     if (task_.joinable()) task_.join();
@@ -592,6 +601,7 @@ void MainWindow::openFile(const QString& path) {
 
 void MainWindow::applyScene(OpenedScene&& s) {
     secFloorGen_ = secWorker_->cancelAll();
+    pickFloorGen_ = pickWorker_->cancelAll();
     src_ = s.src; path_ = s.path; kind_ = s.kind; displayTris_ = s.displayTris;
     section_->clear(); last_ = SectionOutput();
     if (!s.streamRoots.empty()) plan_->setStreamingScene(s.streamRoots, s.center, s.bounds, src_->srs, std::move(s.display));
@@ -612,6 +622,7 @@ void MainWindow::applyScene(OpenedScene&& s) {
 void MainWindow::closeScene() {
     if (taskBusy_) return;
     secFloorGen_ = secWorker_->cancelAll();
+    pickFloorGen_ = pickWorker_->cancelAll();
     src_.reset();
     plan_->clearScene(); section_->clear(); last_ = SectionOutput();
     srsLabel_->setText(QStringLiteral("좌표계 —")); srsLabel_->setToolTip(QString()); srsLabel_->setStyleSheet(QString()); info_->clear();
@@ -1160,4 +1171,42 @@ void MainWindow::applySrsReport() {
         srsBanner_->setText(html);
     }
     srsBanner_->setVisible(warn);
+}
+
+// ---------------------------------------------------------------- 커서 정밀 Z(잎 메시, CPU double)
+void MainWindow::requestPick(const QPointF& screen) {
+    if (!src_) return;
+    Vec3 o, d;
+    if (!plan_->screenRayLocal(screen, o, d)) return;
+    auto src = src_;
+    pickWorker_->submit(false, [this, src, o, d](uint64_t gen, bool, const std::atomic<bool>* cancel) {
+        auto r = std::make_shared<PickResult>();
+        std::string err;
+        bool ok = pickRay(*src, o, d, *r, &err, cancel);
+        if (cancel->load() || !ok) return;
+        QMetaObject::invokeMethod(this, [this, r, gen] {
+            if (gen <= pickFloorGen_ || !pickGate_.accept(gen)) return;   // 커서가 떠났거나 더 새 결과가 있음
+            if (!r->hit) { cz_->setText(QStringLiteral("—")); showZSource(ZSource::None, QStringLiteral("커서 아래에 표면이 없습니다")); return; }
+            cx_->setText(QString::number(r->world.x, 'f', 3)); cy_->setText(QString::number(r->world.y, 'f', 3)); cz_->setText(QString::number(r->world.z, 'f', 3));
+            showZSource(r->source, QStringLiteral("잎 타일 %1 · 삼각형 %2 검사 · %3 ms%4")
+                                       .arg(r->stats.leafNodes).arg(r->trianglesTested).arg(r->ms, 0, 'f', 1)
+                                       .arg(r->stats.fallbackNodes ? QStringLiteral(" · 상위 LOD 대체 %1").arg(r->stats.fallbackNodes) : QString()));
+        }, Qt::QueuedConnection);
+    });
+}
+
+void MainWindow::showZSource(ZSource s, const QString& detail) {
+    QString v = qs(srsReport_.desc.verticalKo());
+    QString t = s == ZSource::None ? QStringLiteral("Z —") : QStringLiteral("Z: %1").arg(qs(zSourceKo(s)));
+    zSrc_->setText(t);
+    bool coarse = s == ZSource::Coarse || s == ZSource::LeafWithFallback;
+    zSrc_->setStyleSheet(coarse ? QStringLiteral("QLabel{color:#9A6A00;}") : QString());
+    QString tip = QStringLiteral("Z 출처: %1\n높이 기준: %2 (모델 SRS 그대로, 변환 없음)").arg(qs(zSourceKo(s)), v);
+    if (!detail.isEmpty()) tip += "\n" + detail;
+    if (srsReport_.precisionWarning) tip += QStringLiteral("\n⚠ 로컬 좌표가 커서 메시 좌표 간격이 약 %1 mm 입니다(float32).").arg(srsReport_.float32StepMm, 0, 'f', 1);
+    zSrc_->setToolTip(tip);
+}
+
+QString MainWindow::cursorText() const {
+    return QStringLiteral("X=%1 Y=%2 Z=%3 [%4]").arg(cx_->text(), cy_->text(), cz_->text(), zSrc_->text());
 }

@@ -2,7 +2,9 @@
 //   SectionViewer [파일.3mx|.obj] [--line AX AY BX BY] [--local] [--front m] [--back m] [--size WxH] [--tab N]
 //                 [--shot out.png] [--export-png f] [--export-tiff f] [--export-geotiff f] [--export-dxf f] [--dxf3d]
 //                 [--export-plan f] [--plan-view] [--export-xyz f] [--export-las f] [--area whole|band|view] [--spacing m] [--norgb]
-//                 [--scale N] [--dpi N] [--log f] [--perf-log f.csv] [--quit]
+//                 [--scale N] [--dpi N] [--log f] [--perf-log f.csv] [--pick X Y]... [--hover] [--quit]
+//   --pick X Y: 그 실좌표(--local 이면 로컬)에서 잎 메시 연직 정밀 피킹 → 로그(Z, 출처, 시간)
+//   --hover: 평면 보기 가운데로 마우스 이동을 흉내 → 좌표줄 Z 와 Z 출처(대략 → 잎 표면)를 로그
 //   --perf-log: 평면 보기 카메라 경로(맞춤→확대→이동→축소)를 재생하며 프레임마다 시간·LOD 상태를 CSV 로 기록
 #include <QApplication>
 #include <QFile>
@@ -11,6 +13,8 @@
 #include <QSurfaceFormat>
 #include <QTextStream>
 #include <QTimer>
+#include <QMouseEvent>
+#include "asec/pick.hpp"
 #include "mainwindow.hpp"
 #include "theme.hpp"
 
@@ -41,7 +45,8 @@ int main(int argc, char** argv) {
     bool haveLine = false, local = false, quit = false;
     double ax = 0, ay = 0, bx = 0, by = 0, front = -1, back = -1, denom = 20, dpi = 300, spacing = 0;
     int W = 0, H = 0, tab = -1;
-    bool dxf3d = false, rgb = true, planView = false;
+    bool dxf3d = false, rgb = true, planView = false, hover = false;
+    std::vector<std::pair<double, double>> picks;
     QString area = "whole";
     QList<QPair<QString, QString>> exports;
     for (int i = 1; i < a.size(); ++i) {
@@ -64,6 +69,8 @@ int main(int argc, char** argv) {
         else if (s == "--log") logPath = nx();
         else if (s == "--perf-log") perfPath = nx();
         else if (s == "--quit") quit = true;
+        else if (s == "--pick" && i + 2 < a.size()) { picks.push_back({a[i + 1].toDouble(), a[i + 2].toDouble()}); i += 2; }
+        else if (s == "--hover") hover = true;
         else if (s.startsWith("--export-")) exports.append({s.mid(9), nx()});
         else if (!s.startsWith("--")) file = s;
     }
@@ -150,6 +157,39 @@ int main(int argc, char** argv) {
             log(QStringLiteral("perf: frames=%1 avg-ms=%2 worst-ms=%3 csv=%4 (GL=%5)").arg(path.size()).arg(sum / path.size(), 0, 'f', 2).arg(worst, 0, 'f', 2)
                     .arg(perfPath, QString::fromLatin1(reinterpret_cast<const char*>(pv->glRenderer().constData()))));
         }
+    }
+    for (auto& pk : picks) {
+        auto src = w.source();
+        Vec3 o = local ? Vec3() : w.srs().origin;
+        double lx = pk.first - o.x, ly = pk.second - o.y;
+        PickResult r; std::string e;
+        bool ok = pickVertical(*src, lx, ly, r, &e);
+        // 비교: 거친 LOD(0.5 m/px 에 충분한 단계)로 읽은 높이
+        double coarseZ = std::nan("");
+        {
+            std::vector<MeshPtr> ms; LeafStats st;
+            SectionLine sl; sl.a = Vec2(lx - 0.02, ly); sl.b = Vec2(lx + 0.02, ly); sl.front = sl.back = 0.02;
+            if (src->bandMeshes(sectionBand(sl), 0.5, ms, &st, &e, nullptr)) {
+                double t = 1e300;
+                if (rayMeshes(ms, Vec3(lx, ly, src->bounds.mx.z + 10), Vec3(0, 0, -1), 0, t)) coarseZ = src->bounds.mx.z + 10 - t + src->srs.origin.z;
+            }
+        }
+        if (!ok) log("pick-error: " + QString::fromStdString(e));
+        else if (!r.hit) log(QStringLiteral("pick %1 %2: no surface").arg(pk.first, 0, 'f', 3).arg(pk.second, 0, 'f', 3));
+        else log(QStringLiteral("pick %1 %2: Z=%3 source=%4 leafTiles=%5 depth=%6 tris=%7 ms=%8 coarse0.5m-Z=%9 (diff %10 mm)")
+                     .arg(r.world.x, 0, 'f', 3).arg(r.world.y, 0, 'f', 3).arg(r.world.z, 0, 'f', 4).arg(QString::fromUtf8(zSourceKo(r.source)))
+                     .arg(r.stats.leafNodes).arg(r.stats.maxDepth).arg(r.trianglesTested).arg(r.ms, 0, 'f', 1).arg(coarseZ, 0, 'f', 4)
+                     .arg((coarseZ - r.world.z) * 1000, 0, 'f', 1));
+    }
+    if (hover) {
+        PlanView* pv = w.plan();
+        QPointF c(pv->width() / 2.0, pv->height() / 2.0);
+        QMouseEvent ev(QEvent::MouseMove, c, pv->mapToGlobal(c), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(pv, &ev);
+        log("hover-immediate: " + w.cursorText());
+        auto th = std::chrono::steady_clock::now();
+        while (msSince(th) < 10000 && !w.cursorText().contains(QStringLiteral("잎")) && !w.cursorText().contains(QStringLiteral("없습니다"))) processFor(20);
+        log(QStringLiteral("hover-final(%1 ms): ").arg(msSince(th), 0, 'f', 0) + w.cursorText());
     }
     if (front >= 0 || back >= 0) w.setThickness(front >= 0 ? front : 0.0, back >= 0 ? back : 0.5);
     if (tab >= 0) w.selectRibbonTab(tab);

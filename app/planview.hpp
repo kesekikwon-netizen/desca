@@ -68,6 +68,9 @@ public:
     bool viewRectLocal(asec::Box3& out) const;
     const asec::Box3& bounds() const { return bounds_; }
     double metersPerPixel() const { return mpp_; }
+    /// 화면 점 → 광선(로컬 double 좌표: 원점, 방향). 정밀 피킹(asec::pickRay)용
+    bool screenRayLocal(const QPointF& sp, asec::Vec3& o, asec::Vec3& d) const;
+    QPointF lastMousePos() const { return QPointF(lastMouse_); }
 
     std::function<void(const asec::SectionLine&, bool final)> onLineChanged;
     std::function<void(double X, double Y, double Z, bool hasZ, bool valid)> onCursor;  // 실좌표
