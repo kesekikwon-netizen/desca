@@ -52,6 +52,10 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
   로그에 `window-title=… appended=0|1`(창 제목에 표시 이름이 덧붙는지), `vex-suggest: relief=… suggest=x…`.
   Windows 패키지: `./build-win.sh --no-package`(빌드·배포 폴더만), zip 은 `packaging/mkzip.py`(UTF-8 이름 플래그).
 
+## 1.2.1 (2026-10-06)
+뒤 깊이(입면 배경) 기본 3 m(0–5 m 조절, 칩·숫자키 0.5/1/2/3/5, 옛 0.5 기본 이관) · 잘린 면은 미리보기도 최고 해상도 잎 · 단면선 맨 위 ·
+단면 화면 세로 과장(X, 화면만) · 창 제목 중복 수정 · 휴대용 zip 한글 이름 UTF-8 플래그 · `--front` 만 줄 때 뒤 깊이 유지. 전체 목록은 `CHANGELOG.md`.
+
 ## 1.2 화면(Strata) · 사용자 중심 개선 P0 + 단면 목록
 - 디자인: `research/ui-ref/UI-SPEC.md` §4 토큰(ground #FAF9F5, ink #141413, 주 단추 흙색 #B5573A 은 「도면」 하나), 본문 13 px 고딕,
   리본 탭 파일·홈·보기·측정·내보내기(옛 분석→측정, 추출→내보내기), 44 px 타일. 영어 병기는 기본 끔(보기 › English). 고대비(보기).

@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QApplication::setOrganizationName("ExcavSection");
     QApplication::setApplicationName("SectionViewer");
-    // 표시 이름 = 창 제목 끝과 같게(「… — 발굴 단면뷰어 1.2.0」). Qt(Windows·X11)는 제목이 표시 이름으로 끝나지 않으면
+    // 표시 이름 = 창 제목 끝과 같게(「… — 발굴 단면뷰어 x.y.z」). Qt(Windows·X11)는 제목이 표시 이름으로 끝나지 않으면
     // 「 - 표시 이름」을 덧붙여 「발굴 단면뷰어」가 두 번 보였음(1.2.0 신고)
     QApplication::setApplicationDisplayName(QStringLiteral("발굴 단면뷰어 %1").arg(QString::fromUtf8(kVersion)));
     QFont f = theme::uiFont(13); f.setStyleStrategy(QFont::PreferAntialias);   // 한글 본문 13 px

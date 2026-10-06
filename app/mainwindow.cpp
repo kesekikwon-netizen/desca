@@ -46,7 +46,7 @@ using namespace asec;
 using clk = std::chrono::steady_clock;
 
 extern const char* const kVersion;
-const char* const kVersion = "1.2.0";
+const char* const kVersion = "1.2.1";
 static constexpr double kDepthFade = kDepthFadeStrength;
 // 모델별 설정 키(경로 기준, 대소문자 무시)
 static QString heightSettingsKey(const QString& path) {

@@ -4,8 +4,8 @@
 IDI_ICON1 ICON "assets/app.ico"
 1 24 "app.manifest"
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 1,2,0,0
-PRODUCTVERSION 1,2,0,0
+FILEVERSION 1,2,1,0
+PRODUCTVERSION 1,2,1,0
 FILEFLAGSMASK 0x3fL
 FILEFLAGS 0x0L
 FILEOS VOS_NT_WINDOWS32
@@ -18,11 +18,11 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "발굴 단면뷰어\0"
       VALUE "FileDescription", "발굴 단면뷰어 — 3MX 실사 메시 단면\0"
-      VALUE "FileVersion", "1.2.0\0"
+      VALUE "FileVersion", "1.2.1\0"
       VALUE "InternalName", "SectionViewer\0"
       VALUE "OriginalFilename", "SectionViewer.exe\0"
       VALUE "ProductName", "발굴 단면뷰어\0"
-      VALUE "ProductVersion", "1.2.0\0"
+      VALUE "ProductVersion", "1.2.1\0"
       VALUE "LegalCopyright", "Qt (LGPLv3), OpenCTM (zlib), stb, nlohmann/json\0"
     END
   END
