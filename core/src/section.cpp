@@ -1,4 +1,7 @@
 #include "asec/section.hpp"
+#include <cstdint>
+#include <functional>
+#include <map>
 
 #include <algorithm>
 #include <cstdio>
@@ -174,30 +177,73 @@ int removeSpikes(Polyline& pl, double maxLen, double turnDeg) {
 }
 
 void joinGaps(std::vector<Polyline>& L, double gapTol) {
-    while (true) {
-        double best = gapTol;
-        int bi = -1, bj = -1, mode = 0;  // mode: 0 = i끝-j처음, 1 = i끝-j끝, 2 = i처음-j처음, 3 = i처음-j끝
-        for (size_t i = 0; i < L.size(); ++i) {
-            if (L[i].size() < 2 || isClosed(L[i])) continue;  // 닫힌 고리(나무·돌 등)는 다른 선과 잇지 않음
-            for (size_t j = i + 1; j < L.size(); ++j) {
-                if (L[j].size() < 2 || isClosed(L[j])) continue;
-                const Vec2 ends[4][2] = {{L[i].back(), L[j].front()}, {L[i].back(), L[j].back()}, {L[i].front(), L[j].front()}, {L[i].front(), L[j].back()}};
-                for (int k = 0; k < 4; ++k) {
-                    double d = (ends[k][0] - ends[k][1]).len();
-                    if (d <= best) { best = d; bi = int(i); bj = int(j); mode = k; }
+    // "가장 가까운 끝점 쌍부터 잇기"(gapTol 이내)를 O(n log n) 으로:
+    // 잇기는 끝점 두 개를 소모할 뿐 남은 끝점의 위치를 바꾸지 않으므로, 모든 후보 쌍(격자 해시)을 거리순으로 한 번 훑으면
+    // 매번 전체를 다시 찾는 방식(O(n³), 실제 현장 모델에서 수천 조각이면 수 분 이상 멈춤)과 같은 결과가 된다.
+    const size_t n = L.size();
+    if (n >= 2 && gapTol > 0) {
+        auto usable = [&](size_t i) { return L[i].size() >= 2 && !isClosed(L[i]); };
+        auto endPt = [&](size_t e) -> const Vec2& { return (e & 1) ? L[e >> 1].back() : L[e >> 1].front(); };  // e = 2i(처음) / 2i+1(끝)
+        const double cell = gapTol;
+        auto key = [&](const Vec2& v) { return std::make_pair(int64_t(std::floor(v.x / cell)), int64_t(std::floor(v.y / cell))); };
+        std::map<std::pair<int64_t, int64_t>, std::vector<uint32_t>> grid;
+        for (size_t i = 0; i < n; ++i)
+            if (usable(i)) for (uint32_t e : {uint32_t(2 * i), uint32_t(2 * i + 1)}) grid[key(endPt(e))].push_back(e);
+        struct Cand { double d; uint32_t a, b; };
+        std::vector<Cand> cand;
+        for (auto& [k, v] : grid)
+            for (int64_t dx = -1; dx <= 1; ++dx)
+                for (int64_t dy = -1; dy <= 1; ++dy) {
+                    auto it = grid.find({k.first + dx, k.second + dy});
+                    if (it == grid.end()) continue;
+                    for (uint32_t ea : v)
+                        for (uint32_t eb : it->second) {
+                            if ((ea >> 1) >= (eb >> 1)) continue;  // 서로 다른 선, 쌍은 한 번만
+                            double d = (endPt(ea) - endPt(eb)).len();
+                            if (d <= gapTol) cand.push_back({d, ea, eb});
+                        }
                 }
-            }
+        std::stable_sort(cand.begin(), cand.end(), [](const Cand& x, const Cand& y) { return x.d < y.d; });
+        std::vector<size_t> uf(n);
+        for (size_t i = 0; i < n; ++i) uf[i] = i;
+        std::function<size_t(size_t)> root = [&](size_t x) { while (uf[x] != x) { uf[x] = uf[uf[x]]; x = uf[x]; } return x; };
+        std::vector<int64_t> link(2 * n, -1);  // 끝점 → 이어진 상대 끝점
+        for (auto& c : cand) {
+            if (link[c.a] >= 0 || link[c.b] >= 0) continue;   // 이미 쓴 끝점
+            size_t ra = root(c.a >> 1), rb = root(c.b >> 1);
+            if (ra == rb) continue;                           // 같은 사슬의 양 끝(고리 만들기 금지 — 원래 규칙과 같음)
+            link[c.a] = c.b; link[c.b] = c.a;
+            uf[std::max(ra, rb)] = std::min(ra, rb);
         }
-        if (bi < 0) break;
-        Polyline& A = L[size_t(bi)];
-        Polyline B = std::move(L[size_t(bj)]);
-        L.erase(L.begin() + bj);
-        if (mode == 1) std::reverse(B.begin(), B.end());
-        if (mode == 2) std::reverse(A.begin(), A.end());
-        if (mode == 3) { std::reverse(A.begin(), A.end()); std::reverse(B.begin(), B.end()); }
-        // 이제 A끝 → B처음
-        size_t startB = ((A.back() - B.front()).len() <= 1e-12) ? 1 : 0;
-        A.insert(A.end(), B.begin() + long(startB), B.end());
+        // 사슬 조립: 자유 끝(이어지지 않은 끝)에서 출발
+        std::vector<char> used(n, 0);
+        std::vector<std::pair<size_t, Polyline>> out;  // (사슬의 가장 작은 원래 번호, 선)
+        for (size_t i = 0; i < n; ++i) {
+            if (used[i]) continue;
+            if (!usable(i)) { used[i] = 1; out.push_back({i, std::move(L[i])}); continue; }
+            uint32_t start;
+            if (link[2 * i] < 0) start = uint32_t(2 * i);
+            else if (link[2 * i + 1] < 0) start = uint32_t(2 * i + 1);
+            else continue;  // 사슬 가운데 — 끝에서 출발할 때 들어감
+            Polyline acc; size_t minIdx = i;
+            uint32_t e = start;
+            while (true) {
+                size_t pi = e >> 1;
+                used[pi] = 1; minIdx = std::min(minIdx, pi);
+                Polyline& P = L[pi];
+                bool fwd = (e & 1) == 0;  // 처음으로 들어오면 정방향
+                size_t k0 = (!acc.empty() && (acc.back() - (fwd ? P.front() : P.back())).len() <= 1e-12) ? 1 : 0;
+                if (fwd) acc.insert(acc.end(), P.begin() + long(k0), P.end());
+                else acc.insert(acc.end(), P.rbegin() + long(k0), P.rend());
+                uint32_t other = e ^ 1u;
+                if (link[other] < 0) break;
+                e = uint32_t(link[other]);
+            }
+            out.push_back({minIdx, std::move(acc)});
+        }
+        std::stable_sort(out.begin(), out.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+        L.clear();
+        for (auto& o : out) L.push_back(std::move(o.second));
     }
     // 거의 닫힌 고리(끝과 처음 사이 틈 <= gapTol)는 닫는다
     for (auto& pl : L) {
