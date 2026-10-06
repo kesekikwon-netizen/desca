@@ -1,6 +1,8 @@
 #include "mainwindow.hpp"
 
 #include <QApplication>
+#include <QMenu>
+#include <QToolButton>
 #include <QCryptographicHash>
 #include <QInputDialog>
 #include <QCheckBox>
@@ -42,6 +44,8 @@ using namespace asec;
 using clk = std::chrono::steady_clock;
 
 static const char* kVersion = "1.1.0";
+static constexpr double kMaxBandDepth = 5.0;   // 두께 띠 앞/뒤 최대(m) — 입면 영상 깊이 최대 5 m
+static constexpr double kDepthFade = 0.55;     // 깊이 음영 세기(가장 먼 면을 흰색 쪽으로 55%)
 // 모델별 설정 키(경로 기준, 대소문자 무시)
 static QString heightSettingsKey(const QString& path) {
     QByteArray h = QCryptographicHash::hash(QFileInfo(path).absoluteFilePath().toLower().toUtf8(), QCryptographicHash::Sha1).toHex().left(16);
@@ -254,17 +258,34 @@ QWidget* MainWindow::buildRibbon() {
              {{K("끝내기"), "Exit"}, rowOf({bigButton(action("quit"))})}});
     // 홈
     front_ = new QDoubleSpinBox; back_ = new QDoubleSpinBox;
-    for (auto* sp : {front_, back_}) { sp->setRange(0, 20); sp->setDecimals(2); sp->setSingleStep(0.05); sp->setSuffix(" m"); sp->setFixedWidth(84); }
-    front_->setToolTip(QStringLiteral("단면선 앞쪽(보는 사람 쪽) 두께 (Front)"));
-    back_->setToolTip(QStringLiteral("단면선 뒤쪽(보는 방향) 두께 — 입면 영상에 보이는 깊이 (Back)"));
+    for (auto* sp : {front_, back_}) { sp->setRange(0, kMaxBandDepth); sp->setDecimals(2); sp->setSingleStep(0.05); sp->setSuffix(" m"); sp->setFixedWidth(84); }
+    front_->setToolTip(QStringLiteral("단면선 앞쪽(보는 사람 쪽) 두께 (Front), 0–5 m"));
+    back_->setToolTip(QStringLiteral("단면선 뒤쪽(보는 방향) 깊이 — 입면 영상에 보이는 깊이 (Back), 0–5 m"));
+    auto* depthBtn = new QToolButton; depthBtn->setText(QStringLiteral("5 m")); depthBtn->setAutoRaise(true);
+    depthBtn->setToolTip(QStringLiteral("입면 깊이 바로 고르기 — 누르면 뒤 5 m(입면 최대). 옆 ▾ 로 0.5 / 1 / 2 / 3 m"));
+    depthBtn->setMinimumWidth(40);
+    QObject::connect(depthBtn, &QToolButton::clicked, this, [this] { back_->setValue(kMaxBandDepth); });
+    // 단계 고르기는 따로 ▾ 버튼(분할 버튼의 화살표 칸이 테마에서 검게 칠해져서)
+    auto* depthMenuBtn = new QToolButton; depthMenuBtn->setText(QStringLiteral("▾")); depthMenuBtn->setAutoRaise(true);
+    depthMenuBtn->setToolTip(QStringLiteral("입면 깊이 고르기: 뒤 0.5 / 1 / 2 / 3 / 5 m"));
+    depthMenuBtn->setPopupMode(QToolButton::InstantPopup);
+    depthMenuBtn->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; width: 0px; }"));
+    depthMenuBtn->setFixedWidth(18);
+    {
+        auto* menu = new QMenu(depthMenuBtn);
+        for (double v : {0.5, 1.0, 2.0, 3.0, 5.0})
+            QObject::connect(menu->addAction(QStringLiteral("뒤 %1 m").arg(v, 0, 'f', v < 1 ? 1 : 0)), &QAction::triggered, this, [this, v] { back_->setValue(v); });
+        depthMenuBtn->setMenu(menu);
+    }
+    auto* backRow = new QWidget; { auto* h = new QHBoxLayout(backRow); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(2); h->addWidget(back_); h->addWidget(depthBtn); h->addWidget(depthMenuBtn); }
     auto thick = new QWidget; { auto* f = new QFormLayout(thick); f->setContentsMargins(2, 2, 2, 0); f->setVerticalSpacing(4); f->setHorizontalSpacing(6);
-        f->addRow(QStringLiteral("앞"), front_); f->addRow(QStringLiteral("뒤"), back_); }
+        f->addRow(QStringLiteral("앞"), front_); f->addRow(QStringLiteral("뒤"), backRow); }
     addPage({{{K("파일"), "File"}, rowOf({bigButton(action("open"))})},
              {{K("좌표계"), "SRS"}, rowOf({bigButton(action("height"))})},
              {{K("단면"), "Section"}, rowOf({bigButton(action("draw")), smallColumn({smallButton(action("flip")), smallButton(action("clear"))})})},
              {{K("두께 띠"), "Thickness"}, thick},
              {{K("탐색"), "Navigate"}, rowOf({bigButton(action("fit")), smallColumn({smallButton(action("top")), smallButton(action("zoomin")), smallButton(action("zoomout"))})})},
-             {{K("단면 표시"), "Display"}, rowOf({smallColumn({smallButton(action("image")), smallButton(action("line")), smallButton(action("levels"))})})},
+             {{K("단면 표시"), "Display"}, rowOf({smallColumn({smallButton(action("image")), smallButton(action("line")), smallButton(action("levels"))}), smallColumn({smallButton(action("fade"))})})},
              {{K("내보내기"), "Export"}, rowOf({bigButton(action("dxf")), bigButton(action("secimg"))})}});
     // 보기
     opacity_ = new QSlider(Qt::Horizontal); opacity_->setRange(10, 100); opacity_->setValue(100); opacity_->setFixedWidth(110);
@@ -275,7 +296,7 @@ QWidget* MainWindow::buildRibbon() {
     auto* langw = new QWidget; { auto* l = new QVBoxLayout(langw); l->setContentsMargins(4, 6, 4, 0); l->addWidget(lang); l->addStretch(); }
     addPage({{{K("보기 창"), "Views"}, rowOf({bigButton(action("view1")), bigButton(action("view2"))})},
              {{K("탐색"), "Navigate"}, rowOf({bigButton(action("fit")), smallColumn({smallButton(action("top")), smallButton(action("zoomin")), smallButton(action("zoomout"))})})},
-             {{K("단면 표시"), "Section Display"}, rowOf({smallColumn({smallButton(action("image")), smallButton(action("line")), smallButton(action("levels"))}), opw})},
+             {{K("단면 표시"), "Section Display"}, rowOf({smallColumn({smallButton(action("image")), smallButton(action("line")), smallButton(action("levels"))}), smallColumn({smallButton(action("fade"))}), opw})},
              {{K("언어"), "Language"}, langw}});
     // 분석
     addPage({{{K("단면 정리"), "Cleanup"}, rowOf({bigButton(action("smooth"))})},
@@ -385,8 +406,10 @@ MainWindow::MainWindow() {
     makeAction("zoomout", QStringLiteral("축소"), "Zoom Out", I::ZoomOut, "-");
     makeAction("image", QStringLiteral("입면 영상"), "Image", I::Image, "I", true)->setChecked(true);
     makeAction("line", QStringLiteral("단면선"), "Profile Line", I::Line, "L", true)->setChecked(true);
-    makeAction("levels", QStringLiteral("레벨선 10cm"), "Level Lines", I::Levels, "V", true)->setChecked(true);
+    makeAction("levels", QStringLiteral("레벨선"), "Level Lines", I::Levels, "V", true)->setChecked(true);
     makeAction("smooth", QStringLiteral("평활"), "Smooth", I::Smooth, QString(), true);
+    makeAction("fade", QStringLiteral("깊이 음영"), "Depth Shading", I::Band, QString(), true);
+    action("fade")->setToolTip(QStringLiteral("깊이 음영 (Depth Shading) — 입면 영상에서 단면선보다 뒤에 있는 면일수록 옅게 그려 빨간 단면선이 잘 보이게 합니다(내보내기도 같음)"));
     makeAction("info", QStringLiteral("단면 정보"), "Section Info", I::Info);
     makeAction("height", QStringLiteral("높이 기준 지정"), "Height Datum", I::Levels);
     makeAction("view1", QStringLiteral("평면"), "View 1", I::View1, "Ctrl+1", true)->setChecked(true);
@@ -398,6 +421,7 @@ MainWindow::MainWindow() {
     makeAction("las", QStringLiteral("점군 LAS"), "Points LAS", I::Las);
     makeAction("csv", QStringLiteral("단면선 CSV"), "Profile CSV", I::Csv);
     action("smooth")->setChecked(QSettings().value("section/smooth", false).toBool());
+    action("fade")->setChecked(QSettings().value("section/depthFade", true).toBool());
 
     auto* central = new QWidget; central->setObjectName("central");
     auto* v = new QVBoxLayout(central); v->setContentsMargins(0, 0, 0, 0); v->setSpacing(0);
@@ -420,7 +444,7 @@ MainWindow::MainWindow() {
     QAction* zinSec = new QAction(theme::icon(I::ZoomIn), QStringLiteral("확대 (Zoom In)"), this);
     QAction* zoutSec = new QAction(theme::icon(I::ZoomOut), QStringLiteral("축소 (Zoom Out)"), this);
     auto* barPlan = mkBar({fitPlan, zinPlan, zoutPlan, action("top"), nullptr, action("draw"), action("flip"), action("clear"), nullptr, action("plan"), action("xyz")});
-    auto* barSec = mkBar({fitSec, zinSec, zoutSec, nullptr, action("image"), action("line"), action("levels"), action("smooth"), nullptr, action("dxf"), action("secimg"), action("csv")});
+    auto* barSec = mkBar({fitSec, zinSec, zoutSec, nullptr, action("image"), action("line"), action("levels"), action("fade"), action("smooth"), nullptr, action("dxf"), action("secimg"), action("csv")});
     QWidget *t1 = nullptr, *t2 = nullptr;
     planFrame_ = buildViewFrame(1, QStringLiteral("평면"), "Top", plan_, barPlan, &t1);
     sectionFrame_ = buildViewFrame(2, QStringLiteral("단면"), "Section", section_, barSec, &t2);
@@ -473,6 +497,7 @@ MainWindow::MainWindow() {
         QObject::connect(action(k), &QAction::toggled, this, [this](bool) { section_->setStyle(secStyle()); });
     QObject::connect(opacity_, &QSlider::valueChanged, this, [this](int) { section_->setStyle(secStyle()); });
     QObject::connect(action("smooth"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/smooth", on); requestSection(true); });
+    QObject::connect(action("fade"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/depthFade", on); section_->setStyle(secStyle()); requestSection(true); });
     QObject::connect(action("info"), &QAction::triggered, this, [this] { dlgInfo(); });
     QObject::connect(action("height"), &QAction::triggered, this, [this] { dlgHeightDatum(); });
     QObject::connect(action("view1"), &QAction::toggled, this, [this](bool on) {
@@ -542,6 +567,7 @@ SectionStyle MainWindow::secStyle() const {
     SectionStyle s;
     s.showImage = action("image")->isChecked(); s.showLine = action("line")->isChecked(); s.showLevels = action("levels")->isChecked();
     s.imageOpacity = opacity_->value() / 100.0;
+    s.depthFade = action("fade")->isChecked();
     return s;
 }
 
@@ -672,10 +698,12 @@ void MainWindow::dropEvent(QDropEvent* e) {
 // ---------------------------------------------------------------- 단면 계산(작업 스레드, 마지막 요청 우선)
 void MainWindow::setLineLocal(const SectionLine& l) { plan_->setLine(l, true); }
 void MainWindow::setThickness(double f, double b) { front_->setValue(f); back_->setValue(b); }
+void MainWindow::setDepthFade(bool on) { action("fade")->setChecked(on); }
 
-static SectionRequest makeRequest(const SectionLine& line, bool smooth, bool final) {
+static SectionRequest makeRequest(const SectionLine& line, bool smooth, bool final, bool fade) {
     SectionRequest rq;
     rq.line = line;
+    rq.depthFade = fade ? kDepthFade : 0.0;
     rq.cleanup.smooth = smooth;
     double L = SectionFrame(line).L;
     rq.imageRes = final ? std::max(0.003, L / 4000.0) : std::max(0.008, L / 700.0);
@@ -690,7 +718,7 @@ void MainWindow::requestSection(bool final) {
     SectionLine l = plan_->line(); l.front = front_->value(); l.back = back_->value();
     if (SectionFrame(l).L < 0.01) return;
     auto src = src_;
-    SectionRequest rq = makeRequest(l, action("smooth")->isChecked(), final);
+    SectionRequest rq = makeRequest(l, action("smooth")->isChecked(), final, action("fade")->isChecked());
     secWorker_->submit(final, [this, src, rq](uint64_t gen, bool fin, const std::atomic<bool>* cancel) {
         auto out = std::make_shared<SectionOutput>();
         std::string err;
@@ -733,7 +761,7 @@ bool MainWindow::computeNow(const SectionLine& line, QString* err) {
     SectionLine l = line; l.front = front_->value(); l.back = back_->value();
     plan_->setLine(l, true);  // (onLineChanged 를 부르지 않음)
     SectionOutput out; std::string e;
-    if (!computeSection(*src_, makeRequest(l, action("smooth")->isChecked(), true), out, &e)) { if (err) *err = qs(e); return false; }
+    if (!computeSection(*src_, makeRequest(l, action("smooth")->isChecked(), true, action("fade")->isChecked()), out, &e)) { if (err) *err = qs(e); return false; }
     onSectionDone(std::move(out), g, true, QString());
     return true;
 }
@@ -750,6 +778,7 @@ bool MainWindow::exportSectionImage(const SectionDoc& doc0, MeshSource& src, con
     SectionRequest rq;
     rq.line = doc.r.line;
     rq.cleanup.smooth = false;
+    rq.depthFade = doc.st.depthFade ? kDepthFade : 0.0;
     rq.imageRes = res;
     rq.maxImagePixels = size_t(160) << 20;
     SectionXf xf;
@@ -809,6 +838,7 @@ bool MainWindow::exportSectionDxf(const SectionDoc& doc, MeshSource& src, const 
         SectionRequest rq;
         rq.line = doc.r.line;
         rq.imageRes = groundResolution(p.denom, p.imageDpi);
+        rq.depthFade = doc.st.depthFade ? kDepthFade : 0.0;
         rq.maxImagePixels = size_t(80) << 20;
         SectionOutput out; std::string e;
         if (!computeSection(src, rq, out, &e, cancel)) { if (msg) *msg = qs(e); return false; }

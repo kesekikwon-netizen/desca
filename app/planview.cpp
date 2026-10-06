@@ -666,16 +666,43 @@ void PlanView::mouseDoubleClickEvent(QMouseEvent* e) {
 
 void PlanView::wheelEvent(QWheelEvent* e) {
     if (!hasScene_) return;
-    Vec2 before; bool ok = screenToLocalXY(e->position(), before);
-    double f = std::pow(0.85, e->angleDelta().y() / 120.0);
-    mpp_ = std::clamp(mpp_ * f, 1e-4, 1e4);
+    double notches = e->angleDelta().y() / 120.0;
+    if (notches == 0 && !e->pixelDelta().isNull()) notches = e->pixelDelta().y() / 60.0;  // 터치패드
+    wheelZoom(e->position(), notches);
+    e->accept();
+}
+
+// 커서 아래 지점(기준 높이 평면)이 화면에서 움직이지 않게 확대/축소
+void PlanView::applyZoomAt(const QPointF& at, double f) {
+    Vec2 before; bool ok = screenToLocalXY(at, before);
+    mpp_ = std::clamp(mpp_ * f, 1e-5, 1e5);
     updateMatrices();
     Vec2 after;
-    if (ok && screenToLocalXY(e->position(), after)) {
+    if (ok && screenToLocalXY(at, after)) {
         target_ += QVector3D(float(before.x - after.x), float(before.y - after.y), 0);
         updateMatrices();
     }
     update();
+}
+
+void PlanView::wheelZoom(const QPointF& at, double notches) {
+    if (!hasScene_ || notches == 0) return;
+    const double step = std::log(0.85) * notches;   // 한 칸 = 15 %
+    if (!QSettings().value("view/smoothZoom", true).toBool()) { zoomPending_ = 0; applyZoomAt(at, std::exp(step)); return; }
+    zoomAnchor_ = at;
+    zoomPending_ += step;
+    if (!zoomTimer_) {
+        zoomTimer_ = new QTimer(this);
+        zoomTimer_->setInterval(16);
+        QObject::connect(zoomTimer_, &QTimer::timeout, this, [this] {
+            // 남은 양의 40 % 씩(지수 감속) — 약 6~8 프레임에 끝남. 프레임이 늦어도 남은 양만 적용하므로 끊기지 않음
+            double d = std::fabs(zoomPending_) < 0.004 ? zoomPending_ : zoomPending_ * 0.4;
+            zoomPending_ -= d;
+            if (std::fabs(zoomPending_) < 1e-9) { zoomPending_ = 0; zoomTimer_->stop(); }
+            applyZoomAt(zoomAnchor_, std::exp(d));
+        });
+    }
+    if (!zoomTimer_->isActive()) zoomTimer_->start();
 }
 
 void PlanView::keyPressEvent(QKeyEvent* e) {
@@ -697,4 +724,4 @@ bool PlanView::viewRectLocal(Box3& out) const {
     return true;
 }
 
-void PlanView::zoomBy(double f) { mpp_ = std::clamp(mpp_ * f, 1e-5, 1e5); updateMatrices(); update(); }
+void PlanView::zoomBy(double f) { zoomPending_ = 0; if (zoomTimer_) zoomTimer_->stop(); mpp_ = std::clamp(mpp_ * f, 1e-5, 1e5); updateMatrices(); update(); }

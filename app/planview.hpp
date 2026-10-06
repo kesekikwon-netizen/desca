@@ -68,6 +68,10 @@ public:
     bool viewRectLocal(asec::Box3& out) const;
     const asec::Box3& bounds() const { return bounds_; }
     double metersPerPixel() const { return mpp_; }
+    /// 휠 확대/축소(커서 위치 고정). smooth=true 면 약 0.1 초에 걸쳐 부드럽게(설정 view/smoothZoom). 자동화·시험용으로도 씀
+    void wheelZoom(const QPointF& at, double notches);
+    bool zoomAnimating() const { return zoomPending_ != 0.0; }
+    bool screenToLocalXYPublic(const QPointF& sp, asec::Vec2& out) const { return screenToLocalXY(sp, out); }
     /// 화면 점 → 광선(로컬 double 좌표: 원점, 방향). 정밀 피킹(asec::pickRay)용
     bool screenRayLocal(const QPointF& sp, asec::Vec3& o, asec::Vec3& d) const;
     QPointF lastMousePos() const { return QPointF(lastMouse_); }
@@ -114,6 +118,10 @@ private:
     // 카메라(중심 기준 좌표)
     QVector3D target_;
     double mpp_ = 0.01, yaw_ = 0, pitch_ = 90;
+    double zoomPending_ = 0;            // 남은 확대량(log, 음수 = 확대)
+    QPointF zoomAnchor_;
+    class QTimer* zoomTimer_ = nullptr;
+    void applyZoomAt(const QPointF& at, double factor);
     QMatrix4x4 proj_, view_;
     // 단면선(로컬 XY)
     asec::SectionLine line_;

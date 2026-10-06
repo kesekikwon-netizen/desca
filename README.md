@@ -26,15 +26,29 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
 ## 명령줄 자동화(시험·캡처용)
 `SectionViewer <파일.3mx> --line AX AY BX BY [--local] [--front m] [--back m] [--scale N] [--dpi N]
  [--export-png|tiff|geotiff|dxf|plan|xyz|las|csv 파일] [--area whole|band|view] [--spacing m] [--shot 파일.png] [--log 파일]
- [--pick X Y]... [--hover] [--perf-log 파일.csv] [--quit]`
+ [--pick X Y]... [--hover] [--perf-log 파일.csv] [--wheel-test] [--depth-fade on|off] [--quit]`
+- `--front/--back m`: 두께 띠(0–5 m). 입면 영상은 뒤 깊이까지 그림. `--depth-fade on|off`: 깊이 음영
+- `--wheel-test`: 평면·단면에 실제 휠 이벤트(화면 비중심 지점)를 보내 애니메이션이 끝난 뒤 커서 아래 지점 이동(px),
+  애니메이션 시간, 프레임 최악 시간, LOD 깊이·스트리밍 대기 여부와 레벨선 간격(화면/1:20·1:40·1:100 내보내기)을 로그
 - `--pick X Y`: 실좌표(또는 `--local`)에서 잎 메시 연직 정밀 피킹 → 로그에 Z·출처·시간
 - `--hover`: 평면 보기 가운데 마우스 이동 흉내 → 좌표줄 Z 가 대략(화면 LOD) → 잎 표면으로 바뀌는지 로그
 - `--perf-log`: 카메라 경로(맞춤→확대→이동→축소, 240프레임) + 단면선 끌기(60프레임 ~16 ms) 재생, 프레임마다
   시간·그린 노드·업로드·대기·GPU MB·최대 깊이를 CSV 로, 요약(미리보기 수, 놓은 뒤 최종까지 ms)은 로그로
 
-`asec-info <파일.3mx> [--tree] [--decode] [--pick X Y]... [--section AX AY BX BY] [--local] [--csv 파일]`
+`asec-info <파일.3mx> [--tree] [--decode] [--pick X Y]... [--section AX AY BX BY] [--front m] [--back m] [--notex] [--local] [--csv 파일]`
 — 열기 시간, 좌표계 판별(수평 EPSG/높이 기준/경고), 원점·위경도·float32 정밀도, 트리(타일·노드·잎·깊이), 잎 전체
-디코드(삼각형 수, 실제 Z 범위), 피킹 시간, 단면 미리보기/최종 차가움·따뜻 시간. GUI 없이 성능 비교용.
+디코드(삼각형 수, 실제 Z 범위), 피킹 시간, 단면 미리보기/최종 차가움·따뜻 시간(입면 영상 포함, 텍스처 디코드 기본 켬 —
+`--notex` 로 끔). GUI 없이 성능 비교용.
+
+## 입면·레벨선·휠 (1.1.1)
+- 입면 깊이 0–5 m(「5 m」 단추 + ▾ 0.5/1/2/3/5 m). 그리기 순서 레벨선 → 입면 영상 → 단면선. 끄는 동안은 화면 LOD
+  미리보기, 놓으면 잎 메시 최종(백그라운드). 래스터라이저(`asec/raster.hpp` `renderElevation`)는 행 띠 병렬
+  (최대 8스레드, 2만 삼각형 미만은 1스레드), 메시 상자·깊이 띠 밖 삼각형 미리 버림. 깊이 음영(`depthFade`, 기본 0.55):
+  깊이 d 에서 흰색 쪽으로 fade·min(1, d / max(뒤깊이, 2 m)). 화면·PNG/TIFF/GeoTIFF·DXF 영상 모두 같은 깊이·음영.
+- 레벨선 간격(`asec::planLevels`): 기본 선 10 cm · 숫자 50 cm. 선 간격이 화면 4 px(인쇄 0.5 mm) 미만이면 선 50 cm → 1 m …,
+  숫자 높이×1.35 미만이면 숫자 1 m → 5 m …. 10 cm 보다 촘촘하게는 안 그림. DXF 는 축척과 무관하게 10/50 cm·1 m 레이어 모두 기록.
+- 휠 확대/축소: 평면·단면 모두 커서 아래 지점 고정, 16 ms 간격 애니메이션(남은 배율의 40 %씩, 설정 `view/smoothZoom`
+  기본 켬), 터치패드 pixelDelta 지원. 평면은 애니메이션 중에도 매 프레임 LOD 요청이 갱신됨.
 
 ## 시험
 `./build-linux/asec_tests` (Catch2). 실제 3MX 시험은 선택:

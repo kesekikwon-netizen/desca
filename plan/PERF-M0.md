@@ -23,3 +23,16 @@ Windows: `SectionViewer.exe <파일.3mx> --perf-log perf.csv --log perf.log --qu
 남은 것: GPU 업로드를 프레임당 예산으로 나누기(이동 중 159 ms 프레임), 실제 GPU 프레임 예산 조정.
 
 Windows 1.1.0 exe 를 wine(소프트웨어 GL)에서 같은 모델로 실행: 열기·좌표계·피킹 Z=56.8852·단면·DXF·GeoTIFF 동일 결과, asec_tests.exe 89건 통과.
+
+## 1.1.1 입면 5 m · 휠 확대 (2026-10-06, 같은 모델, 단면 38 m y=98129.5, 상자 부하 큼 — load 30–90)
+| 항목 | 값 |
+|---|---|
+| 최종 단면 뒤 5 m 차가움(43타일, 786,955 삼각형) | 병렬 전 704 ms(영상 295 ms) → 461–531 ms(영상 99–117 ms) |
+| 최종 단면 뒤 5 m 따뜻 | 병렬 전 936 ms(영상 438 ms) → 102–142 ms |
+| 미리보기 뒤 5 m | 차가움 ~66 ms, 따뜻 ~6 ms |
+| 앱 끌기 60프레임(뒤 5 m) | 미리보기 58회(32.5/s), 그리기 평균 4.5 ms·최악 22 ms, 놓은 뒤 최종 489 ms(부하 높을 때 1.9 s) |
+| 휠 확대 6칸(평면) | 애니메이션 ~720 ms, 커서 고정 오차 0.000 px, 최악 프레임 16–43 ms(새 LOD 텍스처 업로드 1건, llvmpipe), 끝난 뒤 LOD 깊이 2·대기 없음 |
+| 휠 확대 8칸 / 축소 14칸(단면) | ~550 / ~950 ms, 오차 0.000 px |
+
+다시 재는 법: `SectionViewer <3mx> --line … --back 5 --wheel-test --perf-log perf.csv --log run.log --quit`,
+`asec-info <3mx> --section AX AY BX BY --back 5`.

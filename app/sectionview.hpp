@@ -7,6 +7,7 @@
 
 struct SectionStyle {
     bool showImage = true, showLine = true, showLevels = true;
+    bool depthFade = true;   // 입면 깊이 음영(먼 면일수록 옅게) — 계산 단계에서 적용, 내보내기도 같은 설정
     double imageOpacity = 1.0;
 };
 
@@ -23,6 +24,8 @@ struct SectionImgGeo { double s0 = 0, z1Local = 0, res = 0.01; };
 /// 보고서용 그리기(화면·내보내기 공용, 아무 스레드에서나 QImage 에 그릴 수 있음). ppm = 픽셀/m, ui = 글자·선 배율(DPI/96)
 void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const SectionXf& xf, double ui, const QImage& img, bool forExport,
                      const QString& footer, const SectionImgGeo* geo = nullptr, bool busy = false);
+/// 레벨선 간격(화면 4 px / 인쇄 0.5 mm 보다 촘촘하면 솎음). ui = DPI/96
+asec::LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport);
 /// 내보내기용 크기·변환(여백 포함, 영상 픽셀 1:1 정렬)
 QSize sectionExportLayout(const SectionDoc& d, double ppm, double ui, SectionXf& xf);
 
@@ -38,6 +41,12 @@ public:
     const asec::SectionResult& result() const { return r_; }
     void fit();
     void zoomBy(double f);
+    /// 휠 확대/축소(커서 위치의 (s, z) 고정, 부드럽게 — 설정 view/smoothZoom)
+    void wheelZoom(const QPointF& at, double notches);
+    bool zoomAnimating() const { return zoomPending_ != 0.0; }
+    /// 화면 점 → (거리 s, 절대 표고 z)
+    bool screenToSZ(const QPointF& at, double& s, double& zAbs) const;
+    const SectionXf& xf() const { return xf_; }
     double imgS0() const { return imgS0_; }
     double imgZ1() const { return imgZ1_; }
     double imgRes() const { return imgRes_; }
@@ -65,6 +74,10 @@ private:
     bool has_ = false, busy_ = false;
     SectionStyle st_;
     Xf xf_;
+    double zoomPending_ = 0;
+    QPointF zoomAnchor_;
+    class QTimer* zoomTimer_ = nullptr;
+    void applyZoomAt(const QPointF& at, double factor);
     bool panning_ = false;
     QPoint last_;
     QRectF plotRect(const QRectF& area, double ui) const;

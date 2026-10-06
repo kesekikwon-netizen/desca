@@ -74,6 +74,7 @@ public:
     bool hasSection() const;
     void setLineLocal(const asec::SectionLine& l);
     void setThickness(double front, double back);
+    void setDepthFade(bool on);
     const asec::SrsInfo& srs() const;
     const asec::SrsReport& srsReport() const { return srsReport_; }
     QString cursorText() const;   // 자동화 로그: 좌표줄 X/Y/Z + Z 출처

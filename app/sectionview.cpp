@@ -1,6 +1,8 @@
 #include "sectionview.hpp"
 
 #include <QMouseEvent>
+#include <QSettings>
+#include <QTimer>
 #include <QPainter>
 #include <QPainterPath>
 #include <QWheelEvent>
@@ -31,6 +33,7 @@ QRectF SectionView::plotRect(const QRectF& a, double ui) const {
 }
 
 void SectionView::fit() {
+    zoomPending_ = 0; if (zoomTimer_) zoomTimer_->stop();
     if (!has_) return;
     QRectF pr = plotRect(rect(), 1.0);
     double L = SectionFrame(r_.line).L, zr = std::max(0.2, r_.zMax - r_.zMin);
@@ -61,6 +64,12 @@ static QString fmtDist(double s, double step) {
 SectionDoc SectionView::doc() const {
     SectionDoc d; d.r = r_; d.st = st_; d.img = img_; d.imgS0 = imgS0_; d.imgZ1 = imgZ1_; d.imgRes = imgRes_;
     return d;
+}
+
+LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport) {
+    QFont small(theme::fontFamily()); small.setPixelSize(std::max(8, int(std::lround(11.5 * ui))));
+    const double minLinePx = forExport ? 0.5 / 25.4 * 96.0 * ui : 4.0 * ui;   // 인쇄 0.5 mm / 화면 4 px
+    return planLevels(ppm, minLinePx, QFontMetricsF(small).height() * 1.35, 10);
 }
 
 void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const SectionXf& xf, double ui, const QImage& img, bool forExport,
@@ -95,16 +104,18 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         for (long k = long(std::ceil(sVis0 / dStep)); k * dStep <= sVis1; ++k) p.drawLine(QPointF(X(k * dStep), pr.top()), QPointF(X(k * dStep), pr.bottom()));
     }
     // 2) 레벨선(맨 아래 층 — 영상·단면선 밑): 10 cm 얇고 옅게, 50 cm·1 m 조금 진하게. 너무 촘촘하면 생략
+    //    간격 규칙(planLevels): 선 10 cm·숫자 50 cm 기본. 화면은 선 사이 4 px, 인쇄(내보내기)는 0.5 mm 보다 좁으면 50 cm·1 m·5 m 로 솎음.
+    //    확대해도 10 cm 보다 촘촘하게 긋지 않음.
     std::vector<LevelLine> levels;
+    const LevelPlan lp = sectionLevelPlan(xf.ppm, ui, forExport);
     if (st_.showLevels) {
-        levels = levelLines(zVis0, zVis1, 10);
-        double gap10 = 0.1 * xf.ppm;
+        levels = levelLines(zVis0, zVis1, lp.lineCm);
         for (auto& lv : levels) {
             double y = Y(lv.z);
             QColor c; double w;
             if (lv.cls == LevelClass::Master) { c = QColor(60, 60, 58, 120); w = 1.1; }
-            else if (lv.cls == LevelClass::Major) { c = QColor(60, 60, 58, 80); w = 0.9; if (gap10 * 5 < 5 * ui) continue; }
-            else { c = QColor(60, 60, 58, 42); w = 0.6; if (gap10 < 5 * ui) continue; }
+            else if (lv.cls == LevelClass::Major) { c = QColor(60, 60, 58, 80); w = 0.9; }
+            else { c = QColor(60, 60, 58, 42); w = 0.6; }
             p.setPen(QPen(c, w * ui));
             p.drawLine(QPointF(pr.left(), y), QPointF(pr.right(), y));
         }
@@ -147,7 +158,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
 
     // 7) 표고 라벨(왼쪽·오른쪽), 겹치지 않는 간격
     if (st_.showLevels) {
-        int lab = labelStepCm(xf.ppm, fm.height() * 1.35);
+        const int lab = lp.labelCm;
         for (auto& lv : levels) {
             if (lv.cm % lab != 0) continue;
             double y = Y(lv.z);
@@ -205,9 +216,11 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     QString t1 = QStringLiteral("단면 A–A′");
     p.drawText(QRectF(area.left() + 12 * ui, area.top() + 8 * ui, 200 * ui, 20 * ui), Qt::AlignLeft | Qt::AlignVCenter, t1);
     p.setFont(small); p.setPen(theme::InkSub);
-    QString t2 = QStringLiteral("길이 %1 m  ·  두께 앞 %2 / 뒤 %3 m  ·  %4  ·  가로:세로 1:1")
+    auto cmText = [](int cm) { return cm < 100 ? QStringLiteral("%1 cm").arg(cm) : QStringLiteral("%1 m").arg(cm / 100); };
+    QString lvText = st_.showLevels ? QStringLiteral("  ·  레벨선 %1 / 숫자 %2").arg(cmText(lp.lineCm), cmText(lp.labelCm)) : QString();
+    QString t2 = QStringLiteral("길이 %1 m  ·  두께 앞 %2 / 뒤 %3 m  ·  %4%5  ·  가로:세로 1:1")
                      .arg(f.L, 0, 'f', 2).arg(r_.line.front, 0, 'f', 2).arg(r_.line.back, 0, 'f', 2)
-                     .arg(QString::fromStdString(r_.srs.describe().labelKo()));
+                     .arg(QString::fromStdString(r_.srs.describe().labelKo()), lvText);
     p.drawText(QRectF(area.left() + 12 * ui + QFontMetricsF(title).horizontalAdvance(t1) + 12 * ui, area.top() + 8 * ui, area.width(), 20 * ui), Qt::AlignLeft | Qt::AlignVCenter, t2);
     if (!footer.isEmpty()) {
         p.setPen(theme::Idle);
@@ -262,12 +275,45 @@ void SectionView::paintEvent(QPaintEvent*) {
 
 void SectionView::wheelEvent(QWheelEvent* e) {
     if (!has_) return;
-    QPointF m = e->position();
-    double s = xf_.s0 + (m.x() - xf_.plot.left()) / xf_.ppm, z = xf_.zTop - (m.y() - xf_.plot.top()) / xf_.ppm;
-    xf_.ppm = std::clamp(xf_.ppm * std::pow(1.18, e->angleDelta().y() / 120.0), 0.5, 50000.0);
+    double notches = e->angleDelta().y() / 120.0;
+    if (notches == 0 && !e->pixelDelta().isNull()) notches = e->pixelDelta().y() / 60.0;
+    wheelZoom(e->position(), notches);
+    e->accept();
+}
+
+bool SectionView::screenToSZ(const QPointF& m, double& s, double& z) const {
+    if (!has_ || xf_.ppm <= 0) return false;
+    s = xf_.s0 + (m.x() - xf_.plot.left()) / xf_.ppm;
+    z = xf_.zTop - (m.y() - xf_.plot.top()) / xf_.ppm;
+    return true;
+}
+
+void SectionView::applyZoomAt(const QPointF& m, double f) {
+    double s, z;
+    if (!screenToSZ(m, s, z)) return;
+    xf_.ppm = std::clamp(xf_.ppm * f, 0.5, 50000.0);
     xf_.s0 = s - (m.x() - xf_.plot.left()) / xf_.ppm;
     xf_.zTop = z + (m.y() - xf_.plot.top()) / xf_.ppm;
     update();
+}
+
+void SectionView::wheelZoom(const QPointF& at, double notches) {
+    if (!has_ || notches == 0) return;
+    const double step = std::log(1.18) * notches;
+    if (!QSettings().value("view/smoothZoom", true).toBool()) { zoomPending_ = 0; applyZoomAt(at, std::exp(step)); return; }
+    zoomAnchor_ = at;
+    zoomPending_ += step;
+    if (!zoomTimer_) {
+        zoomTimer_ = new QTimer(this);
+        zoomTimer_->setInterval(16);
+        QObject::connect(zoomTimer_, &QTimer::timeout, this, [this] {
+            double d = std::fabs(zoomPending_) < 0.004 ? zoomPending_ : zoomPending_ * 0.4;
+            zoomPending_ -= d;
+            if (std::fabs(zoomPending_) < 1e-9) { zoomPending_ = 0; zoomTimer_->stop(); }
+            applyZoomAt(zoomAnchor_, std::exp(d));
+        });
+    }
+    if (!zoomTimer_->isActive()) zoomTimer_->start();
 }
 
 void SectionView::mousePressEvent(QMouseEvent* e) { panning_ = true; last_ = e->pos(); setCursor(Qt::ClosedHandCursor); }
@@ -290,6 +336,7 @@ void SectionView::mouseMoveEvent(QMouseEvent* e) {
 
 void SectionView::zoomBy(double f) {
     if (!has_) return;
+    zoomPending_ = 0; if (zoomTimer_) zoomTimer_->stop();
     QPointF m = xf_.plot.center();
     double s = xf_.s0 + (m.x() - xf_.plot.left()) / xf_.ppm, z = xf_.zTop - (m.y() - xf_.plot.top()) / xf_.ppm;
     xf_.ppm = std::clamp(xf_.ppm * f, 0.5, 50000.0);

@@ -3,6 +3,8 @@
 //                 [--shot out.png] [--export-png f] [--export-tiff f] [--export-geotiff f] [--export-dxf f] [--dxf3d]
 //                 [--export-plan f] [--plan-view] [--export-xyz f] [--export-las f] [--area whole|band|view] [--spacing m] [--norgb]
 //                 [--scale N] [--dpi N] [--log f] [--perf-log f.csv] [--pick X Y]... [--hover] [--height-datum KEY] [--quit]
+//   --wheel-test: 평면·단면 휠 확대/축소(커서 고정 오차 px, 애니메이션 시간, 프레임) + 레벨선 간격 기록
+//   --depth-fade on|off: 입면 깊이 음영(기본 설정값)
 //   --height-datum KEY: 높이 기준 지정(이름표만, 값 변환·저장 없음) srs|ellipsoidal|egm96|egm2008|kvd1964|kngeoid
 //   --pick X Y: 그 실좌표(--local 이면 로컬)에서 잎 메시 연직 정밀 피킹 → 로그(Z, 출처, 시간)
 //   --hover: 평면 보기 가운데로 마우스 이동을 흉내 → 좌표줄 Z 와 Z 출처(대략 → 잎 표면)를 로그
@@ -15,6 +17,7 @@
 #include <QTextStream>
 #include <QTimer>
 #include <QMouseEvent>
+#include <QWheelEvent>
 #include "asec/pick.hpp"
 #include "mainwindow.hpp"
 #include "theme.hpp"
@@ -42,11 +45,11 @@ int main(int argc, char** argv) {
     app.setWindowIcon(ic);
 
     QStringList a = app.arguments();
-    QString file, shot, logPath, perfPath, heightDatum;
+    QString file, shot, logPath, perfPath, heightDatum, depthFade;
     bool haveLine = false, local = false, quit = false;
     double ax = 0, ay = 0, bx = 0, by = 0, front = -1, back = -1, denom = 20, dpi = 300, spacing = 0;
     int W = 0, H = 0, tab = -1;
-    bool dxf3d = false, rgb = true, planView = false, hover = false;
+    bool dxf3d = false, rgb = true, planView = false, hover = false, wheelTest = false;
     std::vector<std::pair<double, double>> picks;
     QString area = "whole";
     QList<QPair<QString, QString>> exports;
@@ -56,6 +59,8 @@ int main(int argc, char** argv) {
         if (s == "--line" && i + 4 < a.size()) { ax = a[i + 1].toDouble(); ay = a[i + 2].toDouble(); bx = a[i + 3].toDouble(); by = a[i + 4].toDouble(); i += 4; haveLine = true; }
         else if (s == "--local") local = true;
         else if (s == "--height-datum") heightDatum = nx();
+        else if (s == "--depth-fade") depthFade = nx();
+        else if (s == "--wheel-test") wheelTest = true;
         else if (s == "--front") front = nx().toDouble();
         else if (s == "--back") back = nx().toDouble();
         else if (s == "--shot") shot = nx();
@@ -109,6 +114,8 @@ int main(int argc, char** argv) {
         if (d == VDatum::Unknown) log("height-datum: unknown key " + heightDatum);
         else w.setHeightDeclaration(d, false);
     }
+    if (front >= 0 || back >= 0) w.setThickness(front >= 0 ? front : 0.0, back >= 0 ? back : 0.5);  // 성능 기록(단면 끌기)도 이 두께로
+    if (!depthFade.isEmpty()) w.setDepthFade(depthFade != "off" && depthFade != "0");
     {
         const SrsReport& r = w.srsReport();
         QString ws;
@@ -245,6 +252,64 @@ int main(int argc, char** argv) {
         }
     }
     processFor(400);
+    if (haveLine && w.hasSection()) {   // 화면 레벨선 간격(맞춤 상태) 기록
+        SectionView* sv = w.sectionView();
+        LevelPlan lp = sectionLevelPlan(sv->xf().ppm, 1.0, false);
+        log(QStringLiteral("levels-screen: ppm=%1 line=%2cm label=%3cm").arg(sv->xf().ppm, 0, 'f', 2).arg(lp.lineCm).arg(lp.labelCm));
+        for (double denom2 : {20.0, 40.0, 100.0}) {
+            double ppm = 1000.0 / denom2 / 25.4 * dpi;
+            LevelPlan e = sectionLevelPlan(ppm, dpi / 96.0, true);
+            log(QStringLiteral("levels-export 1:%1 %2dpi: line=%3cm label=%4cm").arg(denom2, 0, 'f', 0).arg(dpi, 0, 'f', 0).arg(e.lineCm).arg(e.labelCm));
+        }
+    }
+    if (wheelTest) {
+        // 휠 확대/축소: 커서 아래 지점이 고정되는지(px 오차)와 애니메이션 중 프레임 시간
+        PlanView* pv = w.plan();
+        auto sendWheel = [](QWidget* wd, QPointF at, int sign) {   // 실제 휠 이벤트 경로로 시험(120 = 한 칸)
+            QWheelEvent ev(at, wd->mapToGlobal(at), QPoint(), QPoint(0, 120 * sign), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+            QApplication::sendEvent(wd, &ev);
+        };
+        auto runPlan = [&](double notches, const char* name) {
+            QPointF at(pv->width() * 0.3, pv->height() * 0.4);
+            Vec2 b0, b1; pv->screenToLocalXYPublic(at, b0);
+            double mpp0 = pv->metersPerPixel(), worst = 0; int frames = 0;
+            auto t0 = std::chrono::steady_clock::now();
+            for (int i = 0; i < int(std::fabs(notches)); ++i) { sendWheel(pv, at, notches > 0 ? 1 : -1); processFor(40); worst = std::max(worst, pv->lastFrame().ms); }
+            while (pv->zoomAnimating() && msSince(t0) < 5000) { QApplication::processEvents(QEventLoop::AllEvents, 5); worst = std::max(worst, pv->lastFrame().ms); }
+            double tAnim = msSince(t0);
+            for (int i = 0; i < 30; ++i) { processFor(16); worst = std::max(worst, pv->lastFrame().ms); ++frames; }
+            pv->screenToLocalXYPublic(at, b1);
+            double drift = (b1 - b0).len() / pv->metersPerPixel();
+            log(QStringLiteral("wheel-plan %1: notches=%2 mpp %3→%4 anchor-drift-px=%5 anim-ms=%6 frame-worst-ms(애니+정착)=%7 depth=%8 idle=%9")
+                    .arg(name).arg(notches).arg(mpp0, 0, 'g', 4).arg(pv->metersPerPixel(), 0, 'g', 4).arg(drift, 0, 'f', 3).arg(tAnim, 0, 'f', 0)
+                    .arg(worst, 0, 'f', 1).arg(pv->lastFrame().maxDepth).arg(pv->streamIdle() ? 1 : 0));
+        };
+        runPlan(6, "in"); runPlan(-6, "out");
+        SectionView* sv = w.sectionView();
+        if (sv->hasResult()) {
+            auto runSec = [&](double notches, const char* name) {
+                QPointF at(sv->width() * 0.35, sv->height() * 0.55);
+                double s0, z0, s1, z1; sv->screenToSZ(at, s0, z0);
+                double ppm0 = sv->xf().ppm;
+                auto t0 = std::chrono::steady_clock::now();
+                for (int i = 0; i < int(std::fabs(notches)); ++i) { sendWheel(sv, at, notches > 0 ? 1 : -1); processFor(40); }
+                while (sv->zoomAnimating() && msSince(t0) < 5000) QApplication::processEvents(QEventLoop::AllEvents, 5);
+                double tAnim = msSince(t0);
+                sv->screenToSZ(at, s1, z1);
+                double drift = std::hypot(s1 - s0, z1 - z0) * sv->xf().ppm;
+                LevelPlan lp = sectionLevelPlan(sv->xf().ppm, 1.0, false);
+                log(QStringLiteral("wheel-section %1: notches=%2 ppm %3→%4 anchor-drift-px=%5 anim-ms=%6 levels line=%7cm label=%8cm")
+                        .arg(name).arg(notches).arg(ppm0, 0, 'f', 2).arg(sv->xf().ppm, 0, 'f', 2).arg(drift, 0, 'f', 3).arg(tAnim, 0, 'f', 0).arg(lp.lineCm).arg(lp.labelCm));
+            };
+            runSec(8, "in");
+            if (!shot.isEmpty()) {   // 확대 상태 단면(레벨선 10 cm / 숫자 50 cm 확인용)
+                QString zp = shot; zp.insert(zp.lastIndexOf('.') < 0 ? zp.size() : zp.lastIndexOf('.'), "_section_wheelzoom");
+                sv->grab().save(zp); log("wheel-shot: " + zp);
+            }
+            runSec(-14, "out"); sv->fit(); sv->update();
+        }
+        pv->fitAll();
+    }
     for (auto& e : exports) {
         QString kind = e.first, path = e.second, m;
         bool ok = false;
