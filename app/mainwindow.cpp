@@ -1,6 +1,8 @@
 #include "mainwindow.hpp"
 
 #include <QApplication>
+#include <QCryptographicHash>
+#include <QInputDialog>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -40,6 +42,11 @@ using namespace asec;
 using clk = std::chrono::steady_clock;
 
 static const char* kVersion = "1.1.0";
+// 모델별 설정 키(경로 기준, 대소문자 무시)
+static QString heightSettingsKey(const QString& path) {
+    QByteArray h = QCryptographicHash::hash(QFileInfo(path).absoluteFilePath().toLower().toUtf8(), QCryptographicHash::Sha1).toHex().left(16);
+    return QStringLiteral("heightDatum/") + QString::fromLatin1(h);
+}
 
 // ---------------------------------------------------------------- 공통 도우미
 static fs::path toFs(const QString& q) {
@@ -253,6 +260,7 @@ QWidget* MainWindow::buildRibbon() {
     auto thick = new QWidget; { auto* f = new QFormLayout(thick); f->setContentsMargins(2, 2, 2, 0); f->setVerticalSpacing(4); f->setHorizontalSpacing(6);
         f->addRow(QStringLiteral("앞"), front_); f->addRow(QStringLiteral("뒤"), back_); }
     addPage({{{K("파일"), "File"}, rowOf({bigButton(action("open"))})},
+             {{K("좌표계"), "SRS"}, rowOf({bigButton(action("height"))})},
              {{K("단면"), "Section"}, rowOf({bigButton(action("draw")), smallColumn({smallButton(action("flip")), smallButton(action("clear"))})})},
              {{K("두께 띠"), "Thickness"}, thick},
              {{K("탐색"), "Navigate"}, rowOf({bigButton(action("fit")), smallColumn({smallButton(action("top")), smallButton(action("zoomin")), smallButton(action("zoomout"))})})},
@@ -272,7 +280,7 @@ QWidget* MainWindow::buildRibbon() {
     // 분석
     addPage({{{K("단면 정리"), "Cleanup"}, rowOf({bigButton(action("smooth"))})},
              {{K("두께 띠"), "Band"}, rowOf({bigButton(action("flip"))})},
-             {{K("정보"), "Info"}, rowOf({bigButton(action("info"))})}});
+             {{K("정보"), "Info"}, rowOf({bigButton(action("info")), bigButton(action("height"))})}});
     // 추출
     addPage({{{K("점군"), "Point Cloud"}, rowOf({bigButton(action("xyz")), bigButton(action("las"))})},
              {{K("단면선 좌표"), "Profile"}, rowOf({bigButton(action("csv"))})}});
@@ -380,6 +388,7 @@ MainWindow::MainWindow() {
     makeAction("levels", QStringLiteral("레벨선 10cm"), "Level Lines", I::Levels, "V", true)->setChecked(true);
     makeAction("smooth", QStringLiteral("평활"), "Smooth", I::Smooth, QString(), true);
     makeAction("info", QStringLiteral("단면 정보"), "Section Info", I::Info);
+    makeAction("height", QStringLiteral("높이 기준 지정"), "Height Datum", I::Levels);
     makeAction("view1", QStringLiteral("평면"), "View 1", I::View1, "Ctrl+1", true)->setChecked(true);
     makeAction("view2", QStringLiteral("단면"), "View 2", I::View2, "Ctrl+2", true)->setChecked(true);
     makeAction("dxf", QStringLiteral("단면 DXF"), "Section DXF", I::Dxf, "Ctrl+D");
@@ -465,6 +474,7 @@ MainWindow::MainWindow() {
     QObject::connect(opacity_, &QSlider::valueChanged, this, [this](int) { section_->setStyle(secStyle()); });
     QObject::connect(action("smooth"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/smooth", on); requestSection(true); });
     QObject::connect(action("info"), &QAction::triggered, this, [this] { dlgInfo(); });
+    QObject::connect(action("height"), &QAction::triggered, this, [this] { dlgHeightDatum(); });
     QObject::connect(action("view1"), &QAction::toggled, this, [this](bool on) {
         if (!on && !action("view2")->isChecked()) { action("view1")->setChecked(true); return; }
         planFrame_->setVisible(on); viewNum_[0]->setChecked(on);
@@ -551,7 +561,7 @@ void MainWindow::setProgress(double f) {
 
 void MainWindow::updateEnabled() {
     bool sc = bool(src_), sec = section_->hasResult(), busy = taskBusy_;
-    for (const char* k : {"draw", "fit", "top", "zoomin", "zoomout", "plan", "xyz", "las", "close"}) action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
+    for (const char* k : {"draw", "fit", "top", "zoomin", "zoomout", "plan", "xyz", "las", "close", "height"}) action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
     for (const char* k : {"flip", "clear"}) action(k)->setEnabled(sc && plan_->hasLine());
     for (const char* k : {"dxf", "secimg", "csv", "info"}) action(k)->setEnabled(sec && !busy);
     action("open")->setEnabled(!busy);
@@ -607,13 +617,27 @@ void MainWindow::applyScene(OpenedScene&& s) {
     if (!s.streamRoots.empty()) plan_->setStreamingScene(s.streamRoots, s.center, s.bounds, src_->srs, std::move(s.display));
     else plan_->setScene(std::move(s.display), s.center, s.bounds, src_->srs);
     streaming_ = !s.streamRoots.empty();
-    srsReport_ = analyzeSrs(src_->srs, s.bounds);
-    for (auto& w : s.warnings) srsReport_.warnings.push_back(w);   // 병합 3MX 레이어 경고 등
-    applySrsReport();
+    sceneBounds_ = s.bounds; sceneWarnings_ = s.warnings;
+    // 높이 기준 지정: 모델별 저장값 → 없으면 iTwin '3D 승격·타원체고' 표기일 때만 마지막 지정값(사용자 표준, 예: EGM96)
+    heightNote_.clear();
+    {
+        QSettings st;
+        QString key = heightSettingsKey(path_);
+        SrsDesc raw = describeSrs(src_->srs.srs);
+        if (st.contains(key)) {
+            src_->srs.heightDeclared = vdatumFromKey(st.value(key).toString().toStdString());
+            if (src_->srs.heightDeclared != VDatum::None) heightNote_ = QStringLiteral("이 모델에 저장된 지정값");
+        } else if (raw.promotedTo3D && raw.vertKind == VertKind::Ellipsoidal && st.contains("height/lastDeclared")) {
+            VDatum d = vdatumFromKey(st.value("height/lastDeclared").toString().toStdString());
+            if (d != VDatum::Unknown && d != VDatum::None) { src_->srs.heightDeclared = d; heightNote_ = QStringLiteral("마지막 지정값을 기본으로 적용"); }
+        }
+    }
+    refreshSrs();
     info_->setText(streaming_ ? QStringLiteral("%1%2 · LOD 스트리밍").arg(kind_, s.layers > 1 ? QStringLiteral(" · 레이어 %1개").arg(s.layers) : QString())
                               : QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
     setWindowTitle(QStringLiteral("%1 — 발굴 단면뷰어").arg(QFileInfo(path_).fileName()));
-    QString note = srsReport_.desc.vertKind == VertKind::Ellipsoidal ? QStringLiteral(" · 높이 '타원체고' 표기 — 기준점 대조 권장(오른쪽 좌표계 표시에 마우스)")
+    QString note = srsReport_.desc.heightDeclared ? QStringLiteral(" · 높이 기준 %1 (%2 — 값 변환 없음, 바꾸려면 「높이 기준 지정」)").arg(qs(vdatumInfo(srsReport_.desc.vdatum).shortName), heightNote_)
+                 : srsReport_.desc.vertKind == VertKind::Ellipsoidal ? QStringLiteral(" · 높이 '타원체고' 표기 — 측량값을 그대로 넣었다면 「높이 기준 지정」으로 측량 높이 기준(예: EGM96) 지정")
                  : srsReport_.desc.vertKind == VertKind::Unspecified ? QStringLiteral(" · 높이 기준이 SRS 에 없음 — 기준점과 대조하세요") : QString();
     showStatus(QStringLiteral("열림. 「단면선 그리기」(S)로 A, A′ 두 점을 찍으세요") + note);
     updateEnabled();
@@ -1188,6 +1212,61 @@ void MainWindow::applySrsReport() {
         srsBanner_->setText(html);
     }
     srsBanner_->setVisible(warn);
+}
+
+// ---------------------------------------------------------------- 높이 기준 지정(이름표만, 값 변환 없음)
+void MainWindow::refreshSrs() {
+    if (!src_) return;
+    srsReport_ = analyzeSrs(src_->srs, sceneBounds_);
+    for (auto& w : sceneWarnings_) srsReport_.warnings.push_back(w);   // 병합 3MX 레이어 경고 등
+    applySrsReport();
+}
+
+void MainWindow::setHeightDeclaration(VDatum v, bool persist) {
+    if (!src_ || taskBusy_) return;
+    secFloorGen_ = secWorker_->cancelAll();
+    src_->srs.heightDeclared = v;
+    heightNote_ = v == VDatum::None ? QString() : QStringLiteral("사용자 지정");
+    if (persist) {
+        QSettings st;
+        st.setValue(heightSettingsKey(path_), QString::fromLatin1(vdatumKey(v)));
+        st.setValue(heightSettingsKey(path_) + "_path", QFileInfo(path_).absoluteFilePath());
+        if (v != VDatum::None) st.setValue("height/lastDeclared", QString::fromLatin1(vdatumKey(v)));
+    }
+    refreshSrs();
+    last_.result.srs.heightDeclared = v;           // 표시 중인 단면(제목·내보내기)도 즉시
+    if (section_->hasResult()) requestSection(true);
+    const SrsDesc& d = srsReport_.desc;
+    showStatus(v == VDatum::None ? QStringLiteral("높이 기준: SRS 표기 그대로 (%1)").arg(qs(d.verticalKo()))
+                                 : QStringLiteral("높이 기준을 %1(으)로 지정 — 이름표만 바뀌고 Z 값은 그대로입니다").arg(qs(vdatumInfo(v).nameKo)));
+}
+
+void MainWindow::dlgHeightDatum() {
+    if (!src_) return;
+    SrsDesc raw = describeSrs(src_->srs.srs);
+    QStringList items;
+    std::vector<VDatum> vals;
+    items << QStringLiteral("SRS 표기 그대로 — %1").arg(qs(raw.verticalKo())); vals.push_back(VDatum::None);
+    for (VDatum d : declarableVDatums()) {
+        const VDatumInfo& in = vdatumInfo(d);
+        items << (in.epsg ? QStringLiteral("%1 (EPSG:%2)").arg(qs(in.nameKo)).arg(in.epsg) : qs(in.nameKo));
+        vals.push_back(d);
+    }
+    int cur = 0;
+    for (size_t i = 0; i < vals.size(); ++i) if (vals[i] == src_->srs.heightDeclared) cur = int(i);
+    QString text = QStringLiteral(
+        "이 모델의 Z 값이 실제로 어떤 높이 기준인지 지정합니다.\n"
+        "높이 값은 바뀌지 않고, 화면·DXF·GeoTIFF 수직 키·LAS·JSON 의 이름표만 바뀝니다.\n\n"
+        "SRS 원래 표기: %1%2\n\n"
+        "측량값(예: 지오이드 보정된 EGM96 높이)을 iTwin 에 그대로 넣었다면 Z 는 그 측량 높이 기준입니다.")
+        .arg(qs(raw.verticalKo()),
+             raw.promotedTo3D ? QStringLiteral("\n(iTwin 이 EPSG:%1 을 3D 로 승격하며 붙인 이름표 — 실제 값과 다를 수 있음)").arg(raw.horizontalEpsg) : QString());
+    bool ok = false;
+    QString pick = QInputDialog::getItem(this, QStringLiteral("높이 기준 지정 (Height Datum)"), text, items, cur, false, &ok);
+    if (!ok) return;
+    int i = int(items.indexOf(pick));
+    if (i < 0) return;
+    setHeightDeclaration(vals[size_t(i)], true);
 }
 
 // ---------------------------------------------------------------- 커서 정밀 Z(잎 메시, CPU double)

@@ -101,6 +101,9 @@ private:
     QLineEdit *cx_ = nullptr, *cy_ = nullptr, *cz_ = nullptr;
     QLabel *msg_ = nullptr, *info_ = nullptr, *srsLabel_ = nullptr, *srsBanner_ = nullptr;
     asec::SrsReport srsReport_;   // 열린 모델의 좌표계 점검(표시·경고)
+    asec::Box3 sceneBounds_;      // 열린 모델 로컬 상자(좌표계 재점검용)
+    std::vector<std::string> sceneWarnings_;  // 열 때 경고(병합 레이어 등)
+    QString heightNote_;          // 높이 기준 지정 출처 안내(모델별 저장 / 마지막 지정값)
     QProgressBar* progress_ = nullptr;
     QDoubleSpinBox *front_ = nullptr, *back_ = nullptr;
     QSlider* opacity_ = nullptr;
@@ -160,4 +163,10 @@ private:
     SectionStyle secStyle() const;
     void report(bool ok, const QString& m);
     void applySrsReport();
+    void dlgHeightDatum();
+public:
+    /// 높이 기준 지정(이름표만, 값 변환 없음). persist = 모델별 설정 + 마지막 지정값 저장
+    void setHeightDeclaration(asec::VDatum v, bool persist);
+private:
+    void refreshSrs();
 };

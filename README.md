@@ -47,7 +47,15 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
   BOUNDCRS/VERTCRS). 수평 EPSG 는 ID/AUTHORITY → REMARK("Promoted to 3D from EPSG:5186") → 이름 표 → TM 매개변수 순.
   높이 기준은 VERTCRS 또는 'ellipsoidal height' 축으로 판별. 화면에는 항상 `수평 EPSG:5186 / 높이 타원체고(GRS80)` 형태로
   표시하고, SRS 없음·모름·metadata.xml 불일치·원점 없음·축 순서 의심·float32 정밀도(로컬 > 8192 m)는 노란 경고.
-- iTwin 은 GCP 를 정표고로 넣어도 '타원체고'로 표기하는 경우가 있음 → 기준점과 비교해 확인(자동 변환 안 함).
+- 높이 기준 식별(`asec/vdatum.hpp`): EGM96(EPSG:5773), EGM2008(3855), KVD1964 인천만 평균해수면(5193), KNGeoid, 타원체고 —
+  복합 EPSG 번호, `EPSG:5186+EGM96` 같은 글자 표기, WKT VDATUM·GEOIDMODEL·PROJ4_GRIDS·PARAMETERFILE 에서.
+- 「높이 기준 지정」(리본 홈 › 좌표계): Z 값은 그대로 두고 높이 기준 이름표만 지정(EGM96/EGM2008/KVD1964/KNGeoid/타원체고).
+  화면·DXF 제목·GeoTIFF 수직 GeoKey 4096·LAS·JSON(`vertical_declared_by_user`, `vertical_srs_original`)에 반영.
+  모델별로 QSettings(`heightDatum/<경로 해시>`)에 저장. iTwin 이 2D EPSG 를 '3D 로 승격'해 '타원체고'로 표기한 모델은
+  노란 안내(측량값을 그대로 넣었다면 Z 는 측량 높이 기준, 예: EGM96)를 띄우고, 지정한 적 있으면 마지막 지정값(`height/lastDeclared`)을 기본으로 적용.
+  자동화: `--height-datum srs|ellipsoidal|egm96|egm2008|kvd1964|kngeoid`(저장 안 함).
+- 지오이드 변환 틀(GeoidModel/GridGeoidModel(GTX)/GeoidRegistry/convertHeight)은 있으나 UI·자동 변환 없음, 격자 미동봉
+  (후보: EGM96 15′ 격자 — NGA 공개, 재배포 조건 미검증).
 - 복합 EPSG 는 수평/수직을 나눠 GeoTIFF GeoKey 3072/4096, LAS GeoKeyDirectory VLR 에 기록.
 - 커서/측정 Z(`asec/pick.hpp`): 최고 해상도 잎 메시에서 CPU double 광선 교차(로컬 + 원점). 화면 LOD 값은 '대략'으로
   먼저 보이고 잎 결과가 오면 바뀜. 좌표줄 옆에 Z 출처 표시.

@@ -2,7 +2,8 @@
 //   SectionViewer [파일.3mx|.obj] [--line AX AY BX BY] [--local] [--front m] [--back m] [--size WxH] [--tab N]
 //                 [--shot out.png] [--export-png f] [--export-tiff f] [--export-geotiff f] [--export-dxf f] [--dxf3d]
 //                 [--export-plan f] [--plan-view] [--export-xyz f] [--export-las f] [--area whole|band|view] [--spacing m] [--norgb]
-//                 [--scale N] [--dpi N] [--log f] [--perf-log f.csv] [--pick X Y]... [--hover] [--quit]
+//                 [--scale N] [--dpi N] [--log f] [--perf-log f.csv] [--pick X Y]... [--hover] [--height-datum KEY] [--quit]
+//   --height-datum KEY: 높이 기준 지정(이름표만, 값 변환·저장 없음) srs|ellipsoidal|egm96|egm2008|kvd1964|kngeoid
 //   --pick X Y: 그 실좌표(--local 이면 로컬)에서 잎 메시 연직 정밀 피킹 → 로그(Z, 출처, 시간)
 //   --hover: 평면 보기 가운데로 마우스 이동을 흉내 → 좌표줄 Z 와 Z 출처(대략 → 잎 표면)를 로그
 //   --perf-log: 평면 보기 카메라 경로(맞춤→확대→이동→축소)를 재생하며 프레임마다 시간·LOD 상태를 CSV 로 기록
@@ -41,7 +42,7 @@ int main(int argc, char** argv) {
     app.setWindowIcon(ic);
 
     QStringList a = app.arguments();
-    QString file, shot, logPath, perfPath;
+    QString file, shot, logPath, perfPath, heightDatum;
     bool haveLine = false, local = false, quit = false;
     double ax = 0, ay = 0, bx = 0, by = 0, front = -1, back = -1, denom = 20, dpi = 300, spacing = 0;
     int W = 0, H = 0, tab = -1;
@@ -54,6 +55,7 @@ int main(int argc, char** argv) {
         auto nx = [&]() { return i + 1 < a.size() ? a[++i] : QString(); };
         if (s == "--line" && i + 4 < a.size()) { ax = a[i + 1].toDouble(); ay = a[i + 2].toDouble(); bx = a[i + 3].toDouble(); by = a[i + 4].toDouble(); i += 4; haveLine = true; }
         else if (s == "--local") local = true;
+        else if (s == "--height-datum") heightDatum = nx();
         else if (s == "--front") front = nx().toDouble();
         else if (s == "--back") back = nx().toDouble();
         else if (s == "--shot") shot = nx();
@@ -102,6 +104,11 @@ int main(int argc, char** argv) {
     auto tApply = std::chrono::steady_clock::now();
     auto msSince = [](std::chrono::steady_clock::time_point t) { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count(); };
     w.applyScene(std::move(sc));
+    if (!heightDatum.isEmpty()) {   // 높이 기준 지정(이름표만, 저장 안 함). 키: srs|ellipsoidal|egm96|egm2008|kvd1964|kngeoid
+        VDatum d = heightDatum == "srs" ? VDatum::None : vdatumFromKey(heightDatum.toStdString());
+        if (d == VDatum::Unknown) log("height-datum: unknown key " + heightDatum);
+        else w.setHeightDeclaration(d, false);
+    }
     {
         const SrsReport& r = w.srsReport();
         QString ws;
