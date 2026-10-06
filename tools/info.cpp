@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
             double decMs = ms(td);
             Box3 vb; size_t verts = 0;
             for (auto& m : ms_) { vb.add(m->bbox); verts += m->vertexCount(); }
-            std::printf("[디코드] 잎 노드 %zu, 메시 %zu, 삼각형 %zu, 꼭짓점 %zu, %.0f ms (지오메트리+텍스처, 최대 8 스레드)\n", st.leafNodes, st.meshes, st.triangles, verts, decMs);
+            std::printf("[디코드] 잎 노드 %zu, 메시 %zu, 삼각형 %zu, 꼭짓점 %zu, %.0f ms (지오메트리만 — 텍스처 디코드 제외, 최대 8 스레드)\n", st.leafNodes, st.meshes, st.triangles, verts, decMs);
             if (vb.valid()) std::printf("  실제 Z(실) %.4f ~ %.4f  (모델 SRS 높이 그대로)\n", vb.mn.z + src.srs.origin.z, vb.mx.z + src.srs.origin.z);
             csv.add("leaf_triangles", double(st.triangles), ""); csv.add("decode_all_ms", decMs, "ms");
             if (vb.valid()) { csv.add("z_min", vb.mn.z + src.srs.origin.z, "m"); csv.add("z_max", vb.mx.z + src.srs.origin.z, "m"); }
