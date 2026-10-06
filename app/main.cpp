@@ -9,7 +9,14 @@
 //   --pick X Y: 그 실좌표(--local 이면 로컬)에서 잎 메시 연직 정밀 피킹 → 로그(Z, 출처, 시간)
 //   --hover: 평면 보기 가운데로 마우스 이동을 흉내 → 좌표줄 Z 와 Z 출처(대략 → 잎 표면)를 로그
 //   --perf-log: 평면 보기 카메라 경로(맞춤→확대→이동→축소)를 재생하며 프레임마다 시간·LOD 상태를 CSV 로 기록
+//   1.2: --settings DIR(설정을 DIR 의 INI 로 — 시험용) --export-pdf f / --export-sheet-png f / --export-sheet-tiff f / --export-sheet-dxf f
+//        [--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split] --export-dialog-shot f --undo-test --ctx-shot f
+//        --extra-line AX AY BX BY(단면 목록에 더함, 반복 가능) --start-shot f(파일 없이: 시작 화면)
 #include <QApplication>
+#include <QDialog>
+#include <QSettings>
+#include <array>
+#include <memory>
 #include <QFile>
 #include <QScreen>
 #include <QFontDatabase>
@@ -30,22 +37,30 @@ static void processFor(int ms) {
 }
 
 int main(int argc, char** argv) {
+    for (int i = 1; i + 1 < argc; ++i)
+        if (std::string(argv[i]) == "--settings") {   // 시험용: 사용자 설정을 건드리지 않게
+            QSettings::setDefaultFormat(QSettings::IniFormat);
+            QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, QString::fromLocal8Bit(argv[i + 1]));
+        }
     QApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
     QSurfaceFormat fmt; fmt.setSamples(4); fmt.setDepthBufferSize(24); QSurfaceFormat::setDefaultFormat(fmt);
     QApplication app(argc, argv);
     QApplication::setOrganizationName("ExcavSection");
     QApplication::setApplicationName("SectionViewer");
     QApplication::setApplicationDisplayName(QStringLiteral("발굴 단면뷰어"));
-    QFont f(theme::fontFamily()); f.setPointSizeF(9); f.setStyleStrategy(QFont::PreferAntialias);
+    QFont f = theme::uiFont(13); f.setStyleStrategy(QFont::PreferAntialias);   // 한글 본문 13 px
     QApplication::setFont(f);
     app.setStyle("Fusion");
-    app.setStyleSheet(theme::styleSheet());
+    app.setStyleSheet(theme::styleSheet(QSettings().value("ui/highContrast", false).toBool()));
     QIcon ic; for (const char* r : {":/app_256.png"}) ic.addFile(r);
     ic.addFile(QApplication::applicationDirPath() + "/app.ico");
     app.setWindowIcon(ic);
 
     QStringList a = app.arguments();
-    QString file, shot, logPath, perfPath, heightDatum, depthFade;
+    QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot;
+    bool undoTest = false, split = false; double sheetScale = 0, sectionScale = 0;
+    QString lodShot;
+    std::vector<std::array<double, 4>> extraLines;
     bool haveLine = false, local = false, quit = false;
     double ax = 0, ay = 0, bx = 0, by = 0, front = -1, back = -1, denom = 20, dpi = 300, spacing = 0;
     int W = 0, H = 0, tab = -1;
@@ -78,6 +93,17 @@ int main(int argc, char** argv) {
         else if (s == "--quit") quit = true;
         else if (s == "--pick" && i + 2 < a.size()) { picks.push_back({a[i + 1].toDouble(), a[i + 2].toDouble()}); i += 2; }
         else if (s == "--hover") hover = true;
+        else if (s == "--settings") nx();
+        else if (s == "--export-dialog-shot") dialogShot = nx();
+        else if (s == "--ctx-shot") ctxShot = nx();
+        else if (s == "--lod-shot") lodShot = nx();
+        else if (s == "--section-scale") sectionScale = nx().toDouble();
+        else if (s == "--start-shot") startShot = nx();
+        else if (s == "--undo-test") undoTest = true;
+        else if (s == "--paper") paperArg = nx().toUpper();
+        else if (s == "--sheet-scale") sheetScale = nx().toDouble();
+        else if (s == "--split") split = true;
+        else if (s == "--extra-line" && i + 4 < a.size()) { extraLines.push_back({a[i + 1].toDouble(), a[i + 2].toDouble(), a[i + 3].toDouble(), a[i + 4].toDouble()}); i += 4; }
         else if (s.startsWith("--export-")) exports.append({s.mid(9), nx()});
         else if (!s.startsWith("--")) file = s;
     }
@@ -85,6 +111,13 @@ int main(int argc, char** argv) {
     MainWindow w;
     if (W > 0 && H > 0) w.resize(W, H);
     w.show();
+    if (file.isEmpty() && !startShot.isEmpty()) {   // 시작 화면 캡처
+        processFor(800);
+        QPixmap pm = w.grab();
+        bool ok = pm.save(startShot);
+        fprintf(stdout, "start-shot %s: %s (%dx%d)\n", ok ? "ok" : "FAILED", startShot.toUtf8().constData(), pm.width(), pm.height());
+        return ok ? 0 : 6;
+    }
     if (file.isEmpty()) return app.exec();
 
     int rc = 0;
@@ -95,7 +128,7 @@ int main(int argc, char** argv) {
         if (logOk) { logF.write(b); logF.flush(); }
         fputs(b.constData(), stdout); fflush(stdout);
     };
-    bool automated = haveLine || !shot.isEmpty() || !exports.isEmpty() || quit || !perfPath.isEmpty();
+    bool automated = haveLine || !shot.isEmpty() || !exports.isEmpty() || quit || !perfPath.isEmpty() || !startShot.isEmpty();
     if (!automated) { QTimer::singleShot(0, &w, [&] { w.openFile(file); }); return app.exec(); }
 
     processFor(200);
@@ -262,6 +295,33 @@ int main(int argc, char** argv) {
             log(QStringLiteral("levels-export 1:%1 %2dpi: line=%3cm label=%4cm").arg(denom2, 0, 'f', 0).arg(dpi, 0, 'f', 0).arg(e.lineCm).arg(e.labelCm));
         }
     }
+    if (haveLine && w.hasSection() && !extraLines.empty()) {   // 단면 목록: 더 넣고 각각 계산(썸네일) → 첫 단면으로
+        Vec3 o = local ? Vec3() : w.srs().origin;
+        for (auto& e : extraLines) {
+            SectionLine l; l.a = Vec2(e[0] - o.x, e[1] - o.y); l.b = Vec2(e[2] - o.x, e[3] - o.y);
+            int idx = w.addSectionAt(l);
+            auto c0 = w.sectionCounters();
+            w.selectSectionAt(idx);
+            auto te = std::chrono::steady_clock::now();
+            while (msSince(te) < 60000 && w.sectionCounters().finalsShown == c0.finalsShown) QApplication::processEvents(QEventLoop::AllEvents, 10);
+            log(QStringLiteral("extra-section %1: final in %2 ms").arg(idx).arg(msSince(te), 0, 'f', 0));
+        }
+        auto c0 = w.sectionCounters();
+        w.selectSectionAt(0);
+        auto te = std::chrono::steady_clock::now();
+        while (msSince(te) < 60000 && w.sectionCounters().finalsShown == c0.finalsShown) QApplication::processEvents(QEventLoop::AllEvents, 10);
+        processFor(300);
+        log(QStringLiteral("sections: %1").arg(w.sectionCount()));
+    }
+    if (undoTest) {
+        QString ul; bool ok = w.undoTest(&ul);
+        log(ul.trimmed()); log(QStringLiteral("undo-test %1").arg(ok ? "ok" : "FAILED"));
+        if (!ok) rc = 7;
+        processFor(300);
+        auto c0 = w.sectionCounters();
+        auto te = std::chrono::steady_clock::now();
+        while (msSince(te) < 30000 && w.sectionCounters().finalsShown == c0.finalsShown) QApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
     if (wheelTest) {
         // 휠 확대/축소: 커서 아래 지점이 고정되는지(px 오차)와 애니메이션 중 프레임 시간
         PlanView* pv = w.plan();
@@ -332,10 +392,33 @@ int main(int argc, char** argv) {
             ok = MainWindow::exportPointCloud(*src, p, w.plan()->line(), path, &m);
         } else if (kind == "csv") {
             ok = MainWindow::exportProfileCsv(w.sectionDoc(), path, &m);
+        } else if (kind == "pdf" || kind == "sheet-png" || kind == "sheet-tiff" || kind == "sheet-dxf") {
+            SheetParams sp = w.defaultSheetParams();
+            sp.format = kind == "pdf" ? 0 : kind == "sheet-dxf" ? 1 : kind == "sheet-png" ? 2 : 3;
+            sp.spec.denom = sheetScale > 0 ? sheetScale : denom; sp.dpi = dpi; sp.split = split;
+            if (!paperArg.isEmpty()) { sp.spec.paper = paperArg.startsWith("A3") ? Paper::A3 : Paper::A4; sp.spec.landscape = !paperArg.endsWith("P"); }
+            SectionDoc d = w.sectionDoc();
+            SheetLayout L = layoutSheet(sp.spec, SectionFrame(d.r.line).L, d.r.zMax - d.r.zMin);
+            ok = w.hasSection() && MainWindow::exportSheet(d, *src, sp, path, &m);
+            m += QStringLiteral(" | sheet %1x%2 fits=%3").arg(L.cols).arg(L.rows).arg(L.fits ? 1 : 0);
         } else m = "unknown export kind";
         log(QStringLiteral("export-%1 %2: %3").arg(kind, ok ? "ok" : "FAILED", QString(m).replace('\n', " | ")));
         if (!ok) rc = 4;
     }
+    if (!dialogShot.isEmpty() && w.hasSection()) {   // 도면 창 캡처(넘침 경고가 보이게 기본 1:40 A4 가로)
+        SheetParams sp = w.defaultSheetParams();
+        if (sheetScale > 0) sp.spec.denom = sheetScale;
+        if (!paperArg.isEmpty()) { sp.spec.paper = paperArg.startsWith("A3") ? Paper::A3 : Paper::A4; sp.spec.landscape = !paperArg.endsWith("P"); }
+        sp.showBaseline = true;
+        bool acc = false;
+        std::unique_ptr<QDialog> dlg(w.buildSheetDialog(sp, acc));
+        dlg->show();
+        processFor(700);
+        bool ok = dlg->grab().save(dialogShot);
+        log(QStringLiteral("dialog-shot %1: %2").arg(ok ? "ok" : "FAILED", dialogShot));
+        dlg->close();
+    }
+    if (sectionScale > 0 && w.hasSection()) { w.sectionView()->setScreenDenom(sectionScale); processFor(200); }
     if (!shot.isEmpty()) {
         processFor(500);
         // QOpenGLWidget 위 QPainter 덧그림까지 포함하려면 창 시스템에서 직접 캡처(실패 시 위젯 grab)
@@ -343,6 +426,45 @@ int main(int argc, char** argv) {
         if (pm.isNull() || pm.width() < 10) pm = w.grab();
         bool ok = pm.save(shot);
         log(QStringLiteral("shot %1: %2 (%3x%4)").arg(ok ? "ok" : "FAILED", shot).arg(pm.width()).arg(pm.height()));
+    }
+    if (!ctxShot.isEmpty()) {   // 그리기 중(A 찍고 A′ 로 움직이는 중) 지금 도구 줄
+        PlanView* pv = w.plan();
+        const SectionLine keep = pv->line(); const bool hadLine = pv->hasLine();
+        pv->setDrawMode(true);
+        processFor(200);
+        QPointF pa(pv->width() * 0.30, pv->height() * 0.55), pb(pv->width() * 0.72, pv->height() * 0.50);
+        QMouseEvent pr(QEvent::MouseButtonPress, pa, pv->mapToGlobal(pa), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(pv, &pr);
+        QMouseEvent rl(QEvent::MouseButtonRelease, pa, pv->mapToGlobal(pa), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(pv, &rl);
+        for (int i = 1; i <= 10; ++i) {
+            QPointF q = pa + (pb - pa) * (i / 10.0);
+            QMouseEvent mv(QEvent::MouseMove, q, pv->mapToGlobal(q), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(pv, &mv);
+            processFor(30);
+        }
+        processFor(500);
+        QPixmap pm = w.screen() ? w.screen()->grabWindow(w.winId()) : QPixmap();
+        if (pm.isNull() || pm.width() < 10) pm = w.grab();
+        bool ok = pm.save(ctxShot);
+        log(QStringLiteral("ctx-shot %1: %2 ctxbar=%3").arg(ok ? "ok" : "FAILED", ctxShot).arg(w.ctxBar()->isVisible() ? 1 : 0));
+        pv->setDrawMode(false);
+        pv->setLine(keep, hadLine);   // 그리기 전 단면선 되살림
+        processFor(100);
+    }
+    if (!lodShot.isEmpty()) {   // 디테일 불러오는 중 카드(평면 확대 직후)
+        PlanView* pv = w.plan();
+        pv->zoomBy(1 / 6.0);
+        auto tl = std::chrono::steady_clock::now();
+        while (msSince(tl) < 3000 && pv->streamIdle()) QApplication::processEvents(QEventLoop::AllEvents, 5);
+        processFor(120);
+        QPixmap pm = w.screen() ? w.screen()->grabWindow(w.winId()) : QPixmap();
+        if (pm.isNull() || pm.width() < 10) pm = w.grab();
+        bool ok = pm.save(lodShot);
+        log(QStringLiteral("lod-shot %1: %2 idle=%3 queued=%4 loading=%5").arg(ok ? "ok" : "FAILED", lodShot).arg(pv->streamIdle() ? 1 : 0).arg(pv->lastFrame().queued).arg(pv->lastFrame().loading));
+        auto t2 = std::chrono::steady_clock::now();
+        while (msSince(t2) < 30000 && !pv->streamIdle()) QApplication::processEvents(QEventLoop::AllEvents, 10);
+        pv->fitAll(); processFor(200);
     }
     if (quit) return rc;
     return app.exec();

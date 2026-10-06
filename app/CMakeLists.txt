@@ -1,5 +1,5 @@
 # 발굴 단면뷰어 (Qt Widgets + OpenGL). moc 없이 빌드(Q_OBJECT 미사용) → 교차 빌드에서 Qt 도구 불필요
-set(APP_SRC main.cpp mainwindow.cpp planview.cpp sectionview.cpp)
+set(APP_SRC main.cpp mainwindow.cpp mainwindow_ui.cpp sheetexport.cpp planview.cpp sectionview.cpp)
 if(ASEC_QT_WIN_DIR)
   # Windows 교차 빌드: MinGW 용 Qt 가져오기 라이브러리 직접 연결
   set(Q ${ASEC_QT_WIN_DIR})

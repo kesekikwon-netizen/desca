@@ -9,6 +9,10 @@ struct SectionStyle {
     bool showImage = true, showLine = true, showLevels = true;
     bool depthFade = true;   // 입면 깊이 음영(먼 면일수록 옅게) — 계산 단계에서 적용, 내보내기도 같은 설정
     double imageOpacity = 1.0;
+    double lineWidthPx = 2.0;   // 화면 단면선 굵기(보기 메뉴 1.5 / 2 / 3 px). 인쇄는 0.35 mm 고정
+    bool showBaseline = false;  // 기준선 EL(점선 + 「기준선 EL. 57.00 m」)
+    double baselineEl = 0;      // 절대 표고(m)
+    bool plotScaleBar = true;   // 그림 칸 안 축척 막대(도면은 표제란 띠에 따로 그림)
 };
 
 /// 단면 도면 한 장을 그리는 데 필요한 모든 것(스레드 사이 복사용 스냅숏)
@@ -23,7 +27,7 @@ struct SectionImgGeo { double s0 = 0, z1Local = 0, res = 0.01; };
 
 /// 보고서용 그리기(화면·내보내기 공용, 아무 스레드에서나 QImage 에 그릴 수 있음). ppm = 픽셀/m, ui = 글자·선 배율(DPI/96)
 void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const SectionXf& xf, double ui, const QImage& img, bool forExport,
-                     const QString& footer, const SectionImgGeo* geo = nullptr, bool busy = false);
+                     const QString& footer, const SectionImgGeo* geo = nullptr, bool busy = false, bool titleRow = true);
 /// 레벨선 간격(화면 4 px / 인쇄 0.5 mm 보다 촘촘하면 솎음). ui = DPI/96
 asec::LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport);
 /// 내보내기용 크기·변환(여백 포함, 영상 픽셀 1:1 정렬)
@@ -56,6 +60,10 @@ public:
     SectionDoc doc() const;
 
     std::function<void(double s, double zAbs, double X, double Y, bool valid)> onCursor;
+    std::function<void()> onViewChanged;   // 확대·이동 후(정보 띠의 화면 축척)
+    /// 화면 축척 1:N (논리 DPI 기준: 96 dpi 면 1 px = 0.2646 mm)
+    double screenDenom() const;
+    void setScreenDenom(double denom);
 
 protected:
     void paintEvent(QPaintEvent*) override;

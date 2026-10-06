@@ -521,7 +521,7 @@ void PlanView::paintStreaming(const QMatrix4x4& mvp) {
     fi.residentBytes = f.residentBytes; fi.gpuBytes = gpuNodeBytes_; fi.maxDepth = f.maxDepthDrawn;
     fi.idle = f.idle() && fi.uploaded == size_t(f.upload.size()) && staging_.empty();
     // LOD 카드: 묶음(바쁜 동안)의 완료/전체. 한가해지면 다시 0
-    size_t outstanding = f.wanted + f.queued + f.loading + staging_.size();
+    size_t outstanding = f.wanted + f.queued + f.loading + std::max(staging_.size(), f.upload.size() - std::min(f.upload.size(), size_t(fi.uploaded)));
     if (fi.idle) { burstDone_ = 0; burstPeak_ = 0; }
     else burstPeak_ = std::max(burstPeak_, burstDone_ + outstanding);
     fi.burstDone = burstDone_; fi.burstTotal = std::max(burstPeak_, burstDone_ + outstanding);
@@ -555,13 +555,7 @@ void PlanView::paintGL() {
     p.setRenderHint(QPainter::TextAntialiasing);
     if (!hasScene_) paintEmpty(p);
     else paintOverlay(p);
-    if (streamer_ && !lastFrame_.idle) {  // 스트리밍 진행 표시(오른쪽 아래)
-        QFont f(theme::fontFamily()); f.setPointSizeF(8); p.setFont(f);
-        QString s = QStringLiteral("세부 불러오는 중 · %1").arg(lastFrame_.wanted + lastFrame_.queued);
-        QRectF r(width() - 190, height() - 26, 180, 18);
-        p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 210)); p.drawRoundedRect(r, 6, 6);
-        p.setPen(theme::InkSub); p.drawText(r, Qt::AlignCenter, s);
-    }
+    if (streamer_ && !lastFrame_.idle && lastFrame_.burstTotal > 0) paintLodCard(p);
     p.end();
     if (!streamer_) { lastFrame_ = FrameInfo(); lastFrame_.draw = gpu_.size(); lastFrame_.idle = !needUpload_; }
     lastFrame_.ms = ft.nsecsElapsed() / 1e6;
@@ -600,14 +594,31 @@ bool PlanView::screenRayLocal(const QPointF& sp, Vec3& o, Vec3& d) const {
     return d.x * d.x + d.y * d.y + d.z * d.z > 0;
 }
 
+// 왼쪽 아래 뜬 카드: 「디테일 불러오는 중 12 / 40」 + 먹색 4 px 막대(다 오면 사라짐). 그림자 대신 1 px 테(성능)
+void PlanView::paintLodCard(QPainter& p) {
+    const auto& F = lastFrame_;
+    const size_t total = std::max<size_t>(1, F.burstTotal), done = std::min(F.burstDone, total);
+    QRectF r(12, height() - 48 - 76, 236, 64);
+    p.setPen(QPen(theme::Edge, 1)); p.setBrush(theme::Card); p.drawRoundedRect(r, 8, 8);
+    p.setFont(theme::uiFont(12)); p.setPen(theme::Ink);
+    p.drawText(r.adjusted(12, 8, -12, -40), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("디테일 불러오는 중"));
+    p.setFont(theme::monoFont(12));
+    p.drawText(r.adjusted(12, 8, -12, -40), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("%1 / %2").arg(done).arg(total));
+    QRectF bar(r.left() + 12, r.top() + 30, r.width() - 24, 4);
+    p.setPen(Qt::NoPen); p.setBrush(theme::Press); p.drawRoundedRect(bar, 2, 2);
+    p.setBrush(theme::Ink); p.drawRoundedRect(QRectF(bar.left(), bar.top(), bar.width() * double(done) / double(total), 4), 2, 2);
+    p.setFont(theme::uiFont(11)); p.setPen(theme::Faint);
+    p.drawText(r.adjusted(12, 38, -12, -6), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("움직여도 됩니다 · 다 오면 사라집니다"));
+}
+
 void PlanView::paintEmpty(QPainter& p) {
     QRectF r(0, 0, std::min(440, width() - 40), 150);
     r.moveCenter(QPointF(width() / 2.0, height() / 2.0));
-    p.setPen(QPen(theme::Line, 1)); p.setBrush(theme::Card);
-    p.drawRoundedRect(r, 14, 14);
-    QFont f(theme::fontFamily()); f.setPointSizeF(12); f.setBold(true); p.setFont(f); p.setPen(theme::Ink);
+    p.setPen(QPen(theme::Edge, 1)); p.setBrush(theme::Card);
+    p.drawRoundedRect(r, 8, 8);
+    p.setFont(theme::uiFont(16, true)); p.setPen(theme::Ink);
     p.drawText(r.adjusted(20, 22, -20, -80), Qt::AlignHCenter | Qt::AlignTop, QStringLiteral("3MX 실사 메시를 여세요"));
-    f.setPointSizeF(9.5); f.setBold(false); p.setFont(f); p.setPen(theme::InkSub);
+    p.setFont(theme::uiFont(12)); p.setPen(theme::Muted);
     p.drawText(r.adjusted(20, 58, -20, -10), Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap,
                QStringLiteral("리본의 「열기」(Ctrl+O) 또는 .3mx / .obj 파일을 이 창에 끌어다 놓기\niTwin Capture 결과 폴더의 .3mx 를 고르면 됩니다"));
 }
@@ -620,28 +631,22 @@ void PlanView::paintOverlay(QPainter& p) {
         QPointF dir(std::sin(a), -std::cos(a));
         QPointF tip = c + dir * 16, tail = c - dir * 12, side(dir.y(), -dir.x());
         QPainterPath arr; arr.moveTo(tip); arr.lineTo(tail + side * 8); arr.lineTo(c - dir * 5); arr.lineTo(tail - side * 8); arr.closeSubpath();
-        p.setPen(QPen(theme::Ink, 1.2)); p.setBrush(theme::Card); p.drawEllipse(c, 22, 22);
-        p.setBrush(theme::Ink); p.drawPath(arr);
-        QFont f(theme::fontFamily()); f.setPointSizeF(7.5); f.setBold(true); p.setFont(f); p.setPen(theme::Brand);
-        p.drawText(QRectF(c.x() - 20, c.y() - 36, 40, 12), Qt::AlignCenter, "N");
+        p.setPen(QPen(theme::Edge, 1)); p.setBrush(theme::Card); p.drawRoundedRect(QRectF(c.x() - 22, c.y() - 22, 44, 44), 8, 8);
+        p.setPen(Qt::NoPen); p.setBrush(theme::Ink); p.drawPath(arr);
+        QFont f = theme::uiFont(11, true); p.setFont(f); p.setPen(theme::Ink);
+        p.drawText(QRectF(c.x() - 20, c.y() - 37, 40, 13), Qt::AlignCenter, "N");
         double len = niceStep(mpp_ * 120, 1);
         double px = len / mpp_;
         QRectF sb(16, height() - 28, px, 6);
         p.setPen(QPen(theme::Ink, 1)); p.setBrush(Qt::white); p.drawRect(sb);
         p.setBrush(theme::Ink); p.drawRect(QRectF(sb.x(), sb.y(), px / 2, 6));
-        f.setBold(false); f.setPointSizeF(8); p.setFont(f); p.setPen(theme::Ink);
+        p.setFont(theme::monoFont(11)); p.setPen(theme::Ink);
         QString lab = len >= 1 ? QString::number(len, 'g', 4) + " m" : QString::number(len * 100, 'g', 4) + " cm";
         QRectF lr(sb.right() + 6, sb.y() - 6, 80, 18);
         p.drawText(lr, Qt::AlignLeft | Qt::AlignVCenter, lab);
     }
     if (!hasLine_ && drawStage_ < 1) {
-        if (drawStage_ == 0) {
-            QFont f(theme::fontFamily()); f.setPointSizeF(9.5); p.setFont(f);
-            QRectF r(0, 12, 330, 30); r.moveLeft(width() / 2.0 - 165);
-            p.setPen(Qt::NoPen); p.setBrush(QColor(17, 17, 17, 220)); p.drawRoundedRect(r, 15, 15);
-            p.setPen(Qt::white); p.drawText(r, Qt::AlignCenter, QStringLiteral("단면 시작점 A 를 클릭하세요  ·  Esc 취소"));
-        }
-        return;
+        return;   // 안내는 리본 아래 「지금 도구 줄」이 맡음
     }
     SectionFrame f(line_);
     double z = refZ() + center_.z;
@@ -676,33 +681,45 @@ void PlanView::paintOverlay(QPainter& p) {
         QPen ap(theme::SectionRed, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin); p.setPen(ap);
         p.drawLine(a0, a1); p.drawLine(a1, a1 - nu * 6 + sd * 4); p.drawLine(a1, a1 - nu * 6 - sd * 4);
     }
-    // 단면선: 흰 테두리 + 빨강
-    p.setPen(QPen(QColor(255, 255, 255, 200), 5.0, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
-    p.setPen(QPen(theme::SectionRed, 2.0, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
-    // 손잡이 + 이름
-    QFont fnt(theme::fontFamily()); fnt.setPointSizeF(10); fnt.setBold(true); p.setFont(fnt);
+    // 단면선(고대비): 흰 테 3 px(양쪽) 아래 + 빨강 굵기(설정, 기본 2.5 px) — 정사영상 위에서도 또렷하게
+    const double redW = std::clamp(QSettings().value("view/planLineWidth", 2.5).toDouble(), 1.5, 5.0);
+    p.setPen(QPen(QColor(255, 255, 255), redW + 6.0, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
+    p.setPen(QPen(theme::SectionRed, redW, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
+    // 손잡이 + 이름(흰 바탕 칩)
+    p.setFont(theme::uiFont(13, true));
     QPointF d = B - A; double dl = std::hypot(d.x(), d.y()); QPointF du = dl > 0 ? d / dl : QPointF(1, 0);
     auto handle = [&](QPointF c, const QString& name, QPointF away) {
+        p.setPen(QPen(Qt::white, 5)); p.setBrush(Qt::NoBrush); p.drawEllipse(c, 6.5, 6.5);
         p.setPen(QPen(theme::SectionRed, 2)); p.setBrush(Qt::white); p.drawEllipse(c, 6.5, 6.5);
-        QRectF tr(0, 0, 28, 20); tr.moveCenter(c + away * 18);
-        p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 230)); p.drawRoundedRect(tr, 6, 6);
+        QRectF tr(0, 0, 30, 21); tr.moveCenter(c + away * 20);
+        p.setPen(QPen(theme::Edge, 1)); p.setBrush(Qt::white); p.drawRoundedRect(tr, 4, 4);
         p.setPen(theme::SectionRed); p.drawText(tr, Qt::AlignCenter, name);
     };
     handle(A, "A", -du);
     if (hasLine_ || drawStage_ == 1) handle(B, QStringLiteral("A′"), du);
     if (hasLine_) { p.setPen(QPen(theme::SectionRed, 1.5)); p.setBrush(theme::SectionRed); p.drawEllipse((A + B) / 2, 3.5, 3.5); }
-    if (drawStage_ == 1) {
-        QFont f2(theme::fontFamily()); f2.setPointSizeF(9.5); p.setFont(f2);
-        QRectF r(0, 12, 360, 30); r.moveLeft(width() / 2.0 - 180);
-        p.setPen(Qt::NoPen); p.setBrush(QColor(17, 17, 17, 220)); p.drawRoundedRect(r, 15, 15);
-        p.setPen(Qt::white);
-        p.drawText(r, Qt::AlignCenter, QStringLiteral("끝점 A′ 를 클릭하세요  ·  길이 %1 m").arg(f.L, 0, 'f', 2));
-    }
+}
+
+// Shift: 동서·남북 고정(A 에서 더 긴 축으로)
+Vec2 PlanView::lockAxis(const Vec2& w, Qt::KeyboardModifiers m) const {
+    if (!(m & Qt::ShiftModifier)) return w;
+    Vec2 d = w - line_.a;
+    return std::fabs(d.x) >= std::fabs(d.y) ? Vec2(w.x, line_.a.y) : Vec2(line_.a.x, w.y);
+}
+
+void PlanView::finishDrawAt(const SectionLine& l) {
+    line_.a = l.a; line_.b = l.b;
+    if (SectionFrame(line_).L <= 1e-3) return;
+    hasLine_ = true; drawStage_ = -1; setCursor(Qt::ArrowCursor);
+    if (onDrawModeChanged) onDrawModeChanged(false);
+    update();
+    emitLine(true);
 }
 
 void PlanView::setDrawMode(bool on) {
     drawStage_ = on ? 0 : -1;
     setCursor(on ? Qt::CrossCursor : Qt::ArrowCursor);
+    if (on && onDrawProgress) onDrawProgress(0, line_);
     if (onDrawModeChanged) onDrawModeChanged(on);
     update();
 }
@@ -716,9 +733,9 @@ void PlanView::mousePressEvent(QMouseEvent* e) {
     Vec2 w;
     bool ok = screenToLocalXY(e->position(), w);
     if (e->button() == Qt::LeftButton && drawStage_ >= 0 && ok) {
-        if (drawStage_ == 0) { line_.a = w; line_.b = w; drawStage_ = 1; hasLine_ = false; }
+        if (drawStage_ == 0) { line_.a = w; line_.b = w; drawStage_ = 1; hasLine_ = false; if (onDrawProgress) onDrawProgress(1, line_); }
         else {
-            line_.b = w;
+            line_.b = lockAxis(w, e->modifiers());
             if (SectionFrame(line_).L > 1e-3) {
                 hasLine_ = true; drawStage_ = -1; setCursor(Qt::ArrowCursor);
                 if (onDrawModeChanged) onDrawModeChanged(false);
@@ -750,7 +767,12 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         Vec3 W = srs_.toWorld(Vec3(w.x, w.y, zz + center_.z));
         onCursor(W.x, W.y, W.z, hz, true);
     }
-    if (drawStage_ == 1 && ok) { line_.b = w; update(); if (SectionFrame(line_).L > 0.05 && onLineChanged) onLineChanged(line_, false); return; }
+    if (drawStage_ == 1 && ok) {
+        line_.b = lockAxis(w, e->modifiers()); update();
+        if (onDrawProgress) onDrawProgress(1, line_);
+        if (SectionFrame(line_).L > 0.05 && onLineChanged) onLineChanged(line_, false);
+        return;
+    }
     if (dragHandle_ >= 0 && ok) {
         Vec2 w0;
         screenToLocalXY(dragStartMouse_, w0);

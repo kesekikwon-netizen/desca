@@ -29,7 +29,7 @@ void SectionView::setResult(const SectionResult& r, const QImage& img, double s0
 }
 
 QRectF SectionView::plotRect(const QRectF& a, double ui) const {
-    return a.adjusted(74 * ui, 46 * ui, -54 * ui, -44 * ui);
+    return a.adjusted(60 * ui, 30 * ui, -54 * ui, -40 * ui);   // 위: A/A′ 글자만(제목은 보기 머리에)
 }
 
 void SectionView::fit() {
@@ -73,7 +73,7 @@ LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport) {
 }
 
 void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const SectionXf& xf, double ui, const QImage& img, bool forExport,
-                     const QString& footer, const SectionImgGeo* geo, bool busy_) {
+                     const QString& footer, const SectionImgGeo* geo, bool busy_, bool titleRow) {
     const SectionResult& r_ = d.r;
     const SectionStyle& st_ = d.st;
     const SectionImgGeo ig = geo ? *geo : SectionImgGeo{d.imgS0, d.imgZ1, d.imgRes};
@@ -89,9 +89,10 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     auto Y = [&](double zAbs) { return pr.top() + (xf.zTop - zAbs) * xf.ppm; };
     const double sVis0 = xf.s0, sVis1 = xf.s0 + pr.width() / xf.ppm;
     const double zVis1 = xf.zTop, zVis0 = xf.zTop - pr.height() / xf.ppm;
-    QFont small(theme::fontFamily()); small.setPixelSize(std::max(8, int(std::lround(11.5 * ui))));
-    QFont bold = small; bold.setBold(true);
-    QFont title(theme::fontFamily()); title.setPixelSize(int(std::lround(14 * ui))); title.setBold(true);
+    QFont small = theme::uiFont(std::max(8, int(std::lround(11.5 * ui))));
+    QFont mono = theme::monoFont(std::max(8, int(std::lround(11 * ui))));
+    QFont monoBold = mono; monoBold.setBold(true);
+    QFont title = theme::uiFont(std::max(6, int(std::lround(14 * ui))), true);
     QFontMetricsF fm(small);
 
     // 1) 세로 격자(거리) — 아주 옅게
@@ -99,7 +100,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     p.save();
     p.setClipRect(pr);
     {
-        QPen g(QColor(0xEE, 0xED, 0xE9), 1.0 * ui);
+        QPen g(QColor(0xF0, 0xEE, 0xE6), 1.0 * ui);
         p.setPen(g);
         for (long k = long(std::ceil(sVis0 / dStep)); k * dStep <= sVis1; ++k) p.drawLine(QPointF(X(k * dStep), pr.top()), QPointF(X(k * dStep), pr.bottom()));
     }
@@ -113,9 +114,10 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         for (auto& lv : levels) {
             double y = Y(lv.z);
             QColor c; double w;
-            if (lv.cls == LevelClass::Master) { c = QColor(60, 60, 58, 120); w = 1.1; }
-            else if (lv.cls == LevelClass::Major) { c = QColor(60, 60, 58, 80); w = 0.9; }
-            else { c = QColor(60, 60, 58, 42); w = 0.6; }
+            // Strata 레벨선: 10 cm #DEDCD1 0.75 px, 50 cm #9C9A92 1 px, 1 m 조금 굵게
+            if (lv.cls == LevelClass::Master) { c = theme::LevelMajor; w = 1.25; }
+            else if (lv.cls == LevelClass::Major) { c = theme::LevelMajor; w = 1.0; }
+            else { c = theme::LevelMinor; w = 0.75; }
             p.setPen(QPen(c, w * ui));
             p.drawLine(QPointF(pr.left(), y), QPointF(pr.right(), y));
         }
@@ -137,7 +139,9 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     // 5) 단면선: 순수 빨강 약 2 px, 안티에일리어싱, 둥근 이음. 닫힌 고리(나무·돌 덩어리)는 닫아서 그림
     if (st_.showLine) {
         p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(theme::ProfileRed, 2.0 * ui, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        // 화면: 설정 굵기(기본 2 px) / 인쇄: 0.35 mm
+        const double lw = forExport ? 0.35 / 25.4 * 96.0 * ui : std::clamp(st_.lineWidthPx, 1.0, 4.0) * ui;
+        p.setPen(QPen(theme::ProfileRed, lw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         for (auto& pl : r_.profile) {
             if (pl.size() < 2) continue;
             const bool closed = pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9;
@@ -149,10 +153,21 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
             p.drawPath(path);
         }
     }
+    // 5b) 기준선 EL(점선, 맨 위)
+    if (st_.showBaseline && st_.baselineEl > zVis0 && st_.baselineEl < zVis1) {
+        double y = Y(st_.baselineEl);
+        p.setPen(QPen(theme::Ink2, 1.0 * ui, Qt::DashLine));
+        p.drawLine(QPointF(pr.left(), y), QPointF(pr.right(), y));
+        p.setFont(small);
+        QString bt = QStringLiteral("기준선 EL. %1 m").arg(st_.baselineEl, 0, 'f', 2);
+        QRectF br(pr.left() + 6 * ui, y - fm.height() - 2 * ui, fm.horizontalAdvance(bt) + 8 * ui, fm.height());
+        p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 220)); p.drawRect(br);
+        p.setPen(theme::Ink2); p.drawText(br, Qt::AlignCenter, bt);
+    }
     p.restore();  // clip
 
     // 6) 테두리
-    p.setPen(QPen(QColor(0xC9, 0xC8, 0xC3), 1.0 * ui));
+    p.setPen(QPen(theme::Edge, 1.0 * ui));
     p.setBrush(Qt::NoBrush);
     p.drawRect(pr);
 
@@ -163,29 +178,30 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
             if (lv.cm % lab != 0) continue;
             double y = Y(lv.z);
             if (y < pr.top() + fm.height() * 0.3 || y > pr.bottom() - fm.height() * 0.3) continue;
-            p.setFont(lv.cls == LevelClass::Master ? bold : small);
-            p.setPen(lv.cls == LevelClass::Minor ? theme::InkSub : theme::Ink);
+            p.setFont(lv.cls == LevelClass::Master ? monoBold : mono);
+            p.setPen(theme::LevelText);
             QString t = QString::fromStdString(formatElevation(lv.z));
             p.drawText(QRectF(area.left(), y - fm.height() / 2, pr.left() - area.left() - 8 * ui, fm.height()), Qt::AlignRight | Qt::AlignVCenter, t);
-            p.setPen(QPen(theme::Outline, 1.0 * ui));
+            p.setPen(QPen(theme::LevelMajor, 1.0 * ui));
             p.drawLine(QPointF(pr.left() - 5 * ui, y), QPointF(pr.left(), y));
             p.drawLine(QPointF(pr.right(), y), QPointF(pr.right() + 5 * ui, y));
-            p.setPen(lv.cls == LevelClass::Minor ? theme::InkSub : theme::Ink);
+            p.setPen(theme::LevelText);
             p.drawText(QRectF(pr.right() + 8 * ui, y - fm.height() / 2, 60 * ui, fm.height()), Qt::AlignLeft | Qt::AlignVCenter, t);
         }
         p.setFont(small); p.setPen(theme::Idle);
         p.drawText(QRectF(area.left() + 4 * ui, pr.top() - fm.height() - 4 * ui, pr.left() - area.left(), fm.height()), Qt::AlignLeft, QStringLiteral("표고(m)"));
     }
     // 8) 거리축
-    p.setFont(small);
+    p.setFont(mono);
     for (long k = long(std::ceil(sVis0 / dStep)); k * dStep <= sVis1 + 1e-9; ++k) {
         double s = k * dStep, x = X(s);
         if (x < pr.left() - 0.5 || x > pr.right() + 0.5) continue;
         p.setPen(QPen(theme::Outline, 1.0 * ui));
         p.drawLine(QPointF(x, pr.bottom()), QPointF(x, pr.bottom() + 5 * ui));
-        p.setPen(theme::InkSub);
+        p.setPen(theme::LevelText);
         p.drawText(QRectF(x - 40 * ui, pr.bottom() + 6 * ui, 80 * ui, fm.height()), Qt::AlignHCenter | Qt::AlignTop, fmtDist(s, dStep));
     }
+    p.setFont(small);
     p.setPen(theme::Idle);
     p.drawText(QRectF(pr.right() - 160 * ui, pr.bottom() + 6 * ui + fm.height(), 160 * ui, fm.height()), Qt::AlignRight, QStringLiteral("A 로부터 거리(m)"));
     // 9) A / A′ 표시
@@ -198,7 +214,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         p.drawText(tr, Qt::AlignCenter, k ? QStringLiteral("A′") : QStringLiteral("A"));
     }
     // 10) 축척 막대(그림 안 오른쪽 아래)
-    {
+    if (st_.plotScaleBar) {
         double len = niceStep(110 * ui / xf.ppm, 1);
         double px = len * xf.ppm;
         QRectF sb(pr.right() - px - 14 * ui, pr.bottom() - 22 * ui, px, 5 * ui);
@@ -211,7 +227,8 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         QString lab = len >= 1 ? QString::number(len, 'g', 4) + " m" : QString::number(len * 100, 'g', 4) + " cm";
         p.drawText(QRectF(sb.left(), sb.top() - 15 * ui, px, 13 * ui), Qt::AlignHCenter | Qt::AlignBottom, lab);
     }
-    // 11) 제목
+    // 11) 제목(내보내기 영상만 — 화면은 보기 머리·정보 띠가 대신, 도면은 표제란이 대신)
+    if (titleRow) {
     p.setFont(title); p.setPen(theme::Ink);
     QString t1 = QStringLiteral("단면 A–A′");
     p.drawText(QRectF(area.left() + 12 * ui, area.top() + 8 * ui, 200 * ui, 20 * ui), Qt::AlignLeft | Qt::AlignVCenter, t1);
@@ -222,6 +239,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
                      .arg(f.L, 0, 'f', 2).arg(r_.line.front, 0, 'f', 2).arg(r_.line.back, 0, 'f', 2)
                      .arg(QString::fromStdString(r_.srs.describe().labelKo()), lvText);
     p.drawText(QRectF(area.left() + 12 * ui + QFontMetricsF(title).horizontalAdvance(t1) + 12 * ui, area.top() + 8 * ui, area.width(), 20 * ui), Qt::AlignLeft | Qt::AlignVCenter, t2);
+    }
     if (!footer.isEmpty()) {
         p.setPen(theme::Idle);
         p.drawText(QRectF(area.left() + 12 * ui, area.bottom() - fm.height() - 4 * ui, area.width() - 24 * ui, fm.height()), Qt::AlignRight, footer);
@@ -229,8 +247,8 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     if (!forExport && busy_) {
         p.setFont(small);
         QRectF b(pr.right() - 110 * ui, pr.top() + 8 * ui, 100 * ui, 22 * ui);
-        p.setPen(Qt::NoPen); p.setBrush(QColor(17, 17, 17, 200)); p.drawRoundedRect(b, 11 * ui, 11 * ui);
-        p.setPen(Qt::white); p.drawText(b, Qt::AlignCenter, QStringLiteral("계산 중…"));
+        p.setPen(QPen(theme::Edge, 1)); p.setBrush(Qt::white); p.drawRoundedRect(b, 6 * ui, 6 * ui);
+        p.setPen(theme::Ink); p.drawText(b, Qt::AlignCenter, QStringLiteral("최종 계산 중…"));
     }
     p.restore();
 }
@@ -256,21 +274,23 @@ void SectionView::paintEvent(QPaintEvent*) {
         p.fillRect(rect(), Qt::white);
         p.setRenderHint(QPainter::Antialiasing);
         // 빈 격자 + 안내
-        p.setPen(QPen(QColor(0xEE, 0xED, 0xE9), 1));
+        p.setPen(QPen(theme::Desk, 1));
         for (int x = 0; x < width(); x += 24) p.drawLine(x, 0, x, height());
         for (int y = 0; y < height(); y += 24) p.drawLine(0, y, width(), y);
         QRectF r(0, 0, std::min(400, width() - 40), 110);
         r.moveCenter(QPointF(width() / 2.0, height() / 2.0));
-        p.setPen(QPen(theme::Line, 1)); p.setBrush(theme::Card); p.drawRoundedRect(r, 14, 14);
-        QFont f(theme::fontFamily()); f.setPointSizeF(11.5); f.setBold(true); p.setFont(f); p.setPen(theme::Ink);
+        p.setPen(QPen(theme::Edge, 1)); p.setBrush(theme::Card); p.drawRoundedRect(r, 8, 8);
+        p.setFont(theme::uiFont(15, true)); p.setPen(theme::Ink);
         p.drawText(r.adjusted(16, 18, -16, -50), Qt::AlignHCenter | Qt::AlignTop, QStringLiteral("단면선을 그리세요"));
-        f.setPointSizeF(9.5); f.setBold(false); p.setFont(f); p.setPen(theme::InkSub);
+        p.setFont(theme::uiFont(12)); p.setPen(theme::Muted);
         p.drawText(r.adjusted(16, 52, -16, -8), Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap,
                    QStringLiteral("「단면선 그리기」(S) 후 평면에서 A, A′ 두 점을 클릭\n끝점을 끌면 단면이 바로 바뀝니다"));
         return;
     }
     SectionDoc d; d.r = r_; d.st = st_; d.imgS0 = imgS0_; d.imgZ1 = imgZ1_; d.imgRes = imgRes_;
-    paintSectionDoc(p, d, rect(), xf_, 1.0, img_, false, QString(), nullptr, busy_);
+    paintSectionDoc(p, d, rect(), xf_, 1.0, img_, false, QString(), nullptr, busy_, false);
+    static thread_local double lastPpm = -1;
+    if (onViewChanged && xf_.ppm != lastPpm) { lastPpm = xf_.ppm; QTimer::singleShot(0, this, [this] { if (onViewChanged) onViewChanged(); }); }
 }
 
 void SectionView::wheelEvent(QWheelEvent* e) {
@@ -332,6 +352,16 @@ void SectionView::mouseMoveEvent(QMouseEvent* e) {
         Vec3 w = sectionToWorld(r_, s, z - r_.srs.origin.z);
         onCursor(s, z, w.x, w.y, xf_.plot.contains(e->position()));
     }
+}
+
+double SectionView::screenDenom() const {
+    return xf_.ppm > 0 ? logicalDpiX() / (0.0254 * xf_.ppm) : 0;
+}
+
+void SectionView::setScreenDenom(double d) {
+    if (!has_ || d <= 0) return;
+    zoomPending_ = 0; if (zoomTimer_) zoomTimer_->stop();
+    zoomBy((logicalDpiX() / (0.0254 * d)) / xf_.ppm);
 }
 
 void SectionView::zoomBy(double f) {

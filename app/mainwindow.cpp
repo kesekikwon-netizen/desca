@@ -1,6 +1,8 @@
 #include "mainwindow.hpp"
 
 #include <QApplication>
+#include <QStyle>
+#include <QUndoStack>
 #include <QMenu>
 #include <QToolButton>
 #include <QCryptographicHash>
@@ -43,9 +45,9 @@
 using namespace asec;
 using clk = std::chrono::steady_clock;
 
-static const char* kVersion = "1.1.1";
-static constexpr double kMaxBandDepth = 5.0;   // 두께 띠 앞/뒤 최대(m) — 입면 영상 깊이 최대 5 m
-static constexpr double kDepthFade = 0.55;     // 깊이 음영 세기(가장 먼 면을 흰색 쪽으로 55%)
+extern const char* const kVersion;
+const char* const kVersion = "1.1.1";
+static constexpr double kDepthFade = kDepthFadeStrength;
 // 모델별 설정 키(경로 기준, 대소문자 무시)
 static QString heightSettingsKey(const QString& path) {
     QByteArray h = QCryptographicHash::hash(QFileInfo(path).absoluteFilePath().toLower().toUtf8(), QCryptographicHash::Sha1).toHex().left(16);
@@ -171,379 +173,10 @@ bool MainWindow::loadScene(const QString& path, OpenedScene& out, QString* err, 
     return true;
 }
 
-// ---------------------------------------------------------------- 리본·창 구성
-namespace {
-QFrame* groupSep() { auto* f = new QFrame; f->setObjectName("groupSep"); f->setFrameShape(QFrame::NoFrame); return f; }
-
-QToolButton* bigButton(QAction* a) {
-    auto* b = new QToolButton;
-    b->setDefaultAction(a);
-    b->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-    b->setIconSize(QSize(32, 32));
-    b->setMinimumWidth(54);
-    b->setAutoRaise(true);
-    return b;
-}
-QToolButton* smallButton(QAction* a, bool text = true) {
-    auto* b = new QToolButton;
-    b->setDefaultAction(a);
-    b->setToolButtonStyle(text ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
-    b->setIconSize(QSize(16, 16));
-    b->setAutoRaise(true);
-    if (text) b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    return b;
-}
-QWidget* smallColumn(std::initializer_list<QWidget*> ws) {
-    auto* w = new QWidget; auto* l = new QVBoxLayout(w); l->setContentsMargins(0, 0, 0, 0); l->setSpacing(1);
-    for (auto* x : ws) l->addWidget(x);
-    l->addStretch();
-    return w;
-}
-}  // namespace
-
-QAction* MainWindow::makeAction(const QString& key, const QString& ko, const QString& en, theme::Ico ico, const QString& shortcut, bool checkable) {
-    auto* a = new QAction(theme::icon(ico), ko, this);
-    a->setCheckable(checkable);
-    if (!shortcut.isEmpty()) { a->setShortcut(QKeySequence(shortcut)); a->setShortcutContext(Qt::ApplicationShortcut); }
-    a->setToolTip(shortcut.isEmpty() ? QStringLiteral("%1  (%2)").arg(ko, en) : QStringLiteral("%1  (%2)  [%3]").arg(ko, en, shortcut));
-    a->setIconText(ko);
-    act_[key] = a;
-    addAction(a);
-    return a;
-}
-
-QWidget* MainWindow::buildRibbon() {
-    auto* rib = new QWidget; rib->setObjectName("ribbon");
-    auto* v = new QVBoxLayout(rib); v->setContentsMargins(0, 0, 0, 0); v->setSpacing(0);
-    auto* top = new QWidget; top->setStyleSheet("background:#E9E9E7;");
-    auto* th = new QHBoxLayout(top); th->setContentsMargins(4, 3, 4, 0); th->setSpacing(0);
-    tabs_ = new QTabBar; tabs_->setObjectName("ribbonTabs"); tabs_->setDrawBase(false); tabs_->setExpanding(false);
-    struct T { const char* ko; const char* en; };
-    const T tabNames[] = {{"파일", "File"}, {"홈", "Home"}, {"보기", "View"}, {"분석", "Analyze"}, {"추출", "Extract"}, {"내보내기", "Export"}};
-    for (auto& t : tabNames) { int i = tabs_->addTab(QString()); labels_.push_back({tabs_, QString::fromUtf8(t.ko), QString::fromUtf8(t.en), 100 + i}); }
-    th->addWidget(tabs_);
-    th->addStretch();
-    auto* brand = new QLabel(QStringLiteral("발굴 단면뷰어  v%1").arg(kVersion)); brand->setObjectName("brand");
-    th->addWidget(brand);
-    v->addWidget(top);
-    pages_ = new QStackedWidget; pages_->setFixedHeight(92);
-    v->addWidget(pages_);
-
-    using G = std::pair<std::pair<QString, QString>, QWidget*>;
-    auto addPage = [&](std::vector<G> groups) {
-        auto* page = new QWidget; auto* h = new QHBoxLayout(page); h->setContentsMargins(6, 4, 6, 2); h->setSpacing(6);
-        for (size_t i = 0; i < groups.size(); ++i) {
-            auto* g = new QWidget; auto* gl = new QVBoxLayout(g); gl->setContentsMargins(0, 0, 0, 0); gl->setSpacing(0);
-            auto* row = groups[i].second;
-            gl->addWidget(row, 1);
-            auto* lab = new QLabel; lab->setObjectName("groupLabel"); lab->setAlignment(Qt::AlignHCenter | Qt::AlignBottom);
-            labels_.push_back({lab, groups[i].first.first, groups[i].first.second, 1});
-            gl->addWidget(lab);
-            h->addWidget(g);
-            h->addWidget(groupSep());
-        }
-        h->addStretch();
-        pages_->addWidget(page);
-    };
-    auto rowOf = [](std::initializer_list<QWidget*> ws) {
-        auto* w = new QWidget; auto* l = new QHBoxLayout(w); l->setContentsMargins(0, 0, 0, 0); l->setSpacing(2);
-        for (auto* x : ws) l->addWidget(x, 0, Qt::AlignTop);
-        return w;
-    };
-    auto K = [](const char* s) { return QString::fromUtf8(s); };
-
-    // 파일
-    addPage({{{K("파일"), "File"}, rowOf({bigButton(action("open")), bigButton(action("close"))})},
-             {{K("정보"), "Info"}, rowOf({bigButton(action("about"))})},
-             {{K("끝내기"), "Exit"}, rowOf({bigButton(action("quit"))})}});
-    // 홈
-    front_ = new QDoubleSpinBox; back_ = new QDoubleSpinBox;
-    for (auto* sp : {front_, back_}) { sp->setRange(0, kMaxBandDepth); sp->setDecimals(2); sp->setSingleStep(0.05); sp->setSuffix(" m"); sp->setFixedWidth(84); }
-    front_->setToolTip(QStringLiteral("단면선 앞쪽(보는 사람 쪽) 두께 (Front), 0–5 m"));
-    back_->setToolTip(QStringLiteral("단면선 뒤쪽(보는 방향) 깊이 — 입면 영상에 보이는 깊이 (Back), 0–5 m"));
-    auto* depthBtn = new QToolButton; depthBtn->setText(QStringLiteral("5 m")); depthBtn->setAutoRaise(true);
-    depthBtn->setToolTip(QStringLiteral("입면 깊이 바로 고르기 — 누르면 뒤 5 m(입면 최대). 옆 ▾ 로 0.5 / 1 / 2 / 3 m"));
-    depthBtn->setMinimumWidth(40);
-    QObject::connect(depthBtn, &QToolButton::clicked, this, [this] { back_->setValue(kMaxBandDepth); });
-    // 단계 고르기는 따로 ▾ 버튼(분할 버튼의 화살표 칸이 테마에서 검게 칠해져서)
-    auto* depthMenuBtn = new QToolButton; depthMenuBtn->setText(QStringLiteral("▾")); depthMenuBtn->setAutoRaise(true);
-    depthMenuBtn->setToolTip(QStringLiteral("입면 깊이 고르기: 뒤 0.5 / 1 / 2 / 3 / 5 m"));
-    depthMenuBtn->setPopupMode(QToolButton::InstantPopup);
-    depthMenuBtn->setStyleSheet(QStringLiteral("QToolButton::menu-indicator { image: none; width: 0px; }"));
-    depthMenuBtn->setFixedWidth(18);
-    {
-        auto* menu = new QMenu(depthMenuBtn);
-        for (double v : {0.5, 1.0, 2.0, 3.0, 5.0})
-            QObject::connect(menu->addAction(QStringLiteral("뒤 %1 m").arg(v, 0, 'f', v < 1 ? 1 : 0)), &QAction::triggered, this, [this, v] { back_->setValue(v); });
-        depthMenuBtn->setMenu(menu);
-    }
-    auto* backRow = new QWidget; { auto* h = new QHBoxLayout(backRow); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(2); h->addWidget(back_); h->addWidget(depthBtn); h->addWidget(depthMenuBtn); }
-    auto thick = new QWidget; { auto* f = new QFormLayout(thick); f->setContentsMargins(2, 2, 2, 0); f->setVerticalSpacing(4); f->setHorizontalSpacing(6);
-        f->addRow(QStringLiteral("앞"), front_); f->addRow(QStringLiteral("뒤"), backRow); }
-    addPage({{{K("파일"), "File"}, rowOf({bigButton(action("open"))})},
-             {{K("좌표계"), "SRS"}, rowOf({bigButton(action("height"))})},
-             {{K("단면"), "Section"}, rowOf({bigButton(action("draw")), smallColumn({smallButton(action("flip")), smallButton(action("clear"))})})},
-             {{K("두께 띠"), "Thickness"}, thick},
-             {{K("탐색"), "Navigate"}, rowOf({bigButton(action("fit")), smallColumn({smallButton(action("top")), smallButton(action("zoomin")), smallButton(action("zoomout"))})})},
-             {{K("단면 표시"), "Display"}, rowOf({smallColumn({smallButton(action("image")), smallButton(action("line")), smallButton(action("levels"))}), smallColumn({smallButton(action("fade"))})})},
-             {{K("내보내기"), "Export"}, rowOf({bigButton(action("dxf")), bigButton(action("secimg"))})}});
-    // 보기
-    opacity_ = new QSlider(Qt::Horizontal); opacity_->setRange(10, 100); opacity_->setValue(100); opacity_->setFixedWidth(110);
-    auto* opw = new QWidget; { auto* l = new QVBoxLayout(opw); l->setContentsMargins(4, 4, 4, 0); l->setSpacing(3);
-        l->addWidget(new QLabel(QStringLiteral("영상 불투명도"))); l->addWidget(opacity_); l->addStretch(); }
-    auto* lang = new QCheckBox(QStringLiteral("English 병기")); lang->setChecked(bilingual_);
-    QObject::connect(lang, &QCheckBox::toggled, this, [this](bool on) { bilingual_ = on; QSettings().setValue("ui/bilingual", on); retranslate(); });
-    auto* langw = new QWidget; { auto* l = new QVBoxLayout(langw); l->setContentsMargins(4, 6, 4, 0); l->addWidget(lang); l->addStretch(); }
-    addPage({{{K("보기 창"), "Views"}, rowOf({bigButton(action("view1")), bigButton(action("view2"))})},
-             {{K("탐색"), "Navigate"}, rowOf({bigButton(action("fit")), smallColumn({smallButton(action("top")), smallButton(action("zoomin")), smallButton(action("zoomout"))})})},
-             {{K("단면 표시"), "Section Display"}, rowOf({smallColumn({smallButton(action("image")), smallButton(action("line")), smallButton(action("levels"))}), smallColumn({smallButton(action("fade"))}), opw})},
-             {{K("언어"), "Language"}, langw}});
-    // 분석
-    addPage({{{K("단면 정리"), "Cleanup"}, rowOf({bigButton(action("smooth"))})},
-             {{K("두께 띠"), "Band"}, rowOf({bigButton(action("flip"))})},
-             {{K("정보"), "Info"}, rowOf({bigButton(action("info")), bigButton(action("height"))})}});
-    // 추출
-    addPage({{{K("점군"), "Point Cloud"}, rowOf({bigButton(action("xyz")), bigButton(action("las"))})},
-             {{K("단면선 좌표"), "Profile"}, rowOf({bigButton(action("csv"))})}});
-    // 내보내기
-    addPage({{{K("단면"), "Section"}, rowOf({bigButton(action("dxf")), bigButton(action("secimg"))})},
-             {{K("평면"), "Plan"}, rowOf({bigButton(action("plan"))})},
-             {{K("점군"), "Point Cloud"}, rowOf({bigButton(action("xyz")), bigButton(action("las"))})}});
-
-    QObject::connect(tabs_, &QTabBar::currentChanged, pages_, &QStackedWidget::setCurrentIndex);
-    return rib;
-}
-
-QWidget* MainWindow::buildViewFrame(int num, const QString& ko, const QString& en, QWidget* content, QWidget* bar, QWidget** titleOut) {
-    auto* fr = new QWidget; fr->setObjectName("viewFrame"); fr->setAttribute(Qt::WA_StyledBackground);
-    auto* v = new QVBoxLayout(fr); v->setContentsMargins(1, 1, 1, 1); v->setSpacing(0);
-    auto* title = new QWidget; title->setObjectName("viewTitle"); title->setAttribute(Qt::WA_StyledBackground); title->setFixedHeight(24);
-    auto* th = new QHBoxLayout(title); th->setContentsMargins(4, 0, 2, 0); th->setSpacing(2);
-    auto* ic = new QLabel; ic->setPixmap(theme::icon(num == 1 ? theme::Ico::View1 : theme::Ico::View2, 16).pixmap(16, 16));
-    th->addWidget(ic);
-    auto* t = new QLabel; t->setObjectName("viewTitleText");
-    labels_.push_back({t, ko, en, 200 + num});
-    th->addWidget(t);
-    th->addStretch();
-    auto* maxi = new QToolButton; maxi->setText(QString::fromUtf8("□")); maxi->setAutoRaise(true); maxi->setFixedSize(20, 18);
-    maxi->setToolTip(QStringLiteral("이 보기만 크게 / 나란히 (Maximize)"));
-    QObject::connect(maxi, &QToolButton::clicked, this, [this, num]() {
-        QAction* other = action(num == 1 ? "view2" : "view1");
-        QAction* self = action(num == 1 ? "view1" : "view2");
-        self->setChecked(true);
-        other->setChecked(!other->isChecked());
-    });
-    th->addWidget(maxi);
-    v->addWidget(title);
-    bar->setObjectName("viewBar"); bar->setAttribute(Qt::WA_StyledBackground); bar->setFixedHeight(26);
-    v->addWidget(bar);
-    v->addWidget(content, 1);
-    if (titleOut) *titleOut = title;
-    return fr;
-}
-
-QWidget* MainWindow::buildCoordBar() {
-    auto* w = new QWidget; w->setObjectName("coordBar"); w->setAttribute(Qt::WA_StyledBackground); w->setFixedHeight(28);
-    auto* h = new QHBoxLayout(w); h->setContentsMargins(4, 2, 4, 2); h->setSpacing(2);
-    for (int i = 0; i < 8; ++i) {
-        auto* b = new QToolButton; b->setObjectName("viewNum"); b->setText(QString::number(i + 1));
-        if (i < 2) { b->setCheckable(true); b->setChecked(true); b->setToolTip(i == 0 ? QStringLiteral("View 1 - 평면 보이기/숨기기") : QStringLiteral("View 2 - 단면 보이기/숨기기")); }
-        else { b->setEnabled(false); b->setToolTip(QStringLiteral("사용 안 함")); }
-        viewNum_[i] = b;
-        h->addWidget(b);
-    }
-    QObject::connect(viewNum_[0], &QToolButton::clicked, this, [this](bool on) { action("view1")->setChecked(on); });
-    QObject::connect(viewNum_[1], &QToolButton::clicked, this, [this](bool on) { action("view2")->setChecked(on); });
-    h->addSpacing(10);
-    auto field = [&](const char* k) {
-        auto* l = new QLabel(QString::fromUtf8(k)); l->setObjectName("coordKey"); h->addWidget(l);
-        auto* e = new QLineEdit; e->setObjectName("coord"); e->setReadOnly(true); e->setFixedWidth(118); e->setFocusPolicy(Qt::ClickFocus);
-        h->addWidget(e);
-        return e;
-    };
-    cx_ = field("X"); cy_ = field("Y"); cz_ = field("Z");
-    zSrc_ = new QLabel(QStringLiteral("—")); zSrc_->setObjectName("statusInfo"); zSrc_->setMinimumWidth(150);
-    zSrc_->setToolTip(QStringLiteral("Z 출처: 잎 표면(최고 해상도, CPU double 피킹) / 대략(화면 LOD) / 단면 커서 위치"));
-    h->addWidget(zSrc_);
-    cx_->setFixedWidth(126); cy_->setFixedWidth(126); cz_->setFixedWidth(82);
-    msg_ = new QLabel; msg_->setObjectName("statusMsg");
-    msg_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);  // 긴 상태 문구가 창 폭을 늘리지 않게(잘림, 전체는 툴팁)
-    h->addWidget(msg_, 1);
-    info_ = new QLabel; info_->setObjectName("statusInfo"); h->addWidget(info_);
-    progress_ = new QProgressBar; progress_->setRange(0, 1000); progress_->setVisible(false); progress_->setFixedWidth(140); h->addWidget(progress_);
-    srsLabel_ = new QLabel(QStringLiteral("좌표계 —")); srsLabel_->setObjectName("statusInfo"); h->addWidget(srsLabel_);
-    return w;
-}
-
-void MainWindow::retranslate() {
-    for (auto& L : labels_) {
-        QString t = bilingual_ ? QStringLiteral("%1 %2").arg(L.ko, L.en) : L.ko;
-        if (L.kind >= 100 && L.kind < 200) static_cast<QTabBar*>(L.obj)->setTabText(L.kind - 100, t);
-        else if (L.kind == 1) static_cast<QLabel*>(L.obj)->setText(t);
-        else if (L.kind >= 200) {
-            int n = L.kind - 200;
-            static_cast<QLabel*>(L.obj)->setText(bilingual_ ? QStringLiteral("View %1 - %2 (%3)").arg(n).arg(L.ko, L.en) : QStringLiteral("보기 %1 - %2").arg(n).arg(L.ko));
-        }
-    }
-}
-
-// ---------------------------------------------------------------- 생성·소멸
-MainWindow::MainWindow() {
-    setWindowTitle(QStringLiteral("발굴 단면뷰어"));
-    setAcceptDrops(true);
-    bilingual_ = QSettings().value("ui/bilingual", true).toBool();
-    using I = theme::Ico;
-    makeAction("open", QStringLiteral("열기"), "Open", I::Open, "Ctrl+O");
-    makeAction("close", QStringLiteral("닫기"), "Close", I::Close);
-    makeAction("about", QStringLiteral("프로그램 정보"), "About", I::Info);
-    makeAction("quit", QStringLiteral("끝내기"), "Exit", I::Close, "Ctrl+Q");
-    makeAction("draw", QStringLiteral("단면선 그리기"), "Draw Section", I::Draw, "S", true);
-    makeAction("flip", QStringLiteral("방향 반전"), "Flip Direction", I::Flip, "R");
-    makeAction("clear", QStringLiteral("단면선 지우기"), "Clear Line", I::Clear);
-    makeAction("fit", QStringLiteral("맞춤"), "Fit View", I::Fit, "F");
-    makeAction("top", QStringLiteral("위에서"), "Top", I::Plan, "T");
-    makeAction("zoomin", QStringLiteral("확대"), "Zoom In", I::ZoomIn, "+");
-    makeAction("zoomout", QStringLiteral("축소"), "Zoom Out", I::ZoomOut, "-");
-    makeAction("image", QStringLiteral("입면 영상"), "Image", I::Image, "I", true)->setChecked(true);
-    makeAction("line", QStringLiteral("단면선"), "Profile Line", I::Line, "L", true)->setChecked(true);
-    makeAction("levels", QStringLiteral("레벨선"), "Level Lines", I::Levels, "V", true)->setChecked(true);
-    makeAction("smooth", QStringLiteral("평활"), "Smooth", I::Smooth, QString(), true);
-    makeAction("fade", QStringLiteral("깊이 음영"), "Depth Shading", I::Band, QString(), true);
-    action("fade")->setToolTip(QStringLiteral("깊이 음영 (Depth Shading) — 입면 영상에서 단면선보다 뒤에 있는 면일수록 옅게 그려 빨간 단면선이 잘 보이게 합니다(내보내기도 같음)"));
-    makeAction("info", QStringLiteral("단면 정보"), "Section Info", I::Info);
-    makeAction("height", QStringLiteral("높이 기준 지정"), "Height Datum", I::Levels);
-    makeAction("view1", QStringLiteral("평면"), "View 1", I::View1, "Ctrl+1", true)->setChecked(true);
-    makeAction("view2", QStringLiteral("단면"), "View 2", I::View2, "Ctrl+2", true)->setChecked(true);
-    makeAction("dxf", QStringLiteral("단면 DXF"), "Section DXF", I::Dxf, "Ctrl+D");
-    makeAction("secimg", QStringLiteral("단면 영상"), "PNG/TIFF/GeoTIFF", I::Tif, "Ctrl+E");
-    makeAction("plan", QStringLiteral("평면 GeoTIFF"), "Plan GeoTIFF", I::Geo);
-    makeAction("xyz", QStringLiteral("점군 XYZ"), "Points XYZ", I::Xyz);
-    makeAction("las", QStringLiteral("점군 LAS"), "Points LAS", I::Las);
-    makeAction("csv", QStringLiteral("단면선 CSV"), "Profile CSV", I::Csv);
-    action("smooth")->setChecked(QSettings().value("section/smooth", false).toBool());
-    action("fade")->setChecked(QSettings().value("section/depthFade", true).toBool());
-
-    auto* central = new QWidget; central->setObjectName("central");
-    auto* v = new QVBoxLayout(central); v->setContentsMargins(0, 0, 0, 0); v->setSpacing(0);
-    v->addWidget(buildRibbon());
-
-    plan_ = new PlanView; section_ = new SectionView;
-    auto mkBar = [&](std::initializer_list<QAction*> acts) {
-        auto* bar = new QWidget; auto* h = new QHBoxLayout(bar); h->setContentsMargins(4, 1, 4, 1); h->setSpacing(1);
-        for (QAction* a : acts) {
-            if (!a) { auto* s = new QFrame; s->setObjectName("groupSep"); s->setFixedHeight(18); h->addSpacing(3); h->addWidget(s); h->addSpacing(3); continue; }
-            h->addWidget(smallButton(a, false));
-        }
-        h->addStretch();
-        return bar;
-    };
-    QAction* fitPlan = new QAction(theme::icon(I::Fit), QStringLiteral("맞춤 (Fit)"), this);
-    QAction* zinPlan = new QAction(theme::icon(I::ZoomIn), QStringLiteral("확대 (Zoom In)"), this);
-    QAction* zoutPlan = new QAction(theme::icon(I::ZoomOut), QStringLiteral("축소 (Zoom Out)"), this);
-    QAction* fitSec = new QAction(theme::icon(I::Fit), QStringLiteral("맞춤 (Fit)"), this);
-    QAction* zinSec = new QAction(theme::icon(I::ZoomIn), QStringLiteral("확대 (Zoom In)"), this);
-    QAction* zoutSec = new QAction(theme::icon(I::ZoomOut), QStringLiteral("축소 (Zoom Out)"), this);
-    auto* barPlan = mkBar({fitPlan, zinPlan, zoutPlan, action("top"), nullptr, action("draw"), action("flip"), action("clear"), nullptr, action("plan"), action("xyz")});
-    auto* barSec = mkBar({fitSec, zinSec, zoutSec, nullptr, action("image"), action("line"), action("levels"), action("fade"), action("smooth"), nullptr, action("dxf"), action("secimg"), action("csv")});
-    QWidget *t1 = nullptr, *t2 = nullptr;
-    planFrame_ = buildViewFrame(1, QStringLiteral("평면"), "Top", plan_, barPlan, &t1);
-    sectionFrame_ = buildViewFrame(2, QStringLiteral("단면"), "Section", section_, barSec, &t2);
-    split_ = new QSplitter(Qt::Horizontal);
-    split_->addWidget(planFrame_); split_->addWidget(sectionFrame_);
-    split_->setStretchFactor(0, 5); split_->setStretchFactor(1, 6);
-    split_->setChildrenCollapsible(false);
-    auto* wrap = new QWidget; auto* wl = new QVBoxLayout(wrap); wl->setContentsMargins(4, 4, 4, 4);
-    srsBanner_ = new QLabel; srsBanner_->setWordWrap(true); srsBanner_->setVisible(false); srsBanner_->setTextFormat(Qt::RichText);
-    srsBanner_->setStyleSheet("QLabel{background:#FFF4C2;color:#5A4500;border:1px solid #E0C050;padding:4px 8px;}");
-    srsBanner_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
-    wl->addWidget(srsBanner_, 0);
-    wl->addWidget(split_, 1);
-    v->addWidget(wrap, 1);
-    v->addWidget(buildCoordBar());
-    setCentralWidget(central);
-    retranslate();
-    tabs_->setCurrentIndex(1);
-
-    front_->setValue(QSettings().value("section/front", 0.0).toDouble());
-    back_->setValue(QSettings().value("section/back", 0.5).toDouble());
-    plan_->setBand(front_->value(), back_->value());
-    if (auto g = QSettings().value("ui/geometry").toByteArray(); !g.isEmpty()) restoreGeometry(g);
-    else resize(1500, 900);
-
-    // ---- 연결 ----
-    QObject::connect(action("open"), &QAction::triggered, this, [this] { chooseOpen(); });
-    QObject::connect(action("close"), &QAction::triggered, this, [this] { closeScene(); });
-    QObject::connect(action("about"), &QAction::triggered, this, [this] { dlgAbout(); });
-    QObject::connect(action("quit"), &QAction::triggered, this, [this] { close(); });
-    QObject::connect(action("draw"), &QAction::toggled, this, [this](bool on) { if (plan_->drawMode() != on) plan_->setDrawMode(on); if (on) showStatus(QStringLiteral("평면에서 A 점을 클릭하세요 (Esc 취소)")); });
-    plan_->onDrawModeChanged = [this](bool on) { action("draw")->setChecked(on); if (!on && plan_->hasLine()) showStatus(QString()); };
-    QObject::connect(action("flip"), &QAction::triggered, this, [this] {
-        if (!plan_->hasLine()) return;
-        SectionLine l = plan_->line(); std::swap(l.a, l.b);
-        plan_->setLine(l, true); requestSection(true);
-    });
-    QObject::connect(action("clear"), &QAction::triggered, this, [this] { plan_->setLine(SectionLine(), false); section_->clear(); last_ = SectionOutput(); updateEnabled(); });
-    QObject::connect(action("fit"), &QAction::triggered, this, [this] { plan_->fitAll(); section_->fit(); section_->update(); });
-    QObject::connect(action("top"), &QAction::triggered, this, [this] { plan_->topView(); });
-    QObject::connect(action("zoomin"), &QAction::triggered, this, [this] { plan_->zoomBy(1 / 1.4); section_->zoomBy(1.4); });
-    QObject::connect(action("zoomout"), &QAction::triggered, this, [this] { plan_->zoomBy(1.4); section_->zoomBy(1 / 1.4); });
-    QObject::connect(fitPlan, &QAction::triggered, this, [this] { plan_->fitAll(); });
-    QObject::connect(zinPlan, &QAction::triggered, this, [this] { plan_->zoomBy(1 / 1.4); });
-    QObject::connect(zoutPlan, &QAction::triggered, this, [this] { plan_->zoomBy(1.4); });
-    QObject::connect(fitSec, &QAction::triggered, this, [this] { section_->fit(); section_->update(); });
-    QObject::connect(zinSec, &QAction::triggered, this, [this] { section_->zoomBy(1.4); });
-    QObject::connect(zoutSec, &QAction::triggered, this, [this] { section_->zoomBy(1 / 1.4); });
-    for (const char* k : {"image", "line", "levels"})
-        QObject::connect(action(k), &QAction::toggled, this, [this](bool) { section_->setStyle(secStyle()); });
-    QObject::connect(opacity_, &QSlider::valueChanged, this, [this](int) { section_->setStyle(secStyle()); });
-    QObject::connect(action("smooth"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/smooth", on); requestSection(true); });
-    QObject::connect(action("fade"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/depthFade", on); section_->setStyle(secStyle()); requestSection(true); });
-    QObject::connect(action("info"), &QAction::triggered, this, [this] { dlgInfo(); });
-    QObject::connect(action("height"), &QAction::triggered, this, [this] { dlgHeightDatum(); });
-    QObject::connect(action("view1"), &QAction::toggled, this, [this](bool on) {
-        if (!on && !action("view2")->isChecked()) { action("view1")->setChecked(true); return; }
-        planFrame_->setVisible(on); viewNum_[0]->setChecked(on);
-    });
-    QObject::connect(action("view2"), &QAction::toggled, this, [this](bool on) {
-        if (!on && !action("view1")->isChecked()) { action("view2")->setChecked(true); return; }
-        sectionFrame_->setVisible(on); viewNum_[1]->setChecked(on);
-    });
-    QObject::connect(action("dxf"), &QAction::triggered, this, [this] { dlgSectionDxf(); });
-    QObject::connect(action("secimg"), &QAction::triggered, this, [this] { dlgSectionImage(); });
-    QObject::connect(action("plan"), &QAction::triggered, this, [this] { dlgPlan(); });
-    QObject::connect(action("xyz"), &QAction::triggered, this, [this] { dlgPoints(0); });
-    QObject::connect(action("las"), &QAction::triggered, this, [this] { dlgPoints(1); });
-    QObject::connect(action("csv"), &QAction::triggered, this, [this] { dlgProfileCsv(); });
-    auto bandChanged = [this] {
-        plan_->setBand(front_->value(), back_->value());
-        QSettings().setValue("section/front", front_->value()); QSettings().setValue("section/back", back_->value());
-        if (plan_->hasLine()) { SectionLine l = plan_->line(); l.front = front_->value(); l.back = back_->value(); plan_->setLine(l, true); requestSection(true); }
-    };
-    QObject::connect(front_, &QDoubleSpinBox::valueChanged, this, bandChanged);
-    QObject::connect(back_, &QDoubleSpinBox::valueChanged, this, bandChanged);
-
-    plan_->onLineChanged = [this](const SectionLine&, bool final) { requestSection(final); updateEnabled(); };
-    plan_->onOpenRequest = [this] { chooseOpen(); };
-    auto fmt = [](double v, int dec) { return QString::number(v, 'f', dec); };
-    plan_->onCursor = [this, fmt](double X, double Y, double Z, bool hasZ, bool valid) {
-        if (!valid) { cx_->clear(); cy_->clear(); cz_->clear(); pickFloorGen_ = pickWorker_->cancelAll(); showZSource(ZSource::None, QString()); return; }
-        // 즉시: 화면용 거친 메시(대략값). 이어서 잎 메시 정밀 피킹 결과로 바꿈
-        cx_->setText(fmt(X, 3)); cy_->setText(fmt(Y, 3)); cz_->setText(hasZ ? fmt(Z, 3) : QStringLiteral("—"));
-        showZSource(hasZ ? ZSource::Coarse : ZSource::None, QStringLiteral("정밀 피킹 계산 중…"));
-        requestPick(plan_->lastMousePos());
-    };
-    section_->onCursor = [this, fmt](double s, double zAbs, double X, double Y, bool valid) {
-        if (!valid) { cx_->clear(); cy_->clear(); cz_->clear(); msg_->clear(); return; }
-        cx_->setText(fmt(X, 3)); cy_->setText(fmt(Y, 3)); cz_->setText(fmt(zAbs, 3));
-        showZSource(ZSource::SectionCursor, QStringLiteral("단면 화면의 커서 위치(s, z)입니다. 표면을 피킹한 값이 아닙니다."));
-        msg_->setText(QStringLiteral("단면 거리 %1 m · 표고 %2 m").arg(fmt(s, 3), fmt(zAbs, 3)));
-    };
-    secWorker_ = std::make_unique<CoalescingWorker>();
-    pickWorker_ = std::make_unique<CoalescingWorker>();
-    updateEnabled();
-}
+// 리본·창 구성·생성자는 mainwindow_ui.cpp
 
 MainWindow::~MainWindow() {
+    if (undo_) { QObject::disconnect(undo_, nullptr, this, nullptr); delete undo_; undo_ = nullptr; }   // 동작 표(act_)보다 먼저
     pickWorker_.reset();
     secWorker_.reset();  // 실행 중인 단면 취소 + 합류
     cancelTask_ = true;
@@ -552,6 +185,7 @@ MainWindow::~MainWindow() {
 
 void MainWindow::closeEvent(QCloseEvent* e) {
     QSettings().setValue("ui/geometry", saveGeometry());
+    saveModelState();
     if (taskBusy_) {
         if (QMessageBox::question(this, windowTitle(), QStringLiteral("작업이 진행 중입니다. 중단하고 끝낼까요?")) != QMessageBox::Yes) { e->ignore(); return; }
         cancelTask_ = true;
@@ -568,6 +202,7 @@ SectionStyle MainWindow::secStyle() const {
     s.showImage = action("image")->isChecked(); s.showLine = action("line")->isChecked(); s.showLevels = action("levels")->isChecked();
     s.imageOpacity = opacity_->value() / 100.0;
     s.depthFade = action("fade")->isChecked();
+    s.lineWidthPx = QSettings().value("view/sectionLineWidth", 2.0).toDouble() * (highContrast_ ? 1.5 : 1.0);
     return s;
 }
 
@@ -588,9 +223,12 @@ void MainWindow::setProgress(double f) {
 void MainWindow::updateEnabled() {
     bool sc = bool(src_), sec = section_->hasResult(), busy = taskBusy_;
     for (const char* k : {"draw", "fit", "top", "zoomin", "zoomout", "plan", "xyz", "las", "close", "height"}) action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
-    for (const char* k : {"flip", "clear"}) action(k)->setEnabled(sc && plan_->hasLine());
-    for (const char* k : {"dxf", "secimg", "csv", "info"}) action(k)->setEnabled(sec && !busy);
-    action("open")->setEnabled(!busy);
+    for (const char* k : {"flip", "clear", "move"}) action(k)->setEnabled(sc && plan_->hasLine());
+    for (const char* k : {"dxf", "secimg", "csv", "info", "sheet"}) action(k)->setEnabled(sec && !busy);
+    for (const char* k : {"addsec", "secjson", "secimport", "image", "line", "levels", "fade", "smooth", "listpanel"}) action(k)->setEnabled(sc && !busy);
+    for (QWidget* wd : {static_cast<QWidget*>(front_), static_cast<QWidget*>(back_)}) wd->setEnabled(sc);
+    for (auto* c : depthChip_) if (c) c->setEnabled(sc);
+    action("open")->setEnabled(!busy); action("recent")->setEnabled(!busy && !recentFiles().isEmpty());
 }
 
 void MainWindow::runTask(const QString& what, std::function<bool(QString*)> work, std::function<void(bool, const QString&)> done) {
@@ -661,24 +299,40 @@ void MainWindow::applyScene(OpenedScene&& s) {
     refreshSrs();
     info_->setText(streaming_ ? QStringLiteral("%1%2 · LOD 스트리밍").arg(kind_, s.layers > 1 ? QStringLiteral(" · 레이어 %1개").arg(s.layers) : QString())
                               : QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
-    setWindowTitle(QStringLiteral("%1 — 발굴 단면뷰어").arg(QFileInfo(path_).fileName()));
+    setWindowTitle(QStringLiteral("%1 — 발굴 단면뷰어 %2").arg(QFileInfo(path_).fileName(), QString::fromUtf8(kVersion)));
+    showStart(false);
+    addRecent(path_);
+    restoreModelState();
     QString note = srsReport_.desc.heightDeclared ? QStringLiteral(" · 높이 기준 %1 (%2 — 값 변환 없음, 바꾸려면 「높이 기준 지정」)").arg(qs(vdatumInfo(srsReport_.desc.vdatum).shortName), heightNote_)
                  : srsReport_.desc.vertKind == VertKind::Ellipsoidal ? QStringLiteral(" · 높이 '타원체고' 표기 — 측량값을 그대로 넣었다면 「높이 기준 지정」으로 측량 높이 기준(예: EGM96) 지정")
                  : srsReport_.desc.vertKind == VertKind::Unspecified ? QStringLiteral(" · 높이 기준이 SRS 에 없음 — 기준점과 대조하세요") : QString();
-    showStatus(QStringLiteral("열림. 「단면선 그리기」(S)로 A, A′ 두 점을 찍으세요") + note);
+    showStatus(plan_->hasLine() ? QStringLiteral("마지막 단면선을 되살렸습니다 — 다음: 뒤 깊이(1–5) 또는 Ctrl+P 도면")
+                                : QStringLiteral("열림. 다음: 「단면선」(S)으로 평면에서 시작점 A, 끝점 A′ 를 클릭하세요"));
+    msg_->setToolTip(QStringLiteral("열림") + note);
     updateEnabled();
+    updateHeader();
+    saveModelState();
+    plan_->setFocus();
 }
 
 void MainWindow::closeScene() {
     if (taskBusy_) return;
+    saveModelState();
+    if (plan_->drawMode()) plan_->setDrawMode(false);
     secFloorGen_ = secWorker_->cancelAll();
     pickFloorGen_ = pickWorker_->cancelAll();
     src_.reset();
     plan_->clearScene(); section_->clear(); last_ = SectionOutput();
-    srsLabel_->setText(QStringLiteral("좌표계 —")); srsLabel_->setToolTip(QString()); srsLabel_->setStyleSheet(QString()); info_->clear();
-    srsBanner_->setVisible(false); srsReport_ = SrsReport();
-    setWindowTitle(QStringLiteral("발굴 단면뷰어"));
+    srsLabel_->setText(QStringLiteral("좌표계 —")); srsLabel_->setToolTip(QString()); srsLabel_->setProperty("state", QString()); info_->clear();
+    srsLabel_->style()->unpolish(srsLabel_); srsLabel_->style()->polish(srsLabel_);
+    notice_->setVisible(false); srsReport_ = SrsReport();
+    src_.reset(); path_.clear();
+    sections_.clear(); thumbs_.clear(); current_ = -1; refreshSectionList();
+    undo_->clear();
+    setWindowTitle(QStringLiteral("발굴 단면뷰어 %1").arg(QString::fromUtf8(kVersion)));
+    showStart(true);
     updateEnabled();
+    updateHeader();
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
@@ -740,18 +394,25 @@ void MainWindow::onSectionDone(SectionOutput&& out, uint64_t gen, bool final, co
     (final ? secCounters_.finalsShown : secCounters_.previewsShown)++;
     secCounters_.lastMs = last_.msCollect + last_.msCut + last_.msImage; secCounters_.lastTris = last_.stats.triangles;
     section_->setStyle(secStyle());
-    section_->setResult(last_.result, toQImage(last_.image.img), last_.image.s0, last_.image.z1, last_.image.res, true);
+    section_->setResult(last_.result, toQImage(last_.image.img), last_.image.s0, last_.image.z1, last_.image.res, !fitNextResult_);
+    if (fitNextResult_ && final) fitNextResult_ = false;
     section_->setBusy(!(final && newest));
     size_t nv = 0, nClosed = 0;
     for (auto& pl : last_.result.profile) { nv += pl.size(); if (pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9) ++nClosed; }
     double L = SectionFrame(last_.result.line).L;
-    showStatus(QStringLiteral("%9 단면 %1 m · %10 %2 · 삼각형 %3 · 윤곽 %4개(닫힘 %5) %6점 · %7 ms%8")
+    const QString detail = (QStringLiteral("%9 단면 %1 m · %10 %2 · 삼각형 %3 · 윤곽 %4개(닫힘 %5) %6점 · %7 ms%8")
                    .arg(L, 0, 'f', 2).arg(last_.stats.leafNodes).arg(last_.stats.triangles).arg(last_.result.profile.size()).arg(nClosed).arg(nv)
                    .arg(int(last_.msCollect + last_.msCut + last_.msImage))
                    .arg(last_.stats.fallbackNodes ? QStringLiteral(" · 상위 LOD 대체 %1").arg(last_.stats.fallbackNodes) : QString())
                    .arg(last_.previewLod ? QStringLiteral("[미리보기·거친 LOD]") : QStringLiteral("[최종·잎]"))
                    .arg(last_.previewLod ? QStringLiteral("타일") : QStringLiteral("잎 타일")));
+    if (final && newest) {
+        showStatus(QStringLiteral("%1 단면 %2 m 완료 — 다음: Ctrl+P 「도면」, 숫자키 1–5 뒤 깊이, [ ] 평행 이동").arg(sectionName()).arg(L, 0, 'f', 2));
+        if (current_ >= 0) { thumbs_[current_] = makeThumb(); refreshSectionList(); }
+    } else showStatus(QStringLiteral("미리보기(거친 LOD) — 최종(잎) 계산 중…"));
+    msg_->setToolTip(detail);
     updateEnabled();
+    updateHeader();
 }
 
 bool MainWindow::computeNow(const SectionLine& line, QString* err) {
@@ -763,6 +424,7 @@ bool MainWindow::computeNow(const SectionLine& line, QString* err) {
     SectionOutput out; std::string e;
     if (!computeSection(*src_, makeRequest(l, action("smooth")->isChecked(), true, action("fade")->isChecked()), out, &e)) { if (err) *err = qs(e); return false; }
     onSectionDone(std::move(out), g, true, QString());
+    syncCurrentSection();
     return true;
 }
 
@@ -1233,15 +895,24 @@ void MainWindow::dlgAbout() {
 void MainWindow::applySrsReport() {
     const SrsReport& r = srsReport_;
     bool warn = !r.warnings.empty();
-    srsLabel_->setText((warn ? QStringLiteral("⚠ ") : QString()) + qs(r.labelKo));
+    // 상태줄: 수평 좌표계만 짧게(높이는 옆 배지). 경고는 한 줄 알림 띠(「자세히」에 전체)
+    const SrsDesc& d = r.desc;
+    QString hz = d.horizontalEpsg ? QStringLiteral("EPSG:%1").arg(d.horizontalEpsg) : (d.known() ? qs(d.shortAscii()) : QStringLiteral("좌표계 없음"));
+    srsLabel_->setText(hz);
     srsLabel_->setToolTip(qs(r.tooltipKo));
-    srsLabel_->setStyleSheet(warn ? QStringLiteral("QLabel{background:#FFF4C2;color:#5A4500;padding:0 4px;}") : QString());
+    srsLabel_->setProperty("state", !d.known() ? "error" : (warn ? "warn" : "ok"));
+    srsLabel_->style()->unpolish(srsLabel_); srsLabel_->style()->polish(srsLabel_);
     if (warn) {
-        QString html = QStringLiteral("<b>좌표계 확인 필요</b> — %1").arg(qs(r.labelKo).toHtmlEscaped());
-        for (auto& w : r.warnings) html += QStringLiteral("<br>⚠ ") + qs(w).toHtmlEscaped();
-        srsBanner_->setText(html);
+        QString first = qs(r.warnings.front()).section('\n', 0, 0);
+        if (int dot = first.indexOf(QStringLiteral("니다.")); dot > 0) first = first.left(dot + 3);   // 첫 문장만(전체는 「자세히」)
+        noticeText_->setText(QStringLiteral("<b>%1</b> &nbsp;%2%3").arg(d.known() ? QStringLiteral("좌표계 확인") : QStringLiteral("좌표계 없음"),
+            first.toHtmlEscaped(), r.warnings.size() > 1 ? QStringLiteral(" <span style='color:#5E5D59'>(외 %1건)</span>").arg(r.warnings.size() - 1) : QString()));
+        noticeText_->setToolTip(qs(r.labelKo));
+        notice_->setProperty("level", d.known() ? "caution" : "block");
+        notice_->style()->unpolish(notice_); notice_->style()->polish(notice_);
     }
-    srsBanner_->setVisible(warn);
+    notice_->setVisible(warn);
+    updateHeader();
 }
 
 // ---------------------------------------------------------------- 높이 기준 지정(이름표만, 값 변환 없음)
@@ -1297,6 +968,8 @@ void MainWindow::dlgHeightDatum() {
     int i = int(items.indexOf(pick));
     if (i < 0) return;
     setHeightDeclaration(vals[size_t(i)], true);
+    commitState(QStringLiteral("높이 기준"));
+    saveModelState();
 }
 
 // ---------------------------------------------------------------- 커서 정밀 Z(잎 메시, CPU double)
@@ -1323,10 +996,11 @@ void MainWindow::requestPick(const QPointF& screen) {
 
 void MainWindow::showZSource(ZSource s, const QString& detail) {
     QString v = qs(srsReport_.desc.verticalKo());
-    QString t = s == ZSource::None ? QStringLiteral("Z —") : QStringLiteral("Z: %1").arg(qs(zSourceKo(s)));
-    zSrc_->setText(t);
+    const char* shortK = s == ZSource::LeafSurface ? "잎 표면" : s == ZSource::LeafWithFallback ? "표면·일부 대체" : s == ZSource::Coarse ? "대략" : s == ZSource::SectionCursor ? "단면 커서" : "—";
+    zSrc_->setText(s == ZSource::None ? QStringLiteral("—") : QString::fromUtf8(shortK));
     bool coarse = s == ZSource::Coarse || s == ZSource::LeafWithFallback;
-    zSrc_->setStyleSheet(coarse ? QStringLiteral("QLabel{color:#9A6A00;}") : QString());
+    zSrc_->setProperty("coarse", coarse);
+    zSrc_->style()->unpolish(zSrc_); zSrc_->style()->polish(zSrc_);
     QString tip = QStringLiteral("Z 출처: %1\n높이 기준: %2 (모델 SRS 그대로, 변환 없음)").arg(qs(zSourceKo(s)), v);
     if (!detail.isEmpty()) tip += "\n" + detail;
     if (srsReport_.precisionWarning) tip += QStringLiteral("\n⚠ 로컬 좌표가 커서 메시 좌표 간격이 약 %1 mm 입니다(float32).").arg(srsReport_.float32StepMm, 0, 'f', 1);
@@ -1334,5 +1008,5 @@ void MainWindow::showZSource(ZSource s, const QString& detail) {
 }
 
 QString MainWindow::cursorText() const {
-    return QStringLiteral("X=%1 Y=%2 Z=%3 [%4]").arg(cx_->text(), cy_->text(), cz_->text(), zSrc_->text());
+    return QStringLiteral("X=%1 Y=%2 Z=%3 [Z: %4]").arg(cx_->text(), cy_->text(), cz_->text(), zSrc_->text());
 }

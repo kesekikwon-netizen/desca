@@ -55,6 +55,8 @@ public:
     bool streamIdle() const { return !streamer_ || lastFrame_.idle; }
     bool streaming() const { return bool(streamer_); }
     void setCamera(double cx, double cy, double mpp);  // 로컬 XY 중심 + m/px(위에서 보기)
+    double cameraX() const { return double(target_.x()) + center_.x; }
+    double cameraY() const { return double(target_.y()) + center_.y; }
     static size_t gpuBudgetBytes();
     QByteArray glRenderer() const { return glRenderer_; }
 
@@ -84,6 +86,10 @@ public:
     std::function<void(double X, double Y, double Z, bool hasZ, bool valid)> onCursor;  // 실좌표
     std::function<void(bool)> onDrawModeChanged;
     std::function<void()> onOpenRequest;
+    std::function<void(int stage, const asec::SectionLine&)> onDrawProgress;   // 그리는 중(0 A 대기, 1 A′ 대기): 지금 도구 줄 길이·방위
+    /// 좌표 입력(Enter)으로 A·A′ 를 정해 그리기 끝내기(로컬 XY)
+    void finishDrawAt(const asec::SectionLine& l);
+    int drawStage() const { return drawStage_; }
 
 protected:
     void initializeGL() override;
@@ -161,5 +167,7 @@ private:
     double refZ() const;
     void paintOverlay(QPainter& p);
     void paintEmpty(QPainter& p);
+    void paintLodCard(QPainter& p);
+    asec::Vec2 lockAxis(const asec::Vec2& w, Qt::KeyboardModifiers m) const;
     void emitLine(bool final) { if (onLineChanged && hasLine_) onLineChanged(line_, final); }
 };
