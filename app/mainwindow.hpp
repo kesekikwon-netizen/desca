@@ -38,6 +38,8 @@ struct OpenedScene {
     asec::Box3 bounds;
     size_t displayTris = 0, displayMeshes = 0;
     QString kind;  // "3MX" / "OBJ"
+    size_t layers = 1;                   // 3MX meshPyramid 레이어 수(병합 3MX > 1)
+    std::vector<std::string> warnings;   // 열기 경고(레이어 제외 등)
 };
 
 struct SectionExportParams { int format = 0; double denom = 20, dpi = 300; };  // format 0 PNG 1 TIFF 2 GeoTIFF

@@ -1,6 +1,8 @@
 #include "asec/tmx.hpp"
 #include "asec/obj.hpp"
 
+#include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include "json.hpp"
@@ -104,23 +106,54 @@ bool readTmxScene(const fs::path& file3mx, TmxScene& out, std::string* err) {
     out.name = j.value("name", "");
     out.description = j.value("description", "");
     if (!j.contains("layers") || !j["layers"].is_array()) { setErr(err, "3MX: layers 없음"); return false; }
+    size_t nPyr = 0;
     for (auto& L : j["layers"]) {
-        if (L.value("type", "") != "meshPyramid") continue;
-        if (L.contains("SRS") && L["SRS"].is_string()) out.srs.srs = L["SRS"].get<std::string>();
+        if (!L.is_object() || L.value("type", "") != "meshPyramid") continue;
+        ++nPyr;
+        TmxLayer ly;
+        ly.id = L.value("id", "");
+        ly.name = L.value("name", "");
+        if (L.contains("SRS") && L["SRS"].is_string()) ly.srs.srs = L["SRS"].get<std::string>();
         if (L.contains("SRSOrigin") && L["SRSOrigin"].is_array() && L["SRSOrigin"].size() == 3) {
-            out.srs.origin = Vec3(L["SRSOrigin"][0].get<double>(), L["SRSOrigin"][1].get<double>(), L["SRSOrigin"][2].get<double>());
-            out.srs.hasOrigin = true;
+            try {
+                ly.srs.origin = Vec3(L["SRSOrigin"][0].get<double>(), L["SRSOrigin"][1].get<double>(), L["SRSOrigin"][2].get<double>());
+                ly.srs.hasOrigin = true;
+            } catch (std::exception&) {}
         }
         std::string root = L.value("root", "");
-        if (root.empty()) continue;
-        out.rootFile = (file3mx.parent_path() / fs::u8path(root)).lexically_normal();
-        if (out.name.empty()) out.name = L.value("name", "");
-        SrsInfo meta;
-        if (findMetadataXml(file3mx, meta)) out.srs.metadataSrs = meta.srs;
-        return true;
+        if (root.empty()) { out.warnings.push_back("레이어 '" + ly.name + "' 에 root 가 없어 건너뜁니다."); continue; }
+        ly.rootFile = (file3mx.parent_path() / fs::u8path(root)).lexically_normal();
+        if (out.layers.empty()) {
+            out.srs = ly.srs;
+            out.rootFile = ly.rootFile;
+            if (out.name.empty()) out.name = ly.name;
+            out.layers.push_back(ly);
+            continue;
+        }
+        bool dup = false;
+        for (auto& o : out.layers) dup = dup || o.rootFile == ly.rootFile;
+        if (dup) continue;
+        // 병합 3MX: SRS·원점이 첫 레이어와 같아야 같은 로컬 좌표를 공유한다(Bentley 병합 규칙)
+        SrsDesc d0 = out.srs.describe(), d1 = ly.srs.describe();
+        bool sameSrs = ly.srs.srs == out.srs.srs ||
+                       (d0.known() && d1.known() && d0.horizontalEpsg && d0.horizontalEpsg == d1.horizontalEpsg && d0.vertKind == d1.vertKind && d0.verticalEpsg == d1.verticalEpsg);
+        Vec3 dO = ly.srs.origin - out.srs.origin;
+        bool sameOrigin = ly.srs.hasOrigin == out.srs.hasOrigin && std::fabs(dO.x) < 1e-6 && std::fabs(dO.y) < 1e-6 && std::fabs(dO.z) < 1e-6;
+        if (!sameSrs || !sameOrigin) {
+            out.skippedLayers++;
+            char b2[160];
+            std::snprintf(b2, sizeof b2, " (원점 %.3f, %.3f, %.3f)", ly.srs.origin.x, ly.srs.origin.y, ly.srs.origin.z);
+            out.warnings.push_back("레이어 '" + ly.name + "' 는 " + (!sameSrs ? "좌표계(" + d1.shortAscii() + ")" : std::string("SRSOrigin") + b2) +
+                                   " 가 첫 레이어와 달라 열지 않았습니다(첫 레이어 기준으로만 표시).");
+            continue;
+        }
+        out.layers.push_back(ly);
     }
-    setErr(err, "3MX: meshPyramid 레이어 없음");
-    return false;
+    if (out.layers.empty()) { setErr(err, nPyr ? "3MX: 읽을 수 있는 meshPyramid 레이어 없음" : "3MX: meshPyramid 레이어 없음"); return false; }
+    SrsInfo meta;
+    if (findMetadataXml(file3mx, meta)) out.srs.metadataSrs = meta.srs;
+    for (auto& l : out.layers) l.srs.metadataSrs = out.srs.metadataSrs;
+    return true;
 }
 
 bool readTmxTile(const fs::path& p, TmxTile& t, std::string* err) {
@@ -236,6 +269,21 @@ bool writeTmxTile(const fs::path& p, const std::vector<TmxWriteNode>& nodes, std
         h["nodes"].push_back(jn);
     }
     return writeAll(p, h.dump(), bufs, err);
+}
+
+bool writeTmxSceneLayers(const fs::path& p, const std::string& name, const std::vector<TmxWriteLayer>& layers, std::string* err) {
+    json j;
+    j["3mxVersion"] = 1; j["name"] = name; j["description"] = "archsection merged"; j["logo"] = "";
+    j["sceneOptions"] = json::array({json{{"navigation_mode", "PAN"}}});
+    j["layers"] = json::array();
+    int k = 0;
+    for (auto& l : layers)
+        j["layers"].push_back({{"type", "meshPyramid"}, {"id", "mesh" + std::to_string(k++)}, {"name", l.name}, {"description", ""}, {"SRS", l.srs.srs},
+                               {"SRSOrigin", {l.srs.origin.x, l.srs.origin.y, l.srs.origin.z}}, {"root", l.rootRelative}});
+    std::ofstream f(p, std::ios::binary);
+    if (!f) { setErr(err, "쓸 수 없음: " + p.u8string()); return false; }
+    f << j.dump(2);
+    return bool(f);
 }
 
 bool writeTmxScene(const fs::path& p, const std::string& name, const SrsInfo& srs, const std::string& rootRel, std::string* err) {

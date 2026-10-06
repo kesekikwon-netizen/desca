@@ -47,10 +47,20 @@ SrsReport analyzeSrs(const SrsInfo& s, const Box3& localBounds);
 /// float32 로 v(m)를 저장할 때 간격(m)
 double float32Step(double v);
 
+struct TmxLayer {
+    std::string id, name;
+    SrsInfo srs;
+    fs::path rootFile;  // 이 레이어의 최상위 .3mxb 절대 경로
+};
+
 struct TmxScene {
     std::string name, description;
-    SrsInfo srs;
-    fs::path rootFile;  // 최상위 .3mxb 절대 경로
+    SrsInfo srs;                       // 첫(사용) 레이어의 SRS
+    fs::path rootFile;                 // 첫 레이어 루트(호환용)
+    std::vector<TmxLayer> layers;      // 사용하는 meshPyramid 레이어 전부(병합 3MX = 여러 개). SRS·원점이 첫 레이어와 같은 것만
+    size_t skippedLayers = 0;          // SRS·원점이 달라 뺀 레이어 수
+    std::vector<std::string> warnings; // 사용자 경고(한국어)
+    std::vector<fs::path> roots() const { std::vector<fs::path> r; for (auto& l : layers) r.push_back(l.rootFile); return r; }
 };
 
 struct TmxNode {
@@ -99,6 +109,9 @@ struct TmxWriteNode {
 };
 bool writeTmxTile(const fs::path& file3mxb, const std::vector<TmxWriteNode>& nodes, std::string* err);
 bool writeTmxScene(const fs::path& file3mx, const std::string& name, const SrsInfo& srs, const std::string& rootRelative, std::string* err);
+/// 병합 3MX(레이어 여러 개) 쓰기 — 시험·도구용. 각 레이어: 이름, SRS, 루트(.3mx 기준 상대 경로)
+struct TmxWriteLayer { std::string name; SrsInfo srs; std::string rootRelative; };
+bool writeTmxSceneLayers(const fs::path& file3mx, const std::string& name, const std::vector<TmxWriteLayer>& layers, std::string* err);
 
 /// 파일 전체 읽기(유니코드 경로 안전)
 bool readFileBytes(const fs::path& p, std::vector<uint8_t>& out);

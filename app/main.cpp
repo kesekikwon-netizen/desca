@@ -91,6 +91,7 @@ int main(int argc, char** argv) {
     log(QStringLiteral("open-ok: %1 kind=%2 displayTris=%3 srs=%4 origin=%5,%6,%7 ms=%8").arg(file, sc.kind).arg(sc.displayTris)
             .arg(QString::fromStdString(sc.src->srs.shortLabel())).arg(sc.src->srs.origin.x, 0, 'f', 3).arg(sc.src->srs.origin.y, 0, 'f', 3).arg(sc.src->srs.origin.z, 0, 'f', 3)
             .arg(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(), 0, 'f', 0));
+    log(QStringLiteral("layers=%1 open-warnings=%2").arg(sc.layers).arg(sc.warnings.size()));
     auto tApply = std::chrono::steady_clock::now();
     auto msSince = [](std::chrono::steady_clock::time_point t) { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count(); };
     w.applyScene(std::move(sc));

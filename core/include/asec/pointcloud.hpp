@@ -30,7 +30,11 @@ bool exportPoints(const std::function<bool(const std::function<bool(const MeshPt
                   const std::function<void(size_t)>& progress = {});
 
 /// 3MX 편의 함수
-bool exportPointsTmx(TileCache& cache, const fs::path& root, const SrsInfo& srs, const PointExportOptions& o, const fs::path& out,
+bool exportPointsTmx(TileCache& cache, const std::vector<fs::path>& roots, const SrsInfo& srs, const PointExportOptions& o, const fs::path& out,
                      PointExportStats* st, std::string* err, const std::atomic<bool>* cancel = nullptr, const std::function<void(size_t)>& progress = {});
+inline bool exportPointsTmx(TileCache& cache, const fs::path& root, const SrsInfo& srs, const PointExportOptions& o, const fs::path& out,
+                            PointExportStats* st, std::string* err, const std::atomic<bool>* cancel = nullptr, const std::function<void(size_t)>& progress = {}) {
+    return exportPointsTmx(cache, std::vector<fs::path>{root}, srs, o, out, st, err, cancel, progress);
+}
 
 }  // namespace asec

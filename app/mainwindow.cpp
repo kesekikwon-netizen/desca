@@ -132,12 +132,14 @@ bool MainWindow::loadScene(const QString& path, OpenedScene& out, QString* err, 
         auto s = std::make_shared<TmxSource>();
         s->cache->textureDecoder = decodeTextureFull;
         if (!s->open(p, &e)) { if (err) *err = qs(e); return false; }
-        out.streamRoots = {s->scene.rootFile};
+        out.streamRoots = s->scene.roots();   // 병합 3MX: 레이어 전부
+        out.layers = s->scene.layers.size();
+        out.warnings = s->scene.warnings;
         // 커서 Z 용 거친 메시: 루트 타일 노드(지오메트리만, 텍스처 디코드 없음)
         Box3 bb;
-        {
+        for (auto& root : out.streamRoots) {
             TmxTile rt;
-            if (readTmxTile(s->scene.rootFile, rt, &e))
+            if (readTmxTile(root, rt, &e))
                 for (size_t i = 0; i < rt.nodes.size(); ++i)
                     if (decodeNode(rt, i, &e)) for (auto& m : rt.nodes[i].meshes) { disp.push_back(m); bb.add(m->bbox); }
         }
@@ -417,8 +419,9 @@ MainWindow::MainWindow() {
     auto* wrap = new QWidget; auto* wl = new QVBoxLayout(wrap); wl->setContentsMargins(4, 4, 4, 4);
     srsBanner_ = new QLabel; srsBanner_->setWordWrap(true); srsBanner_->setVisible(false); srsBanner_->setTextFormat(Qt::RichText);
     srsBanner_->setStyleSheet("QLabel{background:#FFF4C2;color:#5A4500;border:1px solid #E0C050;padding:4px 8px;}");
-    wl->addWidget(srsBanner_);
-    wl->addWidget(split_);
+    srsBanner_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
+    wl->addWidget(srsBanner_, 0);
+    wl->addWidget(split_, 1);
     v->addWidget(wrap, 1);
     v->addWidget(buildCoordBar());
     setCentralWidget(central);
@@ -595,8 +598,9 @@ void MainWindow::applyScene(OpenedScene&& s) {
     else plan_->setScene(std::move(s.display), s.center, s.bounds, src_->srs);
     streaming_ = !s.streamRoots.empty();
     srsReport_ = analyzeSrs(src_->srs, s.bounds);
+    for (auto& w : s.warnings) srsReport_.warnings.push_back(w);   // 병합 3MX 레이어 경고 등
     applySrsReport();
-    info_->setText(streaming_ ? QStringLiteral("%1 · LOD 스트리밍").arg(kind_)
+    info_->setText(streaming_ ? QStringLiteral("%1%2 · LOD 스트리밍").arg(kind_, s.layers > 1 ? QStringLiteral(" · 레이어 %1개").arg(s.layers) : QString())
                               : QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
     setWindowTitle(QStringLiteral("%1 — 발굴 단면뷰어").arg(QFileInfo(path_).fileName()));
     QString note = srsReport_.desc.vertKind == VertKind::Ellipsoidal ? QStringLiteral(" · 높이 '타원체고' 표기 — 기준점 대조 권장(오른쪽 좌표계 표시에 마우스)")
@@ -808,7 +812,7 @@ bool MainWindow::exportPlan(MeshSource& src, const PlanParams& p, const SectionL
     std::vector<MeshPtr> meshes; std::string e;
     if (auto* t = dynamic_cast<TmxSource*>(&src)) {
         LeafStats st;
-        if (!collectMeshesForResolution(*t->cache, t->scene.rootFile, area, res, meshes, &st, &e, cancel)) { if (msg) *msg = qs(e); return false; }
+        if (!t->areaMeshes(area, res, meshes, &st, &e, cancel)) { if (msg) *msg = qs(e); return false; }
     } else if (auto* s = dynamic_cast<StaticSource*>(&src)) {
         for (auto& m : s->meshes) if (!m->bbox.valid() || !(m->bbox.mx.x < area.mn.x || m->bbox.mn.x > area.mx.x || m->bbox.mx.y < area.mn.y || m->bbox.mn.y > area.mx.y)) meshes.push_back(m);
     }
@@ -851,7 +855,7 @@ bool MainWindow::exportPointCloud(MeshSource& src, const PointParams& p, const S
     if (p.area == 2) o.box = p.box;
     PointExportStats st; std::string e;
     bool ok;
-    if (auto* t = dynamic_cast<TmxSource*>(&src)) ok = exportPointsTmx(*t->cache, t->scene.rootFile, src.srs, o, toFs(path), &st, &e, cancel, progress);
+    if (auto* t = dynamic_cast<TmxSource*>(&src)) ok = exportPointsTmx(*t->cache, t->scene.roots(), src.srs, o, toFs(path), &st, &e, cancel, progress);
     else {
         auto* s = dynamic_cast<StaticSource*>(&src);
         auto visit = [s](const std::function<bool(const MeshPtr&)>& cb) { for (auto& m : s->meshes) if (!cb(m)) return false; return true; };

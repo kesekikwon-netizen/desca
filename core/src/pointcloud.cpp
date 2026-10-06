@@ -178,12 +178,15 @@ bool exportPoints(const std::function<bool(const std::function<bool(const MeshPt
     return bool(f);
 }
 
-bool exportPointsTmx(TileCache& c, const fs::path& root, const SrsInfo& srs, const PointExportOptions& o, const fs::path& out, PointExportStats* st,
+bool exportPointsTmx(TileCache& c, const std::vector<fs::path>& roots, const SrsInfo& srs, const PointExportOptions& o, const fs::path& out, PointExportStats* st,
                      std::string* err, const std::atomic<bool>* cancel, const std::function<void(size_t)>& progress) {
     std::function<bool(const Box3&)> filt;
     if (o.area == PointArea::Band) filt = [&](const Box3& b) { return bandIntersectsBox(o.band, b); };
     else if (o.area == PointArea::Box) filt = [&](const Box3& b) { return !(b.mx.x < o.box.mn.x || b.mn.x > o.box.mx.x || b.mx.y < o.box.mn.y || b.mn.y > o.box.mx.y); };
-    auto visitor = [&](const std::function<bool(const MeshPtr&)>& cb) { return visitLeafMeshes(c, root, filt, cb, err, cancel); };
+    auto visitor = [&](const std::function<bool(const MeshPtr&)>& cb) {
+        for (auto& root : roots) if (!visitLeafMeshes(c, root, filt, cb, err, cancel)) return false;  // 병합 3MX: 레이어 전부
+        return true;
+    };
     return exportPoints(visitor, srs, o, out, st, err, cancel, progress);
 }
 

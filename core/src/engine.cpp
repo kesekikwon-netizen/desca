@@ -7,19 +7,43 @@ static double msSince(clk::time_point t) { return std::chrono::duration<double, 
 bool TmxSource::open(const fs::path& p, std::string* err) {
     if (!readTmxScene(p, scene, err)) return false;
     srs = scene.srs;
-    auto t = cache->get(scene.rootFile, err);
-    if (!t) return false;
     bounds = Box3();
-    for (auto& n : t->nodes) bounds.add(n.bb);
+    for (auto& r : scene.roots()) {
+        auto t = cache->get(r, err);
+        if (!t) return false;
+        for (auto& n : t->nodes) bounds.add(n.bb);
+    }
+    return true;
+}
+
+static void addStats(LeafStats& a, const LeafStats& b) {
+    a.tilesVisited += b.tilesVisited; a.leafNodes += b.leafNodes; a.meshes += b.meshes; a.triangles += b.triangles;
+    a.maxDepth = std::max(a.maxDepth, b.maxDepth); a.fallbackNodes += b.fallbackNodes;
+}
+
+// 병합 3MX: 레이어(루트)마다 모아서 합친다
+template <class F>
+static bool eachRoot(const TmxScene& sc, LeafStats* st, F&& f) {
+    LeafStats all;
+    for (auto& r : sc.roots()) {
+        LeafStats s;
+        if (!f(r, &s)) return false;
+        addStats(all, s);
+    }
+    if (st) *st = all;
     return true;
 }
 
 bool TmxSource::leafMeshes(const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) {
-    return collectLeafMeshes(*cache, scene.rootFile, band, out, st, err, cancel);
+    return eachRoot(scene, st, [&](const fs::path& r, LeafStats* s) { return collectLeafMeshes(*cache, r, band, out, s, err, cancel); });
 }
 
 bool TmxSource::bandMeshes(const BandQuad& band, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) {
-    return collectBandMeshesForResolution(*cache, scene.rootFile, band, res, out, st, err, cancel);
+    return eachRoot(scene, st, [&](const fs::path& r, LeafStats* s) { return collectBandMeshesForResolution(*cache, r, band, res, out, s, err, cancel); });
+}
+
+bool TmxSource::areaMeshes(const Box3& areaXY, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) {
+    return eachRoot(scene, st, [&](const fs::path& r, LeafStats* s) { return collectMeshesForResolution(*cache, r, areaXY, res, out, s, err, cancel); });
 }
 
 bool StaticSource::leafMeshes(const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string*, const std::atomic<bool>*) {

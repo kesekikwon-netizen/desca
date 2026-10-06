@@ -28,6 +28,8 @@ public:
     bool open(const fs::path& p, std::string* err);
     bool leafMeshes(const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) override;
     bool bandMeshes(const BandQuad& band, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) override;
+    /// XY 상자 + 해상도(정사영상용, 모든 레이어)
+    bool areaMeshes(const Box3& areaXY, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel = nullptr);
 };
 
 class StaticSource : public MeshSource {
