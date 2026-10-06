@@ -46,6 +46,9 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
   `--undo-test`(두께·반전·레벨선 바꾼 뒤 되돌리기×3 / 다시×3 이 원래 상태와 같은지), `--ctx-shot 파일`(그리는 중 지금 도구 줄),
   `--lod-shot 파일`(평면 확대 직후 디테일 카드), `--extra-line AX AY BX BY`(단면 목록에 추가, 반복), `--section-scale N`(단면 화면 1:N),
   `--start-shot 파일`(파일 없이 시작 화면)
+- 1.2.1 시험용: `--vex N`(단면 화면 세로 과장 1·2·5·10 — 화면만), `--plan-cam X Y mpp`(캡처 전 평면 카메라를 실좌표·m/px 로 — 평면-단면 정합 확인).
+  로그에 `window-title=… appended=0|1`(창 제목에 표시 이름이 덧붙는지), `vex-suggest: relief=… suggest=x…`.
+  Windows 패키지: `./build-win.sh --no-package`(빌드·배포 폴더만), zip 은 `packaging/mkzip.py`(UTF-8 이름 플래그).
 
 ## 1.2 화면(Strata) · 사용자 중심 개선 P0 + 단면 목록
 - 디자인: `research/ui-ref/UI-SPEC.md` §4 토큰(ground #FAF9F5, ink #141413, 주 단추 흙색 #B5573A 은 「도면」 하나), 본문 13 px 고딕,

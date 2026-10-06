@@ -20,9 +20,12 @@ x86_64-w64-mingw32-strip -o "$D/tools/asec-section.exe" build-win/asec-section.e
 cp packaging/assets/app.ico "$D/"
 cp packaging/licenses/* "$D/licenses/"
 cp packaging/읽어보기.txt "$D/"
+# --no-package: 빌드·배포 폴더까지만(zip·설치 파일·SHA256SUMS 는 만들지 않음)
+if [ "${1:-}" = "--no-package" ]; then echo "deploy: $ROOT/$D"; exit 0; fi
 mkdir -p dist
 rm -f "dist/SectionViewer-$VER-portable-win64.zip" "dist/SectionViewer-$VER-Setup.exe"
-(cd build-win/deploy && zip -qr -9 "$ROOT/dist/SectionViewer-$VER-portable-win64.zip" SectionViewer)
+# 한글 파일 이름(읽어보기.txt)이 Windows 탐색기에서 깨지지 않게 UTF-8 플래그(0x800)를 켜는 zip(Info-ZIP 은 안 켬)
+python3 packaging/mkzip.py build-win/deploy SectionViewer "$ROOT/dist/SectionViewer-$VER-portable-win64.zip"
 (cd packaging && makensis -V2 -DSRCDIR="$ROOT/$D" -DOUTFILE="$ROOT/dist/SectionViewer-$VER-Setup.exe" installer.nsi)
 # SHA256SUMS.txt: 이전 버전 줄은 유지하고 이번 버전 줄만 바꿈
 (cd dist && { if [ -f SHA256SUMS.txt ]; then grep -v -e "SectionViewer-$VER-Setup.exe" -e "SectionViewer-$VER-portable-win64.zip" SHA256SUMS.txt || true; fi

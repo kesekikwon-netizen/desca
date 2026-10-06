@@ -120,6 +120,11 @@ public:
     void dragLine(const asec::SectionLine& l, bool final) { plan_->setLine(l, true); requestSection(final); }
     PlanView* plan() const { return plan_; }
     SectionView* sectionView() const { return section_; }
+    /// 화면 세로 과장(1·2·5·10). 화면 보기만 — 도면·내보내기는 1:1
+    void setVex(double v);
+    int vexSuggestion() const { return vexSuggest_; }
+    double vexRelief() const { return vexRelief_; }
+    QString windowTitleCheck() const;   // 시험용: 창 제목 + 표시 이름 중복 여부
     void selectRibbonTab(int i);
     void openFile(const QString& path);
     int addSectionAt(const asec::SectionLine& l);      // 자동화: 단면 목록에 더함(로컬 좌표) → 번호
@@ -149,6 +154,9 @@ private:
     QLabel* noticeText_ = nullptr;
     QLabel *secTitle_ = nullptr, *secFacing_ = nullptr;
     QToolButton *heightBadge_ = nullptr, *heightBadge2_ = nullptr;
+    QToolButton* vexBtn_ = nullptr;
+    int vexSuggest_ = 1; double vexRelief_ = 0;
+    void updateVexUi();
     QLabel *stripLen_ = nullptr, *stripDepth_ = nullptr, *stripScale_ = nullptr, *stripState_ = nullptr, *stripLevels_ = nullptr;
     QWidget *planTitle_ = nullptr, *secTitleBar_ = nullptr;
     QComboBox* scaleCombo_ = nullptr;

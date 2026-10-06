@@ -140,6 +140,11 @@ QToolButton#heightBadge:hover { border-color: #141413; }
 QToolButton#heightBadge[state="warn"] { background: #FFFFFF; border-color: #7A5A00; color: #7A5A00; }
 QToolButton#heightBadge[state="error"] { background: #F3DEDA; border-color: #A33B3B; color: #A33B3B; }
 QToolButton#heightBadge[state="none"] { background: #F0EEE6; border-color: #DEDCD1; color: #73726C; }
+QToolButton#vexBtn { background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 0px 6px; font-size: 12px; color: #3D3D3A; }
+QToolButton#vexBtn:hover { border-color: #C2C0B6; }
+QToolButton#vexBtn::menu-indicator { image: none; width: 0px; }
+QToolButton#vexBtn[state="on"] { background: #FFF4D6; border-color: #C98A1B; color: #7A5A00; font-weight: bold; }
+QToolButton#vexBtn[state="hint"] { border-color: #C98A1B; color: #7A5A00; }
 
 QToolButton#viewNum { min-width: 20px; max-width: 20px; min-height: 20px; max-height: 20px; padding: 0; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 11px; }
 QToolButton#viewNum:checked { background: #30302E; color: #FAF9F5; border-color: #30302E; }

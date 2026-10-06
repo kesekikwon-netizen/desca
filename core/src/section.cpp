@@ -1,4 +1,5 @@
 #include "asec/section.hpp"
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -393,6 +394,26 @@ double niceStep(double range, int target) {
     if (range <= 0 || target <= 0) return 1;
     double raw = range / target, mag = std::pow(10.0, std::floor(std::log10(raw))), r = raw / mag;
     return (r < 1.5 ? 1 : r < 3.5 ? 2 : r < 7.5 ? 5 : 10) * mag;
+}
+
+double profileRelief(const std::vector<Polyline>& profile) {
+    std::vector<double> z;
+    for (auto& pl : profile) {
+        const bool closed = pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9;
+        if (closed) continue;
+        for (auto& p : pl) z.push_back(p.y);
+    }
+    if (z.size() < 2) return 0;
+    std::sort(z.begin(), z.end());
+    auto q = [&](double f) { return z[size_t(std::lround(f * double(z.size() - 1)))]; };
+    return q(0.95) - q(0.05);
+}
+
+int suggestVerticalExaggeration(double relief, double visibleZ) {
+    if (!(relief > 0) || !(visibleZ > 0)) return 1;
+    for (int k : {1, 2, 5, 10})
+        if (relief * k >= 0.15 * visibleZ) return k;
+    return 10;
 }
 
 // ---------------- 띠 ----------------

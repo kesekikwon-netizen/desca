@@ -12,6 +12,8 @@
 //   1.2: --settings DIR(설정을 DIR 의 INI 로 — 시험용) --export-pdf f / --export-sheet-png f / --export-sheet-tiff f / --export-sheet-dxf f
 //        [--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split] --export-dialog-shot f --undo-test --ctx-shot f
 //        --extra-line AX AY BX BY(단면 목록에 더함, 반복 가능) --start-shot f(파일 없이: 시작 화면)
+//   --vex N: 단면 화면 세로 과장(1·2·5·10, 화면만) / 창 제목 중복 검사는 항상 로그(window-title=…)
+//   --plan-cam X Y mpp: 캡처 전에 평면 카메라를 실좌표 중심·m/px 로(평면-단면 정합 확인)
 #include <QApplication>
 #include <QDialog>
 #include <QSettings>
@@ -30,6 +32,7 @@
 #include "theme.hpp"
 
 using namespace asec;
+extern const char* const kVersion;
 
 static void processFor(int ms) {
     auto t0 = std::chrono::steady_clock::now();
@@ -47,7 +50,9 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QApplication::setOrganizationName("ExcavSection");
     QApplication::setApplicationName("SectionViewer");
-    QApplication::setApplicationDisplayName(QStringLiteral("발굴 단면뷰어"));
+    // 표시 이름 = 창 제목 끝과 같게(「… — 발굴 단면뷰어 1.2.0」). Qt(Windows·X11)는 제목이 표시 이름으로 끝나지 않으면
+    // 「 - 표시 이름」을 덧붙여 「발굴 단면뷰어」가 두 번 보였음(1.2.0 신고)
+    QApplication::setApplicationDisplayName(QStringLiteral("발굴 단면뷰어 %1").arg(QString::fromUtf8(kVersion)));
     QFont f = theme::uiFont(13); f.setStyleStrategy(QFont::PreferAntialias);   // 한글 본문 13 px
     QApplication::setFont(f);
     app.setStyle("Fusion");
@@ -60,6 +65,7 @@ int main(int argc, char** argv) {
     QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot;
     bool undoTest = false, split = false; double sheetScale = 0, sectionScale = 0;
     QString lodShot;
+    double camX = 0, camY = 0, camMpp = 0, vexArg = 0;
     std::vector<std::array<double, 4>> extraLines;
     bool haveLine = false, local = false, quit = false;
     double ax = 0, ay = 0, bx = 0, by = 0, front = -1, back = -1, denom = 20, dpi = 300, spacing = 0;
@@ -93,6 +99,8 @@ int main(int argc, char** argv) {
         else if (s == "--quit") quit = true;
         else if (s == "--pick" && i + 2 < a.size()) { picks.push_back({a[i + 1].toDouble(), a[i + 2].toDouble()}); i += 2; }
         else if (s == "--hover") hover = true;
+        else if (s == "--vex") vexArg = nx().toDouble();
+        else if (s == "--plan-cam" && i + 3 < a.size()) { camX = a[i + 1].toDouble(); camY = a[i + 2].toDouble(); camMpp = a[i + 3].toDouble(); i += 3; }
         else if (s == "--settings") nx();
         else if (s == "--export-dialog-shot") dialogShot = nx();
         else if (s == "--ctx-shot") ctxShot = nx();
@@ -273,6 +281,7 @@ int main(int argc, char** argv) {
     if (front >= 0 || back >= 0) w.setThickness(front >= 0 ? front : 0.0, back >= 0 ? back : 0.5);
     if (tab >= 0) w.selectRibbonTab(tab);
     processFor(300);
+    log("window-" + w.windowTitleCheck());
     if (haveLine) {
         Vec3 o = local ? Vec3() : w.srs().origin;
         SectionLine l; l.a = Vec2(ax - o.x, ay - o.y); l.b = Vec2(bx - o.x, by - o.y);
@@ -282,6 +291,9 @@ int main(int argc, char** argv) {
             size_t nv = 0; for (auto& pl : d.r.profile) nv += pl.size();
             log(QStringLiteral("section-ok: polylines=%1 vertices=%2 z=[%3,%4] image=%5x%6").arg(d.r.profile.size()).arg(nv)
                     .arg(d.r.zMin + d.r.srs.origin.z, 0, 'f', 2).arg(d.r.zMax + d.r.srs.origin.z, 0, 'f', 2).arg(d.img.width()).arg(d.img.height()));
+            log(QStringLiteral("vex-suggest: relief=%1cm visible1to1=%2m suggest=x%3").arg(w.vexRelief() * 100, 0, 'f', 1)
+                    .arg(w.sectionView()->fitVisibleHeight(), 0, 'f', 2).arg(w.vexSuggestion()));
+            if (vexArg > 0) { w.setVex(vexArg); log(QStringLiteral("vex: x%1 (화면만)").arg(w.sectionView()->verticalExaggeration(), 0, 'g', 3)); }
         }
     }
     processFor(400);
@@ -419,6 +431,17 @@ int main(int argc, char** argv) {
         dlg->close();
     }
     if (sectionScale > 0 && w.hasSection()) { w.sectionView()->setScreenDenom(sectionScale); processFor(200); }
+    if (camMpp > 0) {   // 평면 카메라를 실좌표(X,Y)·m/px 로(정합 확인용 캡처)
+        PlanView* pv = w.plan();
+        const Vec3 o = local ? Vec3() : w.srs().origin;
+        pv->setCamera(camX - o.x, camY - o.y, camMpp);
+        auto tc = std::chrono::steady_clock::now();
+        auto msC = [&] { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tc).count(); };
+        processFor(300);
+        while (msC() < 30000 && !pv->streamIdle()) QApplication::processEvents(QEventLoop::AllEvents, 10);
+        processFor(300);
+        log(QStringLiteral("plan-cam: X=%1 Y=%2 mpp=%3 depth=%4 idle=%5").arg(camX, 0, 'f', 3).arg(camY, 0, 'f', 3).arg(camMpp).arg(pv->lastFrame().maxDepth).arg(pv->streamIdle() ? 1 : 0));
+    }
     if (!shot.isEmpty()) {
         processFor(500);
         // QOpenGLWidget 위 QPainter 덧그림까지 포함하려면 창 시스템에서 직접 캡처(실패 시 위젯 grab)

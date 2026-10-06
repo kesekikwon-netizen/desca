@@ -37,10 +37,11 @@ void SectionView::fit() {
     if (!has_) return;
     QRectF pr = plotRect(rect(), 1.0);
     double L = SectionFrame(r_.line).L, zr = std::max(0.2, r_.zMax - r_.zMin);
-    xf_.ppm = std::max(1e-3, std::min(pr.width() / (L * 1.03), pr.height() / (zr * 1.06)));
+    const double vex = std::max(1.0, xf_.vex);
+    xf_.ppm = std::max(1e-3, std::min(pr.width() / (L * 1.03), pr.height() / (zr * vex * 1.06)));
     double oz = r_.srs.origin.z;
     xf_.s0 = L / 2 - pr.width() / 2 / xf_.ppm;
-    xf_.zTop = (r_.zMin + r_.zMax) / 2 + oz + pr.height() / 2 / xf_.ppm;
+    xf_.zTop = (r_.zMin + r_.zMax) / 2 + oz + pr.height() / 2 / xf_.ppmZ();
     xf_.plot = pr;
 }
 
@@ -48,10 +49,10 @@ void SectionView::resizeEvent(QResizeEvent*) {
     QRectF pr = plotRect(rect(), 1.0);
     if (has_ && xf_.plot.isValid()) {
         // 가운데 유지
-        double sc = xf_.s0 + xf_.plot.width() / 2 / xf_.ppm, zc = xf_.zTop - xf_.plot.height() / 2 / xf_.ppm;
+        double sc = xf_.s0 + xf_.plot.width() / 2 / xf_.ppm, zc = xf_.zTop - xf_.plot.height() / 2 / xf_.ppmZ();
         xf_.plot = pr;
         xf_.s0 = sc - pr.width() / 2 / xf_.ppm;
-        xf_.zTop = zc + pr.height() / 2 / xf_.ppm;
+        xf_.zTop = zc + pr.height() / 2 / xf_.ppmZ();
     }
     xf_.plot = pr;
 }
@@ -86,9 +87,11 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     const double oz = r_.srs.origin.z;
     const SectionFrame f(r_.line);
     auto X = [&](double s) { return pr.left() + (s - xf.s0) * xf.ppm; };
-    auto Y = [&](double zAbs) { return pr.top() + (xf.zTop - zAbs) * xf.ppm; };
+    const double vex = forExport ? 1.0 : std::max(1.0, xf.vex);   // 내보내기는 언제나 1:1
+    const double ppmZ = xf.ppm * vex;
+    auto Y = [&](double zAbs) { return pr.top() + (xf.zTop - zAbs) * ppmZ; };
     const double sVis0 = xf.s0, sVis1 = xf.s0 + pr.width() / xf.ppm;
-    const double zVis1 = xf.zTop, zVis0 = xf.zTop - pr.height() / xf.ppm;
+    const double zVis1 = xf.zTop, zVis0 = xf.zTop - pr.height() / ppmZ;
     QFont small = theme::uiFont(std::max(8, int(std::lround(11.5 * ui))));
     QFont mono = theme::monoFont(std::max(8, int(std::lround(11 * ui))));
     QFont monoBold = mono; monoBold.setBold(true);
@@ -108,7 +111,9 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     //    간격 규칙(planLevels): 선 10 cm·숫자 50 cm 기본. 화면은 선 사이 4 px, 인쇄(내보내기)는 0.5 mm 보다 좁으면 50 cm·1 m·5 m 로 솎음.
     //    확대해도 10 cm 보다 촘촘하게 긋지 않음.
     std::vector<LevelLine> levels;
-    const LevelPlan lp = sectionLevelPlan(xf.ppm, ui, forExport);
+    LevelPlan lp = sectionLevelPlan(ppmZ, ui, forExport);   // 레벨선 간격은 세로 픽셀/m 기준
+    // 세로 과장 화면: 10 cm 선마다 숫자가 겹치지 않으면 10 cm 숫자(얕은 기복 읽기). 내보내기·1:1 은 규칙 그대로(50 cm)
+    if (vex > 1.0 && lp.lineCm == 10 && 0.1 * ppmZ >= fm.height() * 1.35) lp.labelCm = 10;
     if (st_.showLevels) {
         levels = levelLines(zVis0, zVis1, lp.lineCm);
         for (auto& lv : levels) {
@@ -124,7 +129,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     }
     // 3) 입면 영상(레벨선 위)
     if (st_.showImage && !img.isNull()) {
-        QRectF tr(X(ig.s0), Y(ig.z1Local + oz), img.width() * ig.res * xf.ppm, img.height() * ig.res * xf.ppm);
+        QRectF tr(X(ig.s0), Y(ig.z1Local + oz), img.width() * ig.res * xf.ppm, img.height() * ig.res * ppmZ);
         p.setOpacity(st_.imageOpacity);
         p.drawImage(tr, img);
         p.setOpacity(1.0);
@@ -163,6 +168,14 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         QRectF br(pr.left() + 6 * ui, y - fm.height() - 2 * ui, fm.horizontalAdvance(bt) + 8 * ui, fm.height());
         p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 220)); p.drawRect(br);
         p.setPen(theme::Ink2); p.drawText(br, Qt::AlignCenter, bt);
+    }
+    // 5c) 세로 과장 표시(화면만): 도면이 아님을 분명히
+    if (vex > 1.0) {
+        p.setFont(small);
+        QString vt = QStringLiteral("세로 ×%1 과장 — 화면 보기만 · 도면·내보내기는 1:1").arg(vex, 0, 'g', 3);
+        QRectF vr(pr.left() + 8 * ui, pr.top() + 8 * ui, fm.horizontalAdvance(vt) + 16 * ui, fm.height() + 8 * ui);
+        p.setPen(QPen(QColor(0xC9, 0x8A, 0x1B), 1.0 * ui)); p.setBrush(QColor(0xFF, 0xF4, 0xD6, 235)); p.drawRoundedRect(vr, 5 * ui, 5 * ui);
+        p.setPen(QColor(0x7A, 0x5A, 0x00)); p.drawText(vr, Qt::AlignCenter, vt);
     }
     p.restore();  // clip
 
@@ -304,7 +317,7 @@ void SectionView::wheelEvent(QWheelEvent* e) {
 bool SectionView::screenToSZ(const QPointF& m, double& s, double& z) const {
     if (!has_ || xf_.ppm <= 0) return false;
     s = xf_.s0 + (m.x() - xf_.plot.left()) / xf_.ppm;
-    z = xf_.zTop - (m.y() - xf_.plot.top()) / xf_.ppm;
+    z = xf_.zTop - (m.y() - xf_.plot.top()) / xf_.ppmZ();
     return true;
 }
 
@@ -313,7 +326,7 @@ void SectionView::applyZoomAt(const QPointF& m, double f) {
     if (!screenToSZ(m, s, z)) return;
     xf_.ppm = std::clamp(xf_.ppm * f, 0.5, 50000.0);
     xf_.s0 = s - (m.x() - xf_.plot.left()) / xf_.ppm;
-    xf_.zTop = z + (m.y() - xf_.plot.top()) / xf_.ppm;
+    xf_.zTop = z + (m.y() - xf_.plot.top()) / xf_.ppmZ();
     update();
 }
 
@@ -344,11 +357,11 @@ void SectionView::leaveEvent(QEvent*) { if (onCursor) onCursor(0, 0, 0, 0, false
 void SectionView::mouseMoveEvent(QMouseEvent* e) {
     if (panning_) {
         QPoint d = e->pos() - last_; last_ = e->pos();
-        xf_.s0 -= d.x() / xf_.ppm; xf_.zTop += d.y() / xf_.ppm;
+        xf_.s0 -= d.x() / xf_.ppm; xf_.zTop += d.y() / xf_.ppmZ();
         update();
     }
     if (has_ && onCursor) {
-        double s = xf_.s0 + (e->position().x() - xf_.plot.left()) / xf_.ppm, z = xf_.zTop - (e->position().y() - xf_.plot.top()) / xf_.ppm;
+        double s = xf_.s0 + (e->position().x() - xf_.plot.left()) / xf_.ppm, z = xf_.zTop - (e->position().y() - xf_.plot.top()) / xf_.ppmZ();
         Vec3 w = sectionToWorld(r_, s, z - r_.srs.origin.z);
         onCursor(s, z, w.x, w.y, xf_.plot.contains(e->position()));
     }
@@ -368,9 +381,36 @@ void SectionView::zoomBy(double f) {
     if (!has_) return;
     zoomPending_ = 0; if (zoomTimer_) zoomTimer_->stop();
     QPointF m = xf_.plot.center();
-    double s = xf_.s0 + (m.x() - xf_.plot.left()) / xf_.ppm, z = xf_.zTop - (m.y() - xf_.plot.top()) / xf_.ppm;
+    double s = xf_.s0 + (m.x() - xf_.plot.left()) / xf_.ppm, z = xf_.zTop - (m.y() - xf_.plot.top()) / xf_.ppmZ();
     xf_.ppm = std::clamp(xf_.ppm * f, 0.5, 50000.0);
     xf_.s0 = s - (m.x() - xf_.plot.left()) / xf_.ppm;
-    xf_.zTop = z + (m.y() - xf_.plot.top()) / xf_.ppm;
+    xf_.zTop = z + (m.y() - xf_.plot.top()) / xf_.ppmZ();
     update();
+}
+
+void SectionView::setVerticalExaggeration(double v) {
+    v = std::clamp(v, 1.0, 20.0);
+    if (v == xf_.vex) return;
+    zoomPending_ = 0; if (zoomTimer_) zoomTimer_->stop();
+    if (!has_ || !xf_.plot.isValid()) { xf_.vex = v; update(); return; }
+    // 세로 가운데: 보이는 가로 범위 안 단면선 높이의 가운데(없으면 지금 화면 가운데)
+    double zc = xf_.zTop - xf_.plot.height() / 2 / xf_.ppmZ();
+    {
+        const double sa = xf_.s0, sb = xf_.s0 + xf_.plot.width() / xf_.ppm;
+        double lo = 1e18, hi = -1e18;
+        for (auto& pl : r_.profile) for (auto& q : pl) if (q.x >= sa && q.x <= sb) { lo = std::min(lo, q.y); hi = std::max(hi, q.y); }
+        if (hi >= lo) zc = (lo + hi) / 2 + r_.srs.origin.z;
+    }
+    xf_.vex = v;
+    xf_.zTop = zc + xf_.plot.height() / 2 / xf_.ppmZ();
+    update();
+    if (onViewChanged) onViewChanged();
+}
+
+double SectionView::fitVisibleHeight() const {
+    if (!has_) return 0;
+    QRectF pr = plotRect(rect(), 1.0);
+    double L = SectionFrame(r_.line).L, zr = std::max(0.2, r_.zMax - r_.zMin);
+    double ppm = std::max(1e-3, std::min(pr.width() / (L * 1.03), pr.height() / (zr * 1.06)));
+    return pr.height() / ppm;
 }

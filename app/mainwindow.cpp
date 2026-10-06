@@ -407,7 +407,13 @@ void MainWindow::onSectionDone(SectionOutput&& out, uint64_t gen, bool final, co
                    .arg(last_.previewLod ? QStringLiteral("[미리보기·거친 LOD]") : QStringLiteral("[최종·잎]"))
                    .arg(last_.previewLod ? QStringLiteral("타일") : QStringLiteral("잎 타일")));
     if (final && newest) {
-        showStatus(QStringLiteral("%1 단면 %2 m 완료 — 다음: Ctrl+P 「도면」, 숫자키 1–5 뒤 깊이, [ ] 평행 이동").arg(sectionName()).arg(L, 0, 'f', 2));
+        // 기복이 화면 높이에 비해 아주 작으면(1:1 에서 평평해 보임) 세로 과장을 권함 — 화면만, 도면은 1:1
+        vexRelief_ = profileRelief(last_.result.profile);
+        vexSuggest_ = suggestVerticalExaggeration(vexRelief_, section_->fitVisibleHeight());
+        QString vexHint;
+        if (vexSuggest_ > 1 && section_->verticalExaggeration() < 1.5)
+            vexHint = QStringLiteral(" · 기복 %1 cm 라 평평해 보이면 X: 세로 ×%2 과장(화면만)").arg(vexRelief_ * 100, 0, 'f', 0).arg(vexSuggest_);
+        showStatus(QStringLiteral("%1 단면 %2 m 완료 — 다음: Ctrl+P 「도면」, 숫자키 1–5 뒤 깊이, [ ] 평행 이동%3").arg(sectionName()).arg(L, 0, 'f', 2).arg(vexHint));
         if (current_ >= 0) { thumbs_[current_] = makeThumb(); refreshSectionList(); }
     } else showStatus(QStringLiteral("미리보기(거친 LOD) — 최종(잎) 계산 중…"));
     msg_->setToolTip(detail);
@@ -882,7 +888,7 @@ void MainWindow::dlgInfo() {
 
 void MainWindow::dlgAbout() {
     QMessageBox mb(this);
-    mb.setWindowTitle(QStringLiteral("발굴 단면뷰어"));
+    mb.setWindowTitle(QStringLiteral("프로그램 정보"));   // Qt 가 「 - 발굴 단면뷰어 x.y.z」를 붙임
     mb.setIconPixmap(windowIcon().pixmap(64, 64));
     mb.setTextFormat(Qt::RichText);
     mb.setText(QStringLiteral("<b>발굴 단면뷰어</b> v%1<br>3MX 실사 메시 단면 · 10 cm 레벨선 · DXF / GeoTIFF / 점군 내보내기<br><br>"

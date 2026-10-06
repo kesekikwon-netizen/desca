@@ -22,7 +22,8 @@ struct SectionDoc {
     QImage img;
     double imgS0 = 0, imgZ1 = 0, imgRes = 0.01;  // z 로컬
 };
-struct SectionXf { double s0 = 0, zTop = 0, ppm = 100; QRectF plot; };
+/// 화면 변환. ppm = 가로 픽셀/m, vex = 세로 과장(화면 보기만 — 내보내기·도면은 언제나 1)
+struct SectionXf { double s0 = 0, zTop = 0, ppm = 100; QRectF plot; double vex = 1; double ppmZ() const { return ppm * vex; } };
 struct SectionImgGeo { double s0 = 0, z1Local = 0, res = 0.01; };
 
 /// 보고서용 그리기(화면·내보내기 공용, 아무 스레드에서나 QImage 에 그릴 수 있음). ppm = 픽셀/m, ui = 글자·선 배율(DPI/96)
@@ -64,6 +65,11 @@ public:
     /// 화면 축척 1:N (논리 DPI 기준: 96 dpi 면 1 px = 0.2646 mm)
     double screenDenom() const;
     void setScreenDenom(double denom);
+    /// 세로 과장(1·2·5·10, 화면만). 화면 가운데 높이를 유지
+    void setVerticalExaggeration(double vex);
+    double verticalExaggeration() const { return xf_.vex; }
+    /// 1:1 로 맞췄을 때 보이는 높이(m) — 세로 과장 추천용
+    double fitVisibleHeight() const;
 
 protected:
     void paintEvent(QPaintEvent*) override;

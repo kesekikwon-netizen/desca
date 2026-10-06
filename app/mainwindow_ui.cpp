@@ -429,7 +429,18 @@ QWidget* MainWindow::buildSectionFrame() {
     auto* sh = new QHBoxLayout(strip); sh->setContentsMargins(10, 0, 10, 0); sh->setSpacing(14);
     stripLen_ = new QLabel; stripDepth_ = new QLabel; stripScale_ = new QLabel; stripState_ = new QLabel; stripLevels_ = new QLabel;
     for (auto* l : {stripLen_, stripDepth_}) { l->setTextFormat(Qt::RichText); sh->addWidget(l); }
-    auto* ratio = lab(QStringLiteral("세로:가로 <b>1:1</b>")); ratio->setTextFormat(Qt::RichText); sh->addWidget(ratio);
+    // 세로:가로 — 누르면 화면 세로 과장(×1·×2·×5·×10, X 키로 돌아가며). 기복이 작으면 추천을 함께 보여 줌
+    vexBtn_ = new QToolButton; vexBtn_->setObjectName("vexBtn"); vexBtn_->setFocusPolicy(Qt::NoFocus);
+    vexBtn_->setAutoRaise(true); vexBtn_->setPopupMode(QToolButton::InstantPopup);
+    {
+        auto* m = new QMenu(vexBtn_);
+        for (int k : {1, 2, 5, 10}) {
+            QAction* a = m->addAction(k == 1 ? QStringLiteral("세로:가로 1:1 (실제 비율)") : QStringLiteral("세로 ×%1 과장 (화면만)").arg(k));
+            QObject::connect(a, &QAction::triggered, this, [this, k] { setVex(k); });
+        }
+        vexBtn_->setMenu(m);
+    }
+    sh->addWidget(vexBtn_);
     stripScale_->setTextFormat(Qt::RichText); sh->addWidget(stripScale_);
     stripState_->setTextFormat(Qt::RichText); sh->addWidget(stripState_);
     sh->addStretch();
@@ -467,6 +478,39 @@ QString MainWindow::heightBadgeText(QString* state, QString* tip) const {
     return t;
 }
 
+void MainWindow::setVex(double v) {
+    section_->setVerticalExaggeration(v);
+    updateVexUi();
+    if (v > 1.5) showStatus(QStringLiteral("세로 ×%1 과장 — 화면 보기만 바뀝니다. 도면·DXF·영상 내보내기는 언제나 1:1 (X: 다음 배율)").arg(v, 0, 'g', 3));
+    else showStatus(QStringLiteral("세로:가로 1:1 (실제 비율)"));
+}
+
+void MainWindow::updateVexUi() {
+    if (!vexBtn_) return;
+    const double v = section_->verticalExaggeration();
+    const bool hasSec = section_->hasResult();
+    QString t = v > 1.5 ? QStringLiteral("세로 <b>×%1</b> 과장").arg(v, 0, 'g', 3) : QStringLiteral("세로:가로 <b>1:1</b>");
+    QString plain = v > 1.5 ? QStringLiteral("세로 ×%1 과장").arg(v, 0, 'g', 3) : QStringLiteral("세로:가로 1:1");
+    QString state = v > 1.5 ? "on" : "off";
+    QString tip = QStringLiteral("단면 화면의 세로 과장(×1·×2·×5·×10) — 기복이 작은 면(얕은 수혈 윤곽 등)을 보기 쉽게. 화면만 바뀌고 도면·내보내기는 언제나 1:1 [X]");
+    if (hasSec && v < 1.5 && vexSuggest_ > 1) {
+        plain += QStringLiteral(" · ×%1 권장").arg(vexSuggest_); state = "hint";
+        tip = QStringLiteral("이 단면의 기복은 %1 cm 로 1:1 화면에서는 거의 평평하게 보입니다. ").arg(vexRelief_ * 100, 0, 'f', 0) + tip;
+    }
+    (void)t;
+    vexBtn_->setText(plain);
+    vexBtn_->setToolTip(tip);
+    vexBtn_->setProperty("state", state);
+    vexBtn_->style()->unpolish(vexBtn_); vexBtn_->style()->polish(vexBtn_);
+}
+
+QString MainWindow::windowTitleCheck() const {
+    const QString t = windowTitle(), dn = QGuiApplication::applicationDisplayName();
+    // Qt 는 제목이 표시 이름으로 끝나지 않으면 「 - 표시 이름」을 붙인다(Windows·X11) → 이름이 두 번 보이던 원인
+    const bool dup = !dn.isEmpty() && !t.endsWith(dn);
+    return QStringLiteral("title=\"%1\" displayName=\"%2\" appended=%3").arg(t, dn).arg(dup ? 1 : 0);
+}
+
 void MainWindow::updateHeader() {
     if (!secTitle_) return;
     QString st, tip;
@@ -476,6 +520,7 @@ void MainWindow::updateHeader() {
         b->setText(bt); b->setToolTip(tip); b->setProperty("state", st);
         b->style()->unpolish(b); b->style()->polish(b);
     }
+    updateVexUi();
     const bool has = plan_ && plan_->hasLine();
     const QString monoB = QStringLiteral("<b style='font-family:Consolas,\"DejaVu Sans Mono\",monospace'>%1</b>");
     secTitle_->setText(has ? QStringLiteral("%1 단면").arg(sectionName()) : QStringLiteral("단면"));
@@ -491,7 +536,7 @@ void MainWindow::updateHeader() {
         stripScale_->setText(QStringLiteral("화면 축척 ") + monoB.arg(QStringLiteral("1:") + ds));
         stripState_->setText(last_.previewLod || !lastFinal_ ? QStringLiteral("<span style='color:#7A5A00'>미리보기(거친) → 최종 계산 중…</span>")
                                                              : QStringLiteral("<span style='color:#3F6B31'>✓</span> 최종(잎)"));
-        LevelPlan lp = sectionLevelPlan(section_->xf().ppm, 1.0, false);
+        LevelPlan lp = sectionLevelPlan(section_->xf().ppmZ(), 1.0, false);
         lvLine_->setText(QStringLiteral("%1 m").arg(lp.lineCm / 100.0, 0, 'f', 2));
         lvLabel_->setText(QStringLiteral("%1 m").arg(lp.labelCm / 100.0, 0, 'f', 2));
         if (scaleCombo_) { QSignalBlocker b(scaleCombo_); scaleCombo_->setEditText(QStringLiteral("1:") + ds); }
@@ -1075,6 +1120,7 @@ void MainWindow::dlgKeys() {
         {"Ctrl+O", "모델 열기"}, {"Ctrl+Shift+O", "최근 모델 다시 열기(마지막 단면선·화면 그대로)"}, {"S", "단면선 그리기 — A 클릭, A′ 클릭"},
         {"Shift (그리는 중)", "동서·남북으로 고정"}, {"Enter (그리는 중)", "A/A′ 좌표 직접 입력"}, {"Esc", "그리기 취소"},
         {"1 2 3 4 5", "뒤 깊이 0.5 / 1 / 2 / 3 / 5 m"}, {"[  ]", "평행 이동 −0.1 / +0.1 m (보는 쪽 +)"}, {"{  }", "평행 이동 −1 / +1 m"},
+        {"X", "세로 과장 ×1 → ×2 → ×5 → ×10 (화면만 · 도면은 1:1)"},
         {"R", "방향 반전(A↔A′)"}, {"N", "새 단면 추가"}, {"I · L · V", "입면 영상 · 단면선 · 레벨선 켜기/끄기"},
         {"Ctrl+Z / Ctrl+Y", "되돌리기 / 다시(단면선·두께·표시·높이 기준)"}, {"Ctrl+P", "도면(축척·용지 미리보기 → PDF/DXF/PNG/TIFF)"},
         {"Ctrl+D · Ctrl+E", "단면 DXF · 단면 영상(GeoTIFF 포함)"}, {"F · T · + · −", "맞춤 · 위에서 · 확대 · 축소"}, {"Ctrl+1 · Ctrl+2", "평면 · 단면 보기 켜기/끄기"},
@@ -1224,6 +1270,14 @@ MainWindow::MainWindow() {
             sc->setContext(Qt::WidgetWithChildrenShortcut);
             double dv = depths[i];
             QObject::connect(sc, &QShortcut::activated, this, [this, dv] { if (src_) setBackDepth(dv); });
+        }
+        {   // X: 세로 과장 1 → 2 → 5 → 10 → 1 (화면만)
+            auto* sc = new QShortcut(QKeySequence(QStringLiteral("X")), workArea_);
+            sc->setContext(Qt::WidgetWithChildrenShortcut);
+            QObject::connect(sc, &QShortcut::activated, this, [this] {
+                const double v = section_->verticalExaggeration();
+                setVex(v < 2 ? 2 : v < 5 ? 5 : v < 10 ? 10 : 1);
+            });
         }
         const std::pair<const char*, double> shifts[] = {{"]", 0.1}, {"[", -0.1}, {"}", 1.0}, {"{", -1.0}};
         for (auto& [k, d] : shifts) {

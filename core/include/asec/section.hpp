@@ -86,6 +86,11 @@ struct LevelPlan { int lineCm = 10; int labelCm = 50; };
 LevelPlan planLevels(double pxPerMeter, double minLinePx, double minLabelPx, int baseCm = 10);
 /// 보기 좋은 눈금 간격(1·2·5 ×10^k) — 목표 개수 근처
 double niceStep(double range, int targetCount);
+/// 단면선 기복(m): 열린 단면선(지면) 점 높이의 5–95 백분위 차. 닫힌 고리(덤불·돌 덩어리)는 뺌. 점 없으면 0
+double profileRelief(const std::vector<Polyline>& profile);
+/// 화면 세로 과장 추천(1·2·5·10): 기복이 보이는 높이 visibleZ(m, 1:1 일 때)의 15% 이상 차지하는 가장 작은 배율.
+/// 기복 없음·보이는 높이 없음이면 1. 화면 보기 전용 — 도면·내보내기는 언제나 1:1
+int suggestVerticalExaggeration(double relief, double visibleZ);
 
 // ---- 띠/타일 선택 ----
 struct BandQuad { Vec2 p[4]; };
