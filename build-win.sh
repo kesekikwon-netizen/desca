@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT=$PWD
 QT=${QT_WIN:-$HOME/qt/6.8.3/mingw_64}
-VER=1.0.0
+VER=1.1.0
 cmake -S . -B build-win -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake -DCMAKE_BUILD_TYPE=Release \
       -DASEC_QT_WIN_DIR="$QT" -DASEC_BUILD_TESTS=ON -DASEC_BUILD_TOOLS=ON >/dev/null
 ninja -C build-win
@@ -24,4 +24,6 @@ mkdir -p dist
 rm -f "dist/SectionViewer-$VER-portable-win64.zip" "dist/SectionViewer-$VER-Setup.exe"
 (cd build-win/deploy && zip -qr -9 "$ROOT/dist/SectionViewer-$VER-portable-win64.zip" SectionViewer)
 (cd packaging && makensis -V2 -DSRCDIR="$ROOT/$D" -DOUTFILE="$ROOT/dist/SectionViewer-$VER-Setup.exe" installer.nsi)
-(cd dist && sha256sum "SectionViewer-$VER-Setup.exe" "SectionViewer-$VER-portable-win64.zip" > SHA256SUMS.txt && cat SHA256SUMS.txt)
+# SHA256SUMS.txt: 이전 버전 줄은 유지하고 이번 버전 줄만 바꿈
+(cd dist && { if [ -f SHA256SUMS.txt ]; then grep -v -e "SectionViewer-$VER-Setup.exe" -e "SectionViewer-$VER-portable-win64.zip" SHA256SUMS.txt || true; fi
+  sha256sum "SectionViewer-$VER-Setup.exe" "SectionViewer-$VER-portable-win64.zip"; } > SHA256SUMS.new && mv SHA256SUMS.new SHA256SUMS.txt && cat SHA256SUMS.txt)

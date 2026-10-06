@@ -39,7 +39,7 @@
 using namespace asec;
 using clk = std::chrono::steady_clock;
 
-static const char* kVersion = "1.0.0";
+static const char* kVersion = "1.1.0";
 
 // ---------------------------------------------------------------- 공통 도우미
 static fs::path toFs(const QString& q) {
@@ -968,8 +968,21 @@ QString MainWindow::askSavePath(const QString& key, const QString& suggested, co
 
 static QString baseName(const QString& path) { return path.isEmpty() ? QStringLiteral("section") : QFileInfo(path).completeBaseName(); }
 
+// 내보내기 전: 화면 결과가 미리보기(거친 LOD)이면 잎 메시로 최종 단면을 먼저 계산(내보내기는 항상 최종 기준)
+bool MainWindow::ensureFinalSection() {
+    if (!section_->hasResult()) return false;
+    if (!last_.previewLod) return true;
+    QString e;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    bool ok = computeNow(plan_->line(), &e);
+    QApplication::restoreOverrideCursor();
+    if (!ok) report(false, QStringLiteral("최종 단면 계산 실패: ") + e);
+    return ok && section_->hasResult();
+}
+
 void MainWindow::dlgSectionImage() {
     if (!section_->hasResult() || !src_) return;
+    if (!ensureFinalSection()) return;
     SectionDoc doc = section_->doc();
     QFormLayout* f; QLabel* calc; QVBoxLayout* outer;
     std::unique_ptr<QDialog> d(makeDialog(this, QStringLiteral("단면 영상 내보내기 (Section Image)"), f, calc, outer));
@@ -1002,6 +1015,7 @@ void MainWindow::dlgSectionImage() {
 
 void MainWindow::dlgSectionDxf() {
     if (!section_->hasResult() || !src_) return;
+    if (!ensureFinalSection()) return;
     SectionDoc doc = section_->doc();
     QFormLayout* f; QLabel* calc; QVBoxLayout* outer;
     std::unique_ptr<QDialog> d(makeDialog(this, QStringLiteral("단면 DXF 내보내기 (Section DXF)"), f, calc, outer));
@@ -1113,6 +1127,7 @@ void MainWindow::dlgPoints(int presetFormat) {
 
 void MainWindow::dlgProfileCsv() {
     if (!section_->hasResult()) return;
+    if (src_ && !ensureFinalSection()) return;
     QString path = askSavePath("export", baseName(path_) + QStringLiteral("_단면선.csv"), QStringLiteral("CSV (*.csv)"));
     if (path.isEmpty()) return;
     QString m;

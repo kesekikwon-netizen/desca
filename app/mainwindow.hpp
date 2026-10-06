@@ -57,6 +57,7 @@ public:
     static bool loadScene(const QString& path, OpenedScene& out, QString* err, const std::function<void(double)>& progress = {});
     void applyScene(OpenedScene&& s);
     bool computeNow(const asec::SectionLine& l, QString* err);  // 동기 단면(자동화용)
+    bool ensureFinalSection();  // 화면 결과가 미리보기면 최종(잎) 계산
     // 내보내기: 입력을 모두 인자로 받음(스레드 안전). src 는 공유 포인터 사본, doc 은 GUI 스레드에서 뜬 스냅숏
     static bool exportSectionImage(const SectionDoc& doc, asec::MeshSource& src, const SectionExportParams& p, const QString& path, QString* msg,
                                    const std::atomic<bool>* cancel = nullptr);
