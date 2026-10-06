@@ -121,3 +121,33 @@ TEST_CASE("두께 띠 vs 상자(SAT)") {
     CHECK_FALSE(bandIntersectsBox(q, off));
     CHECK_FALSE(bandIntersectsBox(q, corner));
 }
+
+TEST_CASE("레벨선 간격 규칙: 작업·인쇄 축척은 10 cm 선 / 50 cm 숫자, 축소하면 솎고, 확대해도 10 cm 보다 촘촘하지 않음") {
+    // 인쇄 1:20, 300 dpi: 1 m = 50 mm = 590.6 px. 선 기준 0.5 mm(5.9 px), 숫자 기준 약 15 px
+    const double dpi = 300, minLine = 0.5 / 25.4 * dpi, minLab = 15;
+    for (double denom : {10.0, 20.0, 40.0, 50.0, 100.0}) {
+        double ppm = 1000.0 / denom / 25.4 * dpi;
+        LevelPlan lp = planLevels(ppm, minLine, minLab);
+        INFO("1:" << denom);
+        CHECK(lp.lineCm == 10);
+        CHECK(lp.labelCm == 50);
+    }
+    // 화면: 4 px 보다 촘촘하면 솎음
+    CHECK(planLevels(100, 4, 20).lineCm == 10);   // 10 cm = 10 px
+    CHECK(planLevels(100, 4, 20).labelCm == 50);  // 50 cm = 50 px
+    CHECK(planLevels(30, 4, 20).lineCm == 50);    // 10 cm = 3 px → 50 cm
+    CHECK(planLevels(30, 4, 20).labelCm == 100);  // 50 cm = 15 px < 20 → 1 m
+    CHECK(planLevels(6, 4, 20).lineCm == 100);    // 50 cm = 3 px → 1 m
+    CHECK(planLevels(6, 4, 20).labelCm == 500);
+    CHECK(planLevels(0.5, 4, 20).lineCm == 1000);
+    // 크게 확대: 여전히 10 cm(더 촘촘하게는 사용자가 설정할 때만)
+    CHECK(planLevels(5000, 4, 20).lineCm == 10);
+    CHECK(planLevels(5000, 4, 20, 5).lineCm == 5);
+    CHECK(planLevels(5000, 4, 20).labelCm == 50);
+    // 숫자는 그리는 선 위에만
+    for (double ppm : {0.3, 2.0, 7.0, 25.0, 41.0, 90.0, 400.0}) {
+        LevelPlan lp = planLevels(ppm, 4, 20);
+        CHECK(lp.labelCm % lp.lineCm == 0);
+        CHECK(lp.labelCm >= 50);
+    }
+}

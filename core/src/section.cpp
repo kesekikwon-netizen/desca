@@ -376,6 +376,19 @@ int labelStepCm(double pxPerMeter, double minPx) {
     return 1000;
 }
 
+LevelPlan planLevels(double ppm, double minLinePx, double minLabelPx, int baseCm) {
+    LevelPlan lp;
+    baseCm = std::max(1, baseCm);
+    lp.lineCm = 1000;
+    for (int s : {baseCm, 50, 100, 500, 1000})
+        if (s >= baseCm && s / 100.0 * ppm >= minLinePx) { lp.lineCm = s; break; }
+    lp.labelCm = 1000;
+    for (int s : {50, 100, 500, 1000})
+        if (s >= lp.lineCm && s % lp.lineCm == 0 && s / 100.0 * ppm >= minLabelPx) { lp.labelCm = s; break; }
+    if (lp.labelCm < lp.lineCm) lp.labelCm = lp.lineCm;
+    return lp;
+}
+
 double niceStep(double range, int target) {
     if (range <= 0 || target <= 0) return 1;
     double raw = range / target, mag = std::pow(10.0, std::floor(std::log10(raw))), r = raw / mag;

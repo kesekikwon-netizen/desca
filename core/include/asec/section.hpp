@@ -80,6 +80,10 @@ std::vector<LevelLine> levelLines(double zmin, double zmax, int stepCm = 10, int
 std::string formatElevation(double z, int decimals = 1);  // 표고 라벨: 기본 소수 1자리("78.5", "79.0")
 /// 라벨이 겹치지 않는 최소 라벨 간격(cm): {10,50,100,500,1000} 중 화면 간격 >= minPx
 int labelStepCm(double pxPerMeter, double minPx);
+/// 레벨선 화면/인쇄 간격 규칙: 선은 기본 10 cm(사용자 설정 baseCm, 이보다 촘촘하게는 안 함), 선 사이가 minLinePx 보다
+/// 좁아지면 50 cm → 1 m → 5 m → 10 m 로 솎음. 숫자는 50 cm(78.5/79.0) 기본, 글자가 겹치면 1 m → 5 m → 10 m(그리는 선 위에만).
+struct LevelPlan { int lineCm = 10; int labelCm = 50; };
+LevelPlan planLevels(double pxPerMeter, double minLinePx, double minLabelPx, int baseCm = 10);
 /// 보기 좋은 눈금 간격(1·2·5 ×10^k) — 목표 개수 근처
 double niceStep(double range, int targetCount);
 
