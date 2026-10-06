@@ -248,6 +248,33 @@ const WktNode* findEllipsoid(const WktNode& n) {
     return nullptr;
 }
 std::string lower(std::string s) { for (auto& c : s) c = char(std::tolower((unsigned char)c)); return s; }
+const WktNode* findDeep(const WktNode& n, const char* key) {
+    for (auto& c : n.kids) {
+        if (c.key == key) return &c;
+        if (!c.key.empty()) if (auto* r = findDeep(c, key)) return r;
+    }
+    return nullptr;
+}
+// BOUNDCRS 이면 SOURCECRS 안의 CRS(아니면 그대로)
+const WktNode* unwrapBound(const WktNode* n) {
+    if (!n || n->key != "BOUNDCRS") return n;
+    if (const WktNode* src = n->child("SOURCECRS"))
+        for (auto& k : src->kids) if (isCrs(k.key)) return &k;
+    return n;
+}
+// 수직 좌표계(VERTCRS/VERT_CS, wrapper = 감싼 BOUNDCRS 또는 자신): 이름·EPSG·VDATUM·GEOIDMODEL·격자 파일
+void readVertical(const WktNode& v, const WktNode& wrapper, SrsDesc& d) {
+    d.vertKind = VertKind::Gravity;
+    d.verticalName = v.str(0);
+    d.verticalEpsg = directEpsg(v);
+    const WktNode* dat = v.child("VDATUM"); if (!dat) dat = v.child("VERT_DATUM"); if (!dat) dat = v.child("VERTICALDATUM");
+    if (dat) d.verticalDatum = dat->str(0);
+    if (const WktNode* gm = v.child("GEOIDMODEL")) d.geoidModel = gm->str(0);
+    if (d.geoidModel.empty() && dat)
+        for (auto* ex : dat->children("EXTENSION")) if (ieq(ex->str(0), "PROJ4_GRIDS")) d.geoidModel = ex->str(1);
+    if (d.geoidModel.empty())
+        if (const WktNode* pf = findDeep(wrapper, "PARAMETERFILE")) d.geoidModel = pf->str(1);
+}
 
 void readTm(const WktNode& n, SrsDesc& d) {
     // WKT2: CONVERSION[ ..., METHOD["Transverse Mercator"], PARAMETER[...] ] / WKT1: PROJECTION["Transverse_Mercator"], PARAMETER[...]
@@ -340,7 +367,7 @@ void readHorizontal(const WktNode& n, SrsDesc& d) {
 }
 }  // namespace
 
-SrsDesc describeSrs(const std::string& srs0) {
+static SrsDesc describeSrsRaw(const std::string& srs0) {
     SrsDesc d;
     std::string s = srs0;
     while (!s.empty() && std::isspace((unsigned char)s.back())) s.pop_back();
@@ -366,14 +393,25 @@ SrsDesc describeSrs(const std::string& srs0) {
             if (std::strncmp(e, "EPSG:", 5) == 0 || std::strncmp(e, "epsg:", 5) == 0) e += 5;
             char* e2 = nullptr;
             v = std::strtol(e, &e2, 10);
-            if (e2 == e || v <= 0) { d.kind = SrsKind::Unknown; d.warnings.push_back("복합 좌표계의 수직 EPSG 를 읽을 수 없습니다: " + s); return d; }
+            if (e2 == e || v <= 0) {
+                // iTwin 등 글자 표기 "EPSG:5186+EGM96" / "+KNGeoid18" — 이름으로 높이 기준 판별
+                std::string vt = e;
+                while (!vt.empty() && std::isspace((unsigned char)vt.back())) vt.pop_back();
+                VDatum vd = vdatumFromText(vt);
+                if (vt.empty() || vd == VDatum::Unknown || vd == VDatum::Ellipsoidal) {
+                    d.kind = SrsKind::Unknown; d.warnings.push_back("복합 좌표계의 수직 기준을 읽을 수 없습니다: " + s); return d;
+                }
+                v = vdatumInfo(vd).epsg;
+                d.verticalName = vt;
+                if (!v) { d.vertKind = VertKind::Gravity; }
+            }
         }
-        d.kind = v ? SrsKind::CompoundEpsg : SrsKind::Epsg;
+        d.kind = (v || d.vertKind == VertKind::Gravity) ? SrsKind::CompoundEpsg : SrsKind::Epsg;
         d.horizontalEpsg = int(h); d.horizontalHow = "EPSG 코드";
         d.horizontalName = epsgName(int(h));
         TmParams tp;
         if (tmParamsForEpsg(int(h), tp)) { d.hasTm = true; d.tmLat0 = tp.lat0; d.tmLon0 = tp.lon0; d.tmK0 = tp.k0; d.tmFE = tp.FE; d.tmFN = tp.FN; d.tmA = tp.a; d.tmInvF = tp.invF; d.ellipsoid = tp.invF == GRS80_INVF ? "GRS 1980" : "WGS 84"; d.axisNorthFirst = h >= 5179 && h <= 5188; }
-        if (v) { d.verticalEpsg = int(v); d.vertKind = VertKind::Gravity; d.verticalName = verticalEpsgName(int(v)); }
+        if (v) { d.verticalEpsg = int(v); d.vertKind = VertKind::Gravity; if (d.verticalName.empty() || verticalEpsgName(int(v))[0]) d.verticalName = verticalEpsgName(int(v)); }
         else if (is3dGeographic(int(h))) { d.vertKind = VertKind::Ellipsoidal; d.verticalName = "ellipsoidal height"; }
         if (d.horizontalName.empty()) d.warnings.push_back("EPSG:" + std::to_string(h) + " 는 내장 이름표에 없습니다(번호는 그대로 사용).");
         if (h == 5174 || h == 2097) d.warnings.push_back("구 좌표계(Bessel, 가산 북 500000)입니다. 현행 EPSG:5186 과 수백 m 다릅니다.");
@@ -410,24 +448,45 @@ SrsDesc describeSrs(const std::string& srs0) {
     if (isCompound(top->key)) {
         std::vector<const WktNode*> comps;
         for (auto& k : top->kids) if (isCrs(k.key)) comps.push_back(&k);
-        const WktNode* h = nullptr; const WktNode* v = nullptr;
-        for (auto* c : comps) { if (isVert(c->key)) { if (!v) v = c; } else if (!h) h = c; }
+        const WktNode* h = nullptr; const WktNode* v = nullptr; const WktNode* vw = nullptr;
+        for (auto* c0 : comps) { const WktNode* c = unwrapBound(c0); if (isVert(c->key)) { if (!v) { v = c; vw = c0; } } else if (!h) h = c; }
         if (h) readHorizontal(*h, d);
         else d.warnings.push_back("복합 좌표계에 수평 좌표계가 없습니다.");
         readBbox(*top, d);
         int ce = directEpsg(*top);
         (void)ce;
-        if (v) {
-            d.vertKind = VertKind::Gravity;
-            d.verticalName = v->str(0);
-            d.verticalEpsg = directEpsg(*v);
-        }
+        if (v) readVertical(*v, *vw, d);
         if (d.horizontalName.empty()) d.horizontalName = top->str(0);
     } else if (isVert(top->key)) {
-        d.vertKind = VertKind::Gravity; d.verticalName = top->str(0); d.verticalEpsg = directEpsg(*top);
+        readVertical(*top, root, d);
         d.warnings.push_back("수직 좌표계만 있고 수평 좌표계가 없습니다.");
     } else {
         readHorizontal(*top, d);
+    }
+    return d;
+}
+
+// 높이 기준 판별(EPSG → 이름·VDATUM·지오이드 모델 글자). 값은 바꾸지 않음
+SrsDesc describeSrs(const std::string& srs) {
+    SrsDesc d = describeSrsRaw(srs);
+    switch (d.vertKind) {
+    case VertKind::Unspecified: d.vdatum = VDatum::None; break;
+    case VertKind::Ellipsoidal: d.vdatum = VDatum::Ellipsoidal; break;
+    case VertKind::LocalEnu: d.vdatum = VDatum::LocalEnu; break;
+    case VertKind::Gravity: {
+        VDatum v = vdatumFromEpsg(d.verticalEpsg);
+        for (const std::string* t : {&d.verticalName, &d.verticalDatum, &d.geoidModel})
+            if (v == VDatum::Unknown || v == VDatum::KVD1964) {
+                VDatum w = vdatumFromText(*t);
+                // KNGeoid 격자로 정의된 높이는 KVD1964 보다 구체적인 정보이므로 우선
+                if (w != VDatum::Unknown && w != VDatum::Ellipsoidal && (v == VDatum::Unknown || w == VDatum::KNGeoid)) v = w;
+            }
+        d.vdatum = v;
+        if (!d.verticalEpsg && vdatumInfo(v).epsg) d.verticalEpsg = vdatumInfo(v).epsg;
+        if (v == VDatum::Unknown)
+            d.warnings.push_back("높이 기준(" + (d.verticalName.empty() ? std::string("이름 없음") : d.verticalName) + ")을 내장 표에서 알아보지 못했습니다. 이름 그대로 표시합니다.");
+        break;
+    }
     }
     return d;
 }
@@ -445,8 +504,12 @@ std::string SrsDesc::verticalKo() const {
     switch (vertKind) {
     case VertKind::Ellipsoidal: return "타원체고" + (ellipsoid.empty() ? std::string() : "(" + shortEllipsoid(ellipsoid) + ")");
     case VertKind::Gravity: {
-        std::string n = verticalName.empty() ? std::string("수직 좌표계") : verticalName;
-        if (verticalEpsg) n += " (EPSG:" + std::to_string(verticalEpsg) + ")";
+        std::string n = vdatum != VDatum::Unknown && vdatum != VDatum::None ? std::string(vdatumInfo(vdatum).nameKo)
+                        : verticalName.empty() ? std::string("수직 좌표계") : verticalName;
+        std::string extra;
+        if (verticalEpsg) extra = "EPSG:" + std::to_string(verticalEpsg);
+        if (vdatum == VDatum::KNGeoid) { std::string m = !geoidModel.empty() ? geoidModel : verticalName; if (!m.empty()) extra = extra.empty() ? m : extra + ", " + m; }
+        if (!extra.empty()) n += " (" + extra + ")";
         return n;
     }
     case VertKind::LocalEnu: return "ENU 로컬 높이(원점 접평면 기준)";
@@ -487,6 +550,8 @@ std::string SrsDesc::tooltipKo() const {
     if (!horizontalName.empty()) t += "수평 좌표계: " + horizontalName + "\n";
     if (horizontalEpsg) t += "EPSG:" + std::to_string(horizontalEpsg) + " (판별 근거: " + horizontalHow + ")\n";
     t += "높이 기준: " + verticalKo() + "\n";
+    if (!verticalDatum.empty()) t += "수직 측지 기준: " + verticalDatum + "\n";
+    if (!geoidModel.empty()) t += "지오이드 모델/격자: " + geoidModel + "\n";
     if (hasTm) {
         char b[200];
         std::snprintf(b, sizeof b, "TM: 원점 위도 %.4f°, 중앙자오선 %.4f°, 축척 %.4f, 가산 동 %.0f / 북 %.0f\n", tmLat0, tmLon0, tmK0, tmFE, tmFN);
@@ -497,6 +562,8 @@ std::string SrsDesc::tooltipKo() const {
     if (vertKind == VertKind::Ellipsoidal)
         t += "주의: iTwin/ContextCapture 는 GCP 를 정표고(해발)로 넣었어도 3D 좌표계의 높이를 '타원체고'로 표기하는 경우가 있습니다. "
              "실제 값이 어느 쪽인지는 측량 기준점과 대조해 확인하세요(한국에서 두 높이 차는 약 20–30 m).\n";
+    if (vdatum == VDatum::EGM96 || vdatum == VDatum::EGM2008)
+        t += "참고: 전 지구 지오이드(" + std::string(vdatumInfo(vdatum).shortName) + ") 기준 높이는 한국 정표고(KVD1964, 인천만 평균해수면)와 같지 않습니다. 기준점과 대조하세요.\n";
     if (vertKind == VertKind::Unspecified && known())
         t += "주의: 높이 기준이 SRS 에 없습니다. ContextCapture/iTwin 기본은 타원체고(Bentley 문서) — 기준점과 대조해 확인하세요.\n";
     for (auto& w : warnings) t += "⚠ " + w + "\n";

@@ -6,6 +6,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include "asec/vdatum.hpp"
 
 namespace asec {
 
@@ -39,6 +40,9 @@ struct SrsDesc {
     VertKind vertKind = VertKind::Unspecified;
     std::string horizontalName;      // 예: "KGD2002 / Central Belt 2010"
     std::string verticalName;        // 예: "KVD1964 height" / "ellipsoidal height (h)"
+    std::string verticalDatum;       // VDATUM/VERT_DATUM 이름(예: "EGM96 geoid")
+    std::string geoidModel;          // WKT2 GEOIDMODEL / WKT1 EXTENSION PROJ4_GRIDS / PARAMETERFILE(예: "egm96_15.gtx")
+    VDatum vdatum = VDatum::None;    // 식별한 높이 기준(EGM96·EGM2008·KVD1964·KNGeoid·타원체고 …). 표시용 — 높이 값은 안 바꿈
     std::string ellipsoid;           // 예: "GRS 1980"
     bool axisNorthFirst = false;     // WKT 공식 축 순서가 북→동(3MX 좌표 순서와 무관 — 표시용)
     double enuLat = 0, enuLon = 0;   // ENU 원점

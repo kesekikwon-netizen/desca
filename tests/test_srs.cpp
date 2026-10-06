@@ -87,7 +87,8 @@ TEST_CASE("SRS: 복합 COMPOUNDCRS(WKT2)·COMPD_CS(WKT1) → 수평 5186 + 수�
         CHECK(d.verticalEpsg == 5193);
         CHECK(d.vertKind == VertKind::Gravity);
         CHECK(d.verticalName == "KVD1964 height");
-        CHECK(d.labelKo() == "수평 EPSG:5186 / 높이 KVD1964 height (EPSG:5193)");
+        CHECK(d.labelKo() == "수평 EPSG:5186 / 높이 KVD1964 정표고(인천만 평균해수면) (EPSG:5193)");
+        CHECK(d.vdatum == VDatum::KVD1964);
         CHECK(d.shortAscii() == "EPSG:5186+5193");
         SrsInfo s; s.srs = w;
         CHECK(s.verticalEpsg() == 5193);
