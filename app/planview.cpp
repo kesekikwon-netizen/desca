@@ -64,15 +64,29 @@ bool HeightIndex::z(double x, double y, double& out) const {
 // ---------------- 스트리밍 노드 데이터(작업 스레드에서 만듦) ----------------
 namespace {
 struct NodePrep {
-    struct Part { std::vector<float> inter; std::vector<uint32_t> idx; QImage tex; };
+    // mips: 텍스처 밉맵 전체(0 = 원본 … 1×1), 작업 스레드에서 미리 만듦 → GUI 스레드는 나눠 올리기만(glGenerateMipmap 없음)
+    struct Part { std::vector<float> inter; std::vector<uint32_t> idx; std::vector<QImage> mips; };
     std::vector<Part> parts;
 };
+
+/// 밉맵 사슬(원본 → 1×1). 각 단계는 앞 단계의 절반(부드러운 축소)
+std::vector<QImage> buildMips(const QImage& base) {
+    std::vector<QImage> v;
+    if (base.isNull()) return v;
+    v.push_back(base);
+    while (v.back().width() > 1 || v.back().height() > 1) {
+        const QImage& b = v.back();
+        v.push_back(b.scaled(std::max(1, b.width() / 2), std::max(1, b.height() / 2), Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                        .convertToFormat(QImage::Format_RGBA8888));
+    }
+    return v;
+}
 
 /// 3MX 노드 메시 → GPU 업로드용(장면 중심 기준 float, 법선, 텍스처 RGBA). 작업 스레드에서 호출
 std::shared_ptr<void> prepareNode(const TmxNode& node, const Vec3& c, size_t* bytes) {
     auto out = std::make_shared<NodePrep>();
     size_t b = 0;
-    std::unordered_map<const Texture*, QImage> texCache;
+    std::unordered_map<const Texture*, std::vector<QImage>> texCache;
     for (auto& mp : node.meshes) {
         const Mesh& m = *mp;
         size_t n = m.vertexCount();
@@ -109,11 +123,11 @@ std::shared_ptr<void> prepareNode(const TmxNode& node, const Vec3& c, size_t* by
                     if (px) { q = QImage(px, w, h, w * 4, QImage::Format_RGBA8888).copy(); stbi_image_free(px); }
                 }
                 if (!q.isNull() && std::max(q.width(), q.height()) > 2048) q = q.scaled(2048, 2048, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                if (!q.isNull()) q = q.mirrored();  // GL 행0 = 아래 = v 0
-                it = texCache.emplace(m.texture.get(), q).first;
+                if (!q.isNull()) q = q.mirrored().convertToFormat(QImage::Format_RGBA8888);  // GL 행0 = 아래 = v 0
+                it = texCache.emplace(m.texture.get(), buildMips(q)).first;
             }
-            P.tex = it->second;
-            if (!P.tex.isNull()) b += size_t(P.tex.width()) * P.tex.height() * 4 * 4 / 3;  // 밉맵 포함
+            P.mips = it->second;
+            for (auto& mi : P.mips) b += size_t(mi.width()) * mi.height() * 4;  // 밉맵 포함
         }
         b += P.inter.size() * 4 + P.idx.size() * 4;
         out->parts.push_back(std::move(P));
@@ -123,25 +137,6 @@ std::shared_ptr<void> prepareNode(const TmxNode& node, const Vec3& c, size_t* by
     return out;
 }
 
-void uploadPart(QOpenGLFunctions* gl, const float* inter, size_t nFloats, const uint32_t* idx, size_t nIdx, const QImage& texGl, GLuint& vbo, GLuint& ibo, GLuint& tex) {
-    gl->glGenBuffers(1, &vbo);
-    gl->glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    gl->glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(nFloats * 4), inter, GL_STATIC_DRAW);
-    gl->glGenBuffers(1, &ibo);
-    gl->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-    gl->glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(nIdx * 4), idx, GL_STATIC_DRAW);
-    if (!texGl.isNull()) {
-        gl->glGenTextures(1, &tex);
-        gl->glBindTexture(GL_TEXTURE_2D, tex);
-        gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-        gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texGl.width(), texGl.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, texGl.constBits());
-        gl->glGenerateMipmap(GL_TEXTURE_2D);
-        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    }
-}
 }  // namespace
 
 size_t PlanView::gpuBudgetBytes() {
@@ -178,14 +173,27 @@ void PlanView::freeGpu() {
     gpu_.clear();
     for (auto& kv : gpuNodes_) freeGpuNode(kv.second);
     gpuNodes_.clear();
+    freeStaging();
+    freeTexPool();
     gpuNodeBytes_ = 0;
+}
+
+void PlanView::freeTexPool() {
+    for (auto& p : texPool_) glDeleteTextures(1, &p.tex);
+    texPool_.clear(); texPoolBytes_ = 0;
 }
 
 void PlanView::freeGpuNode(std::vector<Gpu>& v) {
     for (auto& g : v) {
         if (g.vbo) glDeleteBuffers(1, &g.vbo);
         if (g.ibo) glDeleteBuffers(1, &g.ibo);
-        if (g.tex) glDeleteTextures(1, &g.tex);
+        if (g.tex) {
+            const size_t tb = size_t(g.texW) * g.texH * 4 * 4 / 3;
+            constexpr size_t kPoolMax = size_t(96) << 20;   // 남겨 두는 텍스처 최대 96 MB
+            if (g.texLevels > 0 && texPoolBytes_ + tb <= kPoolMax && streamer_) {
+                texPool_.push_back({g.tex, g.texW, g.texH, g.texLevels, tb}); texPoolBytes_ += tb;
+            } else glDeleteTextures(1, &g.tex);
+        }
         gpuNodeBytes_ -= std::min(gpuNodeBytes_, g.bytes);
     }
     v.clear();
@@ -342,6 +350,105 @@ void PlanView::drawGpu(const Gpu& g) {
     glDrawElements(GL_TRIANGLES, g.count, GL_UNSIGNED_INT, nullptr);
 }
 
+size_t PlanView::uploadBudgetBytes() {
+    int kb = QSettings().value("view/uploadBudgetKB", 3072).toInt();
+    if (qEnvironmentVariableIsSet("SECTIONVIEWER_UPLOAD_KB")) kb = qEnvironmentVariableIntValue("SECTIONVIEWER_UPLOAD_KB");
+    return kb <= 0 ? 0 : size_t(std::clamp(kb, 256, 262144)) << 10;
+}
+
+void PlanView::freeStaging() {
+    for (auto& kv : staging_) freeGpuNode(kv.second.parts);
+    staging_.clear();
+    burstDone_ = burstPeak_ = 0;
+}
+
+// 한 노드를 예산만큼 올린다. stage 0 = 정점 버퍼(조각), 1 = 색인 버퍼(조각), 2 = 텍스처 자리 잡기, 3 = 밉맵 단계별 행 띠. true = 노드 끝
+static bool gUpDbg = qEnvironmentVariableIsSet("SECTIONVIEWER_UPLOAD_DEBUG");
+#define UPDBG(what, t0) do { if (gUpDbg) { double ms_ = (t.nsecsElapsed() - (t0)) / 1e6; if (ms_ > 2) fprintf(stderr, "upload %s %.2f ms\n", what, ms_); } } while (0)
+bool PlanView::stepStaging(Staging& st, size_t& budget, const QElapsedTimer& t, double maxMs) {
+    auto* prep = static_cast<NodePrep*>(st.prep.get());
+    const size_t chunkMax = size_t(1) << 20;   // 한 번 호출 최대 1 MB(한 호출이 길어지지 않게)
+    while (st.part < prep->parts.size()) {
+        if (budget == 0 || t.nsecsElapsed() / 1e6 >= maxMs) return false;
+        auto& P = prep->parts[st.part];
+        if (st.parts.size() <= st.part) {
+            Gpu g; g.count = GLsizei(P.idx.size()); g.hasTex = !P.mips.empty();
+            g.bytes = P.inter.size() * 4 + P.idx.size() * 4;
+            for (auto& m : P.mips) g.bytes += size_t(m.width()) * m.height() * 4;
+            qint64 t0 = t.nsecsElapsed();
+            glGenBuffers(1, &g.vbo); glBindBuffer(GL_ARRAY_BUFFER, g.vbo); glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(P.inter.size() * 4), nullptr, GL_STATIC_DRAW);
+            glGenBuffers(1, &g.ibo); glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g.ibo); glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(P.idx.size() * 4), nullptr, GL_STATIC_DRAW);
+            UPDBG("bufalloc", t0);
+            gpuNodeBytes_ += g.bytes;
+            st.parts.push_back(g);
+            st.stage = 0; st.offset = 0; st.level = 0; st.row = 0;
+        }
+        Gpu& g = st.parts[st.part];
+        if (st.stage == 0 || st.stage == 1) {
+            const size_t total = st.stage == 0 ? P.inter.size() * 4 : P.idx.size() * 4;
+            const char* src = st.stage == 0 ? reinterpret_cast<const char*>(P.inter.data()) : reinterpret_cast<const char*>(P.idx.data());
+            GLenum tgt = st.stage == 0 ? GL_ARRAY_BUFFER : GL_ELEMENT_ARRAY_BUFFER;
+            glBindBuffer(tgt, st.stage == 0 ? g.vbo : g.ibo);
+            while (st.offset < total) {
+                if (budget == 0 || t.nsecsElapsed() / 1e6 >= maxMs) return false;
+                size_t n = std::min({total - st.offset, chunkMax, std::max<size_t>(budget, 64 << 10)});
+                qint64 t0 = t.nsecsElapsed();
+                glBufferSubData(tgt, GLintptr(st.offset), GLsizeiptr(n), src + st.offset);
+                UPDBG("bufsub", t0);
+                st.offset += n; budget -= std::min(budget, n);
+            }
+            st.stage++; st.offset = 0;
+            continue;
+        }
+        if (P.mips.empty()) { st.part++; continue; }
+        if (st.stage == 2) {
+            const int W = P.mips[0].width(), H = P.mips[0].height(), L = int(P.mips.size());
+            g.texW = W; g.texH = H; g.texLevels = L;
+            auto pit = std::find_if(texPool_.begin(), texPool_.end(), [&](const PoolTex& q) { return q.w == W && q.h == H && q.levels == L; });
+            if (pit != texPool_.end()) {
+                g.tex = pit->tex; texPoolBytes_ -= std::min(texPoolBytes_, pit->bytes);
+                texPool_.erase(pit);
+            } else {
+                qint64 t0 = t.nsecsElapsed();
+                glGenTextures(1, &g.tex);
+                glBindTexture(GL_TEXTURE_2D, g.tex);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+                // 밉맵 거르기를 먼저 정해야 Mesa 등이 처음부터 밉맵 사슬 전체를 한 번에 잡음(아니면 단계마다 다시 할당·복사 → 수십 ms)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                for (int l = 0; l < L; ++l)
+                    glTexImage2D(GL_TEXTURE_2D, l, GL_RGBA, P.mips[size_t(l)].width(), P.mips[size_t(l)].height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+                UPDBG("texalloc", t0);
+                // 새로 잡은 프레임에는 더 올리지 않음(한 프레임에 비용이 겹치지 않게)
+                budget = 0;
+            }
+            st.stage = 3; st.level = int(P.mips.size()) - 1; st.row = 0;   // 작은 단계부터
+            continue;
+        }
+        // stage 3: 밉맵 단계별 행 띠
+        glBindTexture(GL_TEXTURE_2D, g.tex);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        while (st.level >= 0) {
+            const QImage& im = P.mips[size_t(st.level)];
+            const size_t rowBytes = size_t(im.width()) * 4;
+            while (st.row < im.height()) {
+                if (budget == 0 || t.nsecsElapsed() / 1e6 >= maxMs) return false;
+                int rows = int(std::max<size_t>(1, std::min(std::max<size_t>(budget, 64 << 10), chunkMax) / rowBytes));
+                rows = std::min(rows, im.height() - st.row);
+                qint64 t0 = t.nsecsElapsed();
+                glTexSubImage2D(GL_TEXTURE_2D, st.level, 0, st.row, im.width(), rows, GL_RGBA, GL_UNSIGNED_BYTE, im.constScanLine(st.row));
+                UPDBG("texsub", t0);
+                st.row += rows; budget -= std::min(budget, size_t(rows) * rowBytes);
+            }
+            st.level--; st.row = 0;
+        }
+        st.part++;
+    }
+    return true;
+}
+
 void PlanView::paintStreaming(const QMatrix4x4& mvp) {
     // 화면 판정(장면 중심 기준 상자 8꼭짓점을 클립 공간으로: 한 평면 밖에 모두 있으면 안 보임)
     LodStreamer::View v;
@@ -366,25 +473,43 @@ void PlanView::paintStreaming(const QMatrix4x4& mvp) {
         if (it != gpuNodes_.end()) { freeGpuNode(it->second); gpuNodes_.erase(it); }
         fi.evicted++;
     }
-    // 올리기: 프레임당 약 8 ms(최소 1노드) — 큰 모델에서도 화면이 멈추지 않음
+    // 올리기: 프레임당 바이트 예산(기본 3 MB) + 시간 한도 5 ms 로 나눠서. 노드 하나도 여러 프레임에 걸쳐 올림
+    //   (버퍼는 조각, 텍스처는 밉맵 단계·행 띠). 다 올린 노드만 take() 로 상주 확정 → 그동안 부모가 그려져 구멍 없음.
     QElapsedTimer ut; ut.start();
+    ++frameNo_;
+    size_t budget = uploadBudgetBytes(), used0 = budget;
+    const bool legacy = budget == 0;
+    if (legacy) budget = SIZE_MAX;
+    size_t startedThisFrame = 0;
     for (auto k : f.upload) {
-        if (fi.uploaded > 0 && ut.elapsed() >= 8) break;
-        auto p = std::static_pointer_cast<NodePrep>(streamer_->take(k));
-        if (!p) continue;
-        std::vector<Gpu> parts;
-        for (auto& P : p->parts) {
-            Gpu g;
-            uploadPart(this, P.inter.data(), P.inter.size(), P.idx.data(), P.idx.size(), P.tex, g.vbo, g.ibo, g.tex);
-            g.count = GLsizei(P.idx.size());
-            g.hasTex = !P.tex.isNull();
-            g.bytes = P.inter.size() * 4 + P.idx.size() * 4 + (g.hasTex ? size_t(P.tex.width()) * P.tex.height() * 16 / 3 : 0);
-            gpuNodeBytes_ += g.bytes;
-            parts.push_back(g);
+        if (!legacy && (budget == 0 || ut.nsecsElapsed() / 1e6 >= 5.0)) break;
+        auto it = staging_.find(k);
+        if (it == staging_.end()) {
+            if (staging_.size() >= 6 || startedThisFrame >= 2) continue;   // 동시에 올리는 노드 수 제한
+            auto p = streamer_->peek(k);
+            if (!p) continue;
+            Staging st; st.prep = p;
+            it = staging_.emplace(k, std::move(st)).first;
+            ++startedThisFrame;
         }
-        gpuNodes_[k] = std::move(parts);
-        fi.uploaded++;
+        it->second.lastSeen = frameNo_;
+        if (!stepStaging(it->second, budget, ut, legacy ? 1e9 : 5.0)) { if (legacy) continue; else break; }
+        // 다 올림 → 상주 확정
+        Staging st = std::move(it->second);
+        staging_.erase(it);
+        if (!streamer_->take(k)) { freeGpuNode(st.parts); continue; }   // 그사이 스트리머가 버림
+        size_t bytes = 0; for (auto& g : st.parts) bytes += g.bytes;
+        gpuNodes_[k] = std::move(st.parts);
+        fi.uploaded++; burstDone_++;
+        (void)bytes;
     }
+    // 오래 안 쓰인 올리기 중 노드는 버림(시점이 바뀌어 더는 필요 없음)
+    for (auto it = staging_.begin(); it != staging_.end();) {
+        if (frameNo_ - it->second.lastSeen > 120) { freeGpuNode(it->second.parts); it = staging_.erase(it); } else ++it;
+    }
+    fi.uploadBytes = legacy ? 0 : used0 - budget;
+    fi.uploadMs = ut.nsecsElapsed() / 1e6;
+    fi.staging = staging_.size();
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     for (auto k : f.draw) {
@@ -394,7 +519,12 @@ void PlanView::paintStreaming(const QMatrix4x4& mvp) {
     }
     fi.draw = f.draw.size(); fi.wanted = f.wanted; fi.queued = f.queued; fi.loading = f.loading;
     fi.residentBytes = f.residentBytes; fi.gpuBytes = gpuNodeBytes_; fi.maxDepth = f.maxDepthDrawn;
-    fi.idle = f.idle() && fi.uploaded == size_t(f.upload.size());
+    fi.idle = f.idle() && fi.uploaded == size_t(f.upload.size()) && staging_.empty();
+    // LOD 카드: 묶음(바쁜 동안)의 완료/전체. 한가해지면 다시 0
+    size_t outstanding = f.wanted + f.queued + f.loading + staging_.size();
+    if (fi.idle) { burstDone_ = 0; burstPeak_ = 0; }
+    else burstPeak_ = std::max(burstPeak_, burstDone_ + outstanding);
+    fi.burstDone = burstDone_; fi.burstTotal = std::max(burstPeak_, burstDone_ + outstanding);
     fi.ms = t.nsecsElapsed() / 1e6;
     lastFrame_ = fi;
 }

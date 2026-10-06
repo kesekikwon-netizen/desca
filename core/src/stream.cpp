@@ -167,6 +167,14 @@ LodStreamer::Frame LodStreamer::update(const View& v) {
     return f;
 }
 
+LodStreamer::Payload LodStreamer::peek(Key k) const {
+    std::lock_guard<std::mutex> lk(mu_);
+    size_t t = size_t(k >> 20), n = size_t(k & 0xFFFFF);
+    if (t >= tiles_.size() || n >= tiles_[t].nodes.size()) return nullptr;
+    auto& N = tiles_[t].nodes[n];
+    return N.st == NS::Ready ? N.payload : nullptr;
+}
+
 LodStreamer::Payload LodStreamer::take(Key k) {
     std::lock_guard<std::mutex> lk(mu_);
     size_t t = size_t(k >> 20), n = size_t(k & 0xFFFFF);

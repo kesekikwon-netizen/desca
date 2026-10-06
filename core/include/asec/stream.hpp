@@ -57,6 +57,9 @@ public:
     Frame update(const View& v);
     /// upload 목록의 노드 데이터를 넘겨받는다(이후 상주로 간주). 없으면 nullptr
     Payload take(Key k);
+    /// upload 목록의 노드 데이터를 상태는 그대로(준비됨) 두고 빌려 본다. 앱이 여러 프레임에 나눠 GPU 에 올린 뒤
+    /// 다 올렸을 때 take() 로 상주를 확정하는 데 씀(그동안 부모가 계속 그려져 구멍 없음). 없으면 nullptr
+    Payload peek(Key k) const;
     /// 작업 스레드가 새 노드를 준비했을 때(작업 스레드에서 호출됨) — 앱은 다시 그리기를 예약
     std::function<void()> onReady;
     /// threads==0 일 때 대기열 하나 처리(시험용). 처리했으면 true

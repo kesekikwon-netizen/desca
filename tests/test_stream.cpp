@@ -180,3 +180,36 @@ TEST_CASE("LodStreamer: 작업 스레드로 실제 비동기 로드(여러 루�
     CHECK(f.draw.size() == 32);  // 루트 둘 × L2 16
     CHECK(depths(s, f.draw) == std::set<int>{2});
 }
+
+TEST_CASE("LodStreamer: peek 은 상태를 바꾸지 않아 여러 프레임 나눠 올리는 동안 부모가 그려진다(구멍 없음)") {
+    auto root = synthScene("stream_peek");
+    auto s = makeStreamer();
+    s->setRoots({root});
+    Ortho near{0, 0, 16, 12, 0.004};
+    // 루트가 상주할 때까지
+    for (int i = 0; i < 50; ++i) {
+        auto f = s->update(near.view());
+        for (auto k : f.upload) REQUIRE(s->take(k));
+        if (!f.draw.empty()) break;
+        s->processOne();
+    }
+    // 자식이 준비되면 peek 만 하고(나눠 올리는 중) take 는 미룸 → 계속 부모가 그려짐(빈 프레임 없음)
+    std::set<LodStreamer::Key> peeked;
+    for (int i = 0; i < 200; ++i) {
+        auto f = s->update(near.view());
+        REQUIRE(!f.draw.empty());
+        for (auto k : f.upload) { auto p = s->peek(k); REQUIRE(p); CHECK(p.use_count() >= 2); peeked.insert(k); }
+        CHECK(depths(*s, f.draw).count(2) == 0);   // 잎은 아직 상주 확정 전이라 그리지 않음(부모가 덮음)
+        if (f.queued == 0 && f.loading == 0 && !s->processOne()) break;
+        s->processOne();
+    }
+    REQUIRE(!peeked.empty());
+    // 이제 take(확정) → 다음 프레임부터 세부가 그려짐
+    for (int i = 0; i < 200; ++i) {
+        auto f = s->update(near.view());
+        for (auto k : f.upload) REQUIRE(s->take(k));
+        if (f.idle()) { CHECK(depths(*s, f.draw) == std::set<int>{2}); break; }
+        s->processOne();
+    }
+    CHECK(s->peek(*peeked.begin()) == nullptr);  // 상주한 노드는 peek 불가
+}

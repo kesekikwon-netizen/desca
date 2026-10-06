@@ -46,7 +46,11 @@ public:
     void clearScene();
 
     // ---- 스트리밍 상태(자동화·성능 기록용)
-    struct FrameInfo { double ms = 0; size_t draw = 0, uploaded = 0, evicted = 0, wanted = 0, queued = 0, loading = 0; size_t residentBytes = 0, gpuBytes = 0; int maxDepth = -1; bool idle = true; };
+    struct FrameInfo { double ms = 0; size_t draw = 0, uploaded = 0, evicted = 0, wanted = 0, queued = 0, loading = 0; size_t residentBytes = 0, gpuBytes = 0; int maxDepth = -1; bool idle = true;
+                       size_t uploadBytes = 0, staging = 0; double uploadMs = 0;
+                       size_t burstDone = 0, burstTotal = 0; };   // burst*: 이번 불러오기 묶음(LOD 카드 「12/40」)
+    /// GPU 올리기 예산(프레임당 바이트). 설정 view/uploadBudgetKB(기본 3072), 0 이면 옛 방식(노드 통째)
+    static size_t uploadBudgetBytes();
     const FrameInfo& lastFrame() const { return lastFrame_; }
     bool streamIdle() const { return !streamer_ || lastFrame_.idle; }
     bool streaming() const { return bool(streamer_); }
@@ -94,7 +98,12 @@ protected:
     void leaveEvent(QEvent*) override;
 
 private:
-    struct Gpu { GLuint vbo = 0, ibo = 0, tex = 0; GLsizei count = 0; bool hasTex = false; size_t bytes = 0; };
+    struct Gpu { GLuint vbo = 0, ibo = 0, tex = 0; GLsizei count = 0; bool hasTex = false; size_t bytes = 0; int texW = 0, texH = 0, texLevels = 0; };
+    // 내려간 노드의 텍스처를 같은 크기 다음 노드가 다시 씀(새로 잡는 비용 = 소프트웨어 GL 에서 수~수십 ms 를 피함)
+    struct PoolTex { GLuint tex; int w, h, levels; size_t bytes; };
+    std::vector<PoolTex> texPool_;
+    size_t texPoolBytes_ = 0;
+    void freeTexPool();
     std::vector<std::shared_ptr<DisplayMesh>> meshes_;
     std::vector<Gpu> gpu_;
     bool hasScene_ = false;
@@ -107,6 +116,18 @@ private:
     QByteArray glRenderer_;
     double lodBias_ = 1.0;  // >1 이면 더 세밀하게(설정 view/lodBias)
     void paintStreaming(const QMatrix4x4& mvp);
+    // 나눠 올리기: 준비된 노드를 peek 으로 빌려 버퍼·텍스처(밉맵 단계·행 띠)를 프레임마다 예산만큼 올리고, 다 올리면 take 로 상주 확정
+    struct Staging {
+        std::shared_ptr<void> prep;   // NodePrep
+        std::vector<Gpu> parts;
+        size_t part = 0; int stage = 0; size_t offset = 0; int level = 0; int row = 0;
+        uint64_t lastSeen = 0;
+    };
+    std::unordered_map<asec::LodStreamer::Key, Staging> staging_;
+    uint64_t frameNo_ = 0;
+    size_t burstDone_ = 0, burstPeak_ = 0;
+    bool stepStaging(Staging& st, size_t& budget, const class QElapsedTimer& t, double maxMs);   // true = 다 올림
+    void freeStaging();
     void freeGpuNode(std::vector<Gpu>& v);
     void drawGpu(const Gpu& g);
     bool needUpload_ = false;

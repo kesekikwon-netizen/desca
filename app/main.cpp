@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
         if (!pf.open(QIODevice::WriteOnly | QIODevice::Text)) { log("perf-log open failed"); rc = 5; }
         else {
             QTextStream ts(&pf);
-            ts << "frame,t_ms,phase,center_x,center_y,mpp,frame_ms,paint_ms,draw_nodes,uploaded,evicted,wanted,queued,loading,gpu_mb,max_depth,idle\n";
+            ts << "frame,t_ms,phase,center_x,center_y,mpp,frame_ms,paint_ms,draw_nodes,uploaded,evicted,wanted,queued,loading,gpu_mb,max_depth,idle,upload_kb,upload_ms,staging\n";
             PlanView* pv = w.plan();
             Box3 b = pv->bounds();
             double cx = b.center().x, cy = b.center().y, mpp0 = pv->metersPerPixel();
@@ -165,7 +165,7 @@ int main(int argc, char** argv) {
                 ts << i << "," << QString::number(msSince(t0), 'f', 2) << "," << path[i].phase << "," << QString::number(path[i].x, 'f', 3) << ","
                    << QString::number(path[i].y, 'f', 3) << "," << QString::number(path[i].mpp, 'g', 6) << "," << QString::number(fms, 'f', 3) << ","
                    << QString::number(F.ms, 'f', 3) << "," << F.draw << "," << F.uploaded << "," << F.evicted << "," << F.wanted << "," << F.queued << ","
-                   << F.loading << "," << QString::number(F.gpuBytes / 1048576.0, 'f', 2) << "," << F.maxDepth << "," << (F.idle ? 1 : 0) << "\n";
+                   << F.loading << "," << QString::number(F.gpuBytes / 1048576.0, 'f', 2) << "," << F.maxDepth << "," << (F.idle ? 1 : 0) << "," << F.uploadBytes / 1024 << "," << QString::number(F.uploadMs, 'f', 2) << "," << F.staging << "\n";
             }
             // 단면선 끌기: 60 프레임(약 16 ms 간격) 동안 선을 옮기며 미리보기 요청 → 놓음(최종). 화면 프레임 시간과 미리보기 갱신 수
             {
@@ -189,7 +189,7 @@ int main(int argc, char** argv) {
                     ts << (path.size() + i) << "," << QString::number(msSince(t0), 'f', 2) << ",secdrag," << QString::number(cx, 'f', 3) << ","
                        << QString::number((y0 + (y1 - y0) * i / 59.0), 'f', 3) << "," << QString::number(mpp0, 'g', 6) << "," << QString::number(fms, 'f', 3) << ","
                        << QString::number(F.ms, 'f', 3) << "," << F.draw << "," << F.uploaded << "," << F.evicted << "," << F.wanted << "," << F.queued << ","
-                       << F.loading << "," << QString::number(F.gpuBytes / 1048576.0, 'f', 2) << "," << F.maxDepth << "," << (F.idle ? 1 : 0) << "\n";
+                       << F.loading << "," << QString::number(F.gpuBytes / 1048576.0, 'f', 2) << "," << F.maxDepth << "," << (F.idle ? 1 : 0) << "," << F.uploadBytes / 1024 << "," << QString::number(F.uploadMs, 'f', 2) << "," << F.staging << "\n";
                 }
                 double dragMs = msSince(td);
                 int pv1 = w.sectionCounters().previewsShown - c0.previewsShown;
