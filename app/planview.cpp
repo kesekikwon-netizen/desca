@@ -9,6 +9,8 @@
 #include <QWheelEvent>
 #include <cmath>
 #include "theme.hpp"
+#include <QSettings>
+#include "stb_image.h"
 
 using namespace asec;
 
@@ -59,6 +61,95 @@ bool HeightIndex::z(double x, double y, double& out) const {
     return found;
 }
 
+// ---------------- 스트리밍 노드 데이터(작업 스레드에서 만듦) ----------------
+namespace {
+struct NodePrep {
+    struct Part { std::vector<float> inter; std::vector<uint32_t> idx; QImage tex; };
+    std::vector<Part> parts;
+};
+
+/// 3MX 노드 메시 → GPU 업로드용(장면 중심 기준 float, 법선, 텍스처 RGBA). 작업 스레드에서 호출
+std::shared_ptr<void> prepareNode(const TmxNode& node, const Vec3& c, size_t* bytes) {
+    auto out = std::make_shared<NodePrep>();
+    size_t b = 0;
+    std::unordered_map<const Texture*, QImage> texCache;
+    for (auto& mp : node.meshes) {
+        const Mesh& m = *mp;
+        size_t n = m.vertexCount();
+        if (n == 0 || m.idx.empty()) continue;
+        NodePrep::Part P;
+        std::vector<float> nrm(n * 3, 0.f);
+        for (size_t t = 0; t + 2 < m.idx.size(); t += 3) {
+            uint32_t a = m.idx[t], bb = m.idx[t + 1], e = m.idx[t + 2];
+            if (a >= n || bb >= n || e >= n) continue;
+            double ux = m.pos[3 * bb] - m.pos[3 * a], uy = m.pos[3 * bb + 1] - m.pos[3 * a + 1], uz = m.pos[3 * bb + 2] - m.pos[3 * a + 2];
+            double vx = m.pos[3 * e] - m.pos[3 * a], vy = m.pos[3 * e + 1] - m.pos[3 * a + 1], vz = m.pos[3 * e + 2] - m.pos[3 * a + 2];
+            float nx = float(uy * vz - uz * vy), ny = float(uz * vx - ux * vz), nz = float(ux * vy - uy * vx);
+            if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+            for (uint32_t k : {a, bb, e}) { nrm[3 * k] += nx; nrm[3 * k + 1] += ny; nrm[3 * k + 2] += nz; }
+        }
+        P.inter.resize(n * 8);
+        bool hasUv = m.uv.size() >= 2 * n;
+        for (size_t i = 0; i < n; ++i) {
+            float* q = &P.inter[i * 8];
+            q[0] = float(m.pos[3 * i] - c.x); q[1] = float(m.pos[3 * i + 1] - c.y); q[2] = float(m.pos[3 * i + 2] - c.z);
+            q[3] = hasUv ? m.uv[2 * i] : 0.f; q[4] = hasUv ? m.uv[2 * i + 1] : 0.f;
+            q[5] = nrm[3 * i]; q[6] = nrm[3 * i + 1]; q[7] = nrm[3 * i + 2];
+        }
+        P.idx = m.idx;
+        if (m.texture) {
+            auto it = texCache.find(m.texture.get());
+            if (it == texCache.end()) {
+                QImage q;
+                const Texture& t = *m.texture;
+                if (!t.rgba.empty()) q = QImage(t.rgba.px.data(), t.rgba.w, t.rgba.h, t.rgba.w * 4, QImage::Format_RGBA8888).copy();
+                else if (!t.encoded.empty()) {
+                    int w, h, cc;
+                    unsigned char* px = stbi_load_from_memory(t.encoded.data(), int(t.encoded.size()), &w, &h, &cc, 4);
+                    if (px) { q = QImage(px, w, h, w * 4, QImage::Format_RGBA8888).copy(); stbi_image_free(px); }
+                }
+                if (!q.isNull() && std::max(q.width(), q.height()) > 2048) q = q.scaled(2048, 2048, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                if (!q.isNull()) q = q.mirrored();  // GL 행0 = 아래 = v 0
+                it = texCache.emplace(m.texture.get(), q).first;
+            }
+            P.tex = it->second;
+            if (!P.tex.isNull()) b += size_t(P.tex.width()) * P.tex.height() * 4 * 4 / 3;  // 밉맵 포함
+        }
+        b += P.inter.size() * 4 + P.idx.size() * 4;
+        out->parts.push_back(std::move(P));
+    }
+    if (out->parts.empty()) return nullptr;
+    *bytes = b;
+    return out;
+}
+
+void uploadPart(QOpenGLFunctions* gl, const float* inter, size_t nFloats, const uint32_t* idx, size_t nIdx, const QImage& texGl, GLuint& vbo, GLuint& ibo, GLuint& tex) {
+    gl->glGenBuffers(1, &vbo);
+    gl->glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    gl->glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(nFloats * 4), inter, GL_STATIC_DRAW);
+    gl->glGenBuffers(1, &ibo);
+    gl->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+    gl->glBufferData(GL_ELEMENT_ARRAY_BUFFER, GLsizeiptr(nIdx * 4), idx, GL_STATIC_DRAW);
+    if (!texGl.isNull()) {
+        gl->glGenTextures(1, &tex);
+        gl->glBindTexture(GL_TEXTURE_2D, tex);
+        gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texGl.width(), texGl.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, texGl.constBits());
+        gl->glGenerateMipmap(GL_TEXTURE_2D);
+        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+}
+}  // namespace
+
+size_t PlanView::gpuBudgetBytes() {
+    int mb = QSettings().value("view/gpuBudgetMB", 768).toInt();
+    if (qEnvironmentVariableIsSet("SECTIONVIEWER_GPU_BUDGET_MB")) mb = qEnvironmentVariableIntValue("SECTIONVIEWER_GPU_BUDGET_MB");
+    return size_t(std::clamp(mb, 64, 16384)) << 20;
+}
+
 // ---------------- PlanView ----------------
 PlanView::PlanView(QWidget* parent) : QOpenGLWidget(parent) {
     QSurfaceFormat f = format();
@@ -71,6 +162,7 @@ PlanView::PlanView(QWidget* parent) : QOpenGLWidget(parent) {
 }
 
 PlanView::~PlanView() {
+    streamer_.reset();  // 작업 스레드 정지(콜백이 this 를 쓰므로 먼저)
     makeCurrent();
     freeGpu();
     prog_.reset();
@@ -84,16 +176,64 @@ void PlanView::freeGpu() {
         if (g.tex) glDeleteTextures(1, &g.tex);
     }
     gpu_.clear();
+    for (auto& kv : gpuNodes_) freeGpuNode(kv.second);
+    gpuNodes_.clear();
+    gpuNodeBytes_ = 0;
+}
+
+void PlanView::freeGpuNode(std::vector<Gpu>& v) {
+    for (auto& g : v) {
+        if (g.vbo) glDeleteBuffers(1, &g.vbo);
+        if (g.ibo) glDeleteBuffers(1, &g.ibo);
+        if (g.tex) glDeleteTextures(1, &g.tex);
+        gpuNodeBytes_ -= std::min(gpuNodeBytes_, g.bytes);
+    }
+    v.clear();
 }
 
 void PlanView::clearScene() {
+    streamer_.reset();
     makeCurrent(); freeGpu(); doneCurrent();
-    meshes_.clear(); hasLine_ = false; update();
+    meshes_.clear(); hidx_ = HeightIndex(); hasScene_ = false; hasLine_ = false; lastFrame_ = FrameInfo(); update();
+}
+
+void PlanView::setStreamingScene(const std::vector<fs::path>& roots, const Vec3& center, const Box3& bounds, const SrsInfo& srs,
+                                 std::vector<std::shared_ptr<DisplayMesh>> heightMeshes) {
+    streamer_.reset();
+    makeCurrent(); freeGpu(); doneCurrent();
+    meshes_.clear();
+    center_ = center; bounds_ = bounds; srs_ = srs;
+    hidx_ = HeightIndex();
+    if (!heightMeshes.empty()) hidx_.build(heightMeshes, std::max(0.05, std::max(bounds.mx.x - bounds.mn.x, bounds.mx.y - bounds.mn.y) / 512.0));
+    lodBias_ = std::clamp(QSettings().value("view/lodBias", 1.0).toDouble(), 0.25, 4.0);
+    LodStreamer::Config cfg;
+    cfg.gpuBudgetBytes = gpuBudgetBytes();
+    cfg.cpuBudgetBytes = std::min<size_t>(cfg.gpuBudgetBytes / 2, size_t(512) << 20);
+    cfg.threads = int(std::clamp(std::thread::hardware_concurrency() / 2, 2u, 4u));
+    Vec3 c = center;
+    streamer_ = std::make_unique<LodStreamer>(cfg, [c](const TmxNode& n, size_t* bytes) { return prepareNode(n, c, bytes); });
+    streamer_->onReady = [this] {
+        if (!repaintQueued_.exchange(true)) QMetaObject::invokeMethod(this, [this] { repaintQueued_ = false; update(); }, Qt::QueuedConnection);
+    };
+    streamer_->setRoots(roots);
+    lastFrame_ = FrameInfo(); lastFrame_.idle = false;
+    hasScene_ = true;
+    hasLine_ = false;
+    fitAll();
+}
+
+void PlanView::setCamera(double cx, double cy, double mpp) {
+    target_ = QVector3D(float(cx - center_.x), float(cy - center_.y), target_.z());
+    mpp_ = std::clamp(mpp, 1e-5, 1e5);
+    updateMatrices();
+    update();
 }
 
 void PlanView::setScene(std::vector<std::shared_ptr<DisplayMesh>> meshes, const Vec3& center, const Box3& bounds, const SrsInfo& srs) {
+    streamer_.reset();
     makeCurrent(); freeGpu(); doneCurrent();
     meshes_ = std::move(meshes);
+    hasScene_ = !meshes_.empty();
     center_ = center; bounds_ = bounds; srs_ = srs;
     hidx_.build(meshes_, std::max(0.05, std::max(bounds.mx.x - bounds.mn.x, bounds.mx.y - bounds.mn.y) / 512.0));
     needUpload_ = true;
@@ -103,6 +243,7 @@ void PlanView::setScene(std::vector<std::shared_ptr<DisplayMesh>> meshes, const 
 
 void PlanView::initializeGL() {
     initializeOpenGLFunctions();
+    if (const GLubyte* r = glGetString(GL_RENDERER)) glRenderer_ = QByteArray(reinterpret_cast<const char*>(r));
     prog_ = std::make_unique<QOpenGLShaderProgram>();
     prog_->addShaderFromSourceCode(QOpenGLShader::Vertex,
         "attribute vec3 aPos; attribute vec2 aUv; attribute vec3 aNrm;\n"
@@ -189,10 +330,80 @@ void PlanView::fitAll() {
 
 void PlanView::topView() { yaw_ = 0; pitch_ = 90; updateMatrices(); update(); }
 
+void PlanView::drawGpu(const Gpu& g) {
+    glBindBuffer(GL_ARRAY_BUFFER, g.vbo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g.ibo);
+    glEnableVertexAttribArray(0); glEnableVertexAttribArray(1); glEnableVertexAttribArray(2);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(0));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(12));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(20));
+    glBindTexture(GL_TEXTURE_2D, g.tex);
+    prog_->setUniformValue("uHasTex", g.hasTex ? 1.0f : 0.0f);
+    glDrawElements(GL_TRIANGLES, g.count, GL_UNSIGNED_INT, nullptr);
+}
+
+void PlanView::paintStreaming(const QMatrix4x4& mvp) {
+    // 화면 판정(장면 중심 기준 상자 8꼭짓점을 클립 공간으로: 한 평면 밖에 모두 있으면 안 보임)
+    LodStreamer::View v;
+    const Vec3 c = center_;
+    v.visible = [&mvp, c](const Box3& b) {
+        int out[6] = {0, 0, 0, 0, 0, 0};
+        for (int i = 0; i < 8; ++i) {
+            QVector4D p = mvp * QVector4D(float((i & 1 ? b.mx.x : b.mn.x) - c.x), float((i & 2 ? b.mx.y : b.mn.y) - c.y), float((i & 4 ? b.mx.z : b.mn.z) - c.z), 1.f);
+            float w = p.w();
+            out[0] += p.x() < -w; out[1] += p.x() > w; out[2] += p.y() < -w; out[3] += p.y() > w; out[4] += p.z() < -w; out[5] += p.z() > w;
+        }
+        for (int k = 0; k < 6; ++k) if (out[k] == 8) return false;
+        return true;
+    };
+    const double ppm = lodBias_ / std::max(1e-9, mpp_ / std::max(1.0, devicePixelRatioF()));  // 정사: 화면 지름 = 대각선 / (m/물리px)
+    v.screenDiameter = [ppm](const Box3& b) { return b.diag() * ppm; };
+    QElapsedTimer t; t.start();
+    auto f = streamer_->update(v);
+    FrameInfo fi;
+    for (auto k : f.evict) {
+        auto it = gpuNodes_.find(k);
+        if (it != gpuNodes_.end()) { freeGpuNode(it->second); gpuNodes_.erase(it); }
+        fi.evicted++;
+    }
+    // 올리기: 프레임당 약 8 ms(최소 1노드) — 큰 모델에서도 화면이 멈추지 않음
+    QElapsedTimer ut; ut.start();
+    for (auto k : f.upload) {
+        if (fi.uploaded > 0 && ut.elapsed() >= 8) break;
+        auto p = std::static_pointer_cast<NodePrep>(streamer_->take(k));
+        if (!p) continue;
+        std::vector<Gpu> parts;
+        for (auto& P : p->parts) {
+            Gpu g;
+            uploadPart(this, P.inter.data(), P.inter.size(), P.idx.data(), P.idx.size(), P.tex, g.vbo, g.ibo, g.tex);
+            g.count = GLsizei(P.idx.size());
+            g.hasTex = !P.tex.isNull();
+            g.bytes = P.inter.size() * 4 + P.idx.size() * 4 + (g.hasTex ? size_t(P.tex.width()) * P.tex.height() * 16 / 3 : 0);
+            gpuNodeBytes_ += g.bytes;
+            parts.push_back(g);
+        }
+        gpuNodes_[k] = std::move(parts);
+        fi.uploaded++;
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    for (auto k : f.draw) {
+        auto it = gpuNodes_.find(k);
+        if (it == gpuNodes_.end()) continue;
+        for (auto& g : it->second) drawGpu(g);
+    }
+    fi.draw = f.draw.size(); fi.wanted = f.wanted; fi.queued = f.queued; fi.loading = f.loading;
+    fi.residentBytes = f.residentBytes; fi.gpuBytes = gpuNodeBytes_; fi.maxDepth = f.maxDepthDrawn;
+    fi.idle = f.idle() && fi.uploaded == size_t(f.upload.size());
+    fi.ms = t.nsecsElapsed() / 1e6;
+    lastFrame_ = fi;
+}
+
 void PlanView::paintGL() {
+    QElapsedTimer ft; ft.start();
     glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    if (!meshes_.empty()) {
+    if (hasScene_) {
         if (needUpload_) upload();
         updateMatrices();
         glEnable(GL_DEPTH_TEST);
@@ -201,17 +412,8 @@ void PlanView::paintGL() {
         prog_->setUniformValue("uMvp", proj_ * view_);
         prog_->setUniformValue("uTex", 0);
         glActiveTexture(GL_TEXTURE0);
-        for (auto& g : gpu_) {
-            glBindBuffer(GL_ARRAY_BUFFER, g.vbo);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g.ibo);
-            glEnableVertexAttribArray(0); glEnableVertexAttribArray(1); glEnableVertexAttribArray(2);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(0));
-            glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(12));
-            glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(20));
-            glBindTexture(GL_TEXTURE_2D, g.tex);
-            prog_->setUniformValue("uHasTex", g.hasTex ? 1.0f : 0.0f);
-            glDrawElements(GL_TRIANGLES, g.count, GL_UNSIGNED_INT, nullptr);
-        }
+        if (streamer_) paintStreaming(proj_ * view_);
+        else for (auto& g : gpu_) drawGpu(g);
         glDisableVertexAttribArray(0); glDisableVertexAttribArray(1); glDisableVertexAttribArray(2);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -221,9 +423,19 @@ void PlanView::paintGL() {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     p.setRenderHint(QPainter::TextAntialiasing);
-    if (meshes_.empty()) paintEmpty(p);
+    if (!hasScene_) paintEmpty(p);
     else paintOverlay(p);
-    if (needUpload_) QTimer::singleShot(0, this, [this] { update(); });  // 남은 메시 다음 프레임에
+    if (streamer_ && !lastFrame_.idle) {  // 스트리밍 진행 표시(오른쪽 아래)
+        QFont f(theme::fontFamily()); f.setPointSizeF(8); p.setFont(f);
+        QString s = QStringLiteral("세부 불러오는 중 · %1").arg(lastFrame_.wanted + lastFrame_.queued);
+        QRectF r(width() - 190, height() - 26, 180, 18);
+        p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 210)); p.drawRoundedRect(r, 6, 6);
+        p.setPen(theme::InkSub); p.drawText(r, Qt::AlignCenter, s);
+    }
+    p.end();
+    if (!streamer_) { lastFrame_ = FrameInfo(); lastFrame_.draw = gpu_.size(); lastFrame_.idle = !needUpload_; }
+    lastFrame_.ms = ft.nsecsElapsed() / 1e6;
+    if (needUpload_ || (streamer_ && !lastFrame_.idle)) QTimer::singleShot(streamer_ ? 15 : 0, this, [this] { update(); });  // 남은 것 다음 프레임에
 }
 
 QPointF PlanView::localToScreen(double x, double y, double z) const {
@@ -358,7 +570,7 @@ void PlanView::setBand(double front, double back) { line_.front = front; line_.b
 
 void PlanView::mousePressEvent(QMouseEvent* e) {
     lastMouse_ = e->pos();
-    if (meshes_.empty()) { if (e->button() == Qt::LeftButton && onOpenRequest) onOpenRequest(); return; }
+    if (!hasScene_) { if (e->button() == Qt::LeftButton && onOpenRequest) onOpenRequest(); return; }
     Vec2 w;
     bool ok = screenToLocalXY(e->position(), w);
     if (e->button() == Qt::LeftButton && drawStage_ >= 0 && ok) {
@@ -389,7 +601,7 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
     QPoint d = e->pos() - lastMouse_;
     lastMouse_ = e->pos();
     Vec2 w;
-    bool ok = !meshes_.empty() && screenToLocalXY(e->position(), w);
+    bool ok = hasScene_ && screenToLocalXY(e->position(), w);
     if (ok && onCursor) {
         double zz = 0;
         bool hz = hidx_.z(w.x - center_.x, w.y - center_.y, zz);
@@ -422,7 +634,7 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         update();
         return;
     }
-    if (hasLine_ && !meshes_.empty()) {
+    if (hasLine_ && hasScene_) {
         double z = refZ() + center_.z;
         QPointF A = localToScreen(line_.a.x, line_.a.y, z), B = localToScreen(line_.b.x, line_.b.y, z);
         auto near = [&](QPointF q) { return std::hypot(q.x() - e->position().x(), q.y() - e->position().y()) < 11; };
@@ -441,7 +653,7 @@ void PlanView::mouseDoubleClickEvent(QMouseEvent* e) {
 }
 
 void PlanView::wheelEvent(QWheelEvent* e) {
-    if (meshes_.empty()) return;
+    if (!hasScene_) return;
     Vec2 before; bool ok = screenToLocalXY(e->position(), before);
     double f = std::pow(0.85, e->angleDelta().y() / 120.0);
     mpp_ = std::clamp(mpp_ * f, 1e-4, 1e4);
@@ -462,7 +674,7 @@ void PlanView::keyPressEvent(QKeyEvent* e) {
 void PlanView::leaveEvent(QEvent*) { if (onCursor) onCursor(0, 0, 0, false, false); }
 
 bool PlanView::viewRectLocal(Box3& out) const {
-    if (meshes_.empty()) return false;
+    if (!hasScene_) return false;
     out = Box3();
     for (QPointF c : {QPointF(0, 0), QPointF(width(), 0), QPointF(0, height()), QPointF(width(), height())}) {
         Vec2 w;

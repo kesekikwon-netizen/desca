@@ -4,10 +4,13 @@
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLWidget>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include "asec/section.hpp"
 #include "asec/tmx.hpp"
+#include "asec/stream.hpp"
+#include <unordered_map>
 
 /// GPU 에 올릴 메시(장면 중심 기준 float 좌표)
 struct DisplayMesh {
@@ -36,8 +39,20 @@ public:
 
     /// center = 로컬 좌표의 장면 중심(메시는 이미 이 값을 뺀 상태), bounds = 로컬 상자
     void setScene(std::vector<std::shared_ptr<DisplayMesh>> meshes, const asec::Vec3& center, const asec::Box3& bounds, const asec::SrsInfo& srs);
-    bool hasScene() const { return !meshes_.empty(); }
+    /// 3MX: 시점 의존 LOD 스트리밍(roots = 각 layer 의 루트 .3mxb). heightMeshes = 커서 Z 용 거친 메시(선택)
+    void setStreamingScene(const std::vector<asec::fs::path>& roots, const asec::Vec3& center, const asec::Box3& bounds, const asec::SrsInfo& srs,
+                           std::vector<std::shared_ptr<DisplayMesh>> heightMeshes = {});
+    bool hasScene() const { return hasScene_; }
     void clearScene();
+
+    // ---- 스트리밍 상태(자동화·성능 기록용)
+    struct FrameInfo { double ms = 0; size_t draw = 0, uploaded = 0, evicted = 0, wanted = 0, queued = 0, loading = 0; size_t residentBytes = 0, gpuBytes = 0; int maxDepth = -1; bool idle = true; };
+    const FrameInfo& lastFrame() const { return lastFrame_; }
+    bool streamIdle() const { return !streamer_ || lastFrame_.idle; }
+    bool streaming() const { return bool(streamer_); }
+    void setCamera(double cx, double cy, double mpp);  // 로컬 XY 중심 + m/px(위에서 보기)
+    static size_t gpuBudgetBytes();
+    QByteArray glRenderer() const { return glRenderer_; }
 
     void setDrawMode(bool on);
     bool drawMode() const { return drawStage_ >= 0; }
@@ -72,9 +87,21 @@ protected:
     void leaveEvent(QEvent*) override;
 
 private:
-    struct Gpu { GLuint vbo = 0, ibo = 0, tex = 0; GLsizei count = 0; bool hasTex = false; };
+    struct Gpu { GLuint vbo = 0, ibo = 0, tex = 0; GLsizei count = 0; bool hasTex = false; size_t bytes = 0; };
     std::vector<std::shared_ptr<DisplayMesh>> meshes_;
     std::vector<Gpu> gpu_;
+    bool hasScene_ = false;
+    // 스트리밍(3MX)
+    std::unique_ptr<asec::LodStreamer> streamer_;
+    std::unordered_map<asec::LodStreamer::Key, std::vector<Gpu>> gpuNodes_;
+    size_t gpuNodeBytes_ = 0;
+    std::atomic<bool> repaintQueued_{false};
+    FrameInfo lastFrame_;
+    QByteArray glRenderer_;
+    double lodBias_ = 1.0;  // >1 이면 더 세밀하게(설정 view/lodBias)
+    void paintStreaming(const QMatrix4x4& mvp);
+    void freeGpuNode(std::vector<Gpu>& v);
+    void drawGpu(const Gpu& g);
     bool needUpload_ = false;
     std::unique_ptr<QOpenGLShaderProgram> prog_;
     HeightIndex hidx_;

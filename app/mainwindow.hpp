@@ -31,7 +31,8 @@ class QCheckBox;
 struct OpenedScene {
     QString path;
     std::shared_ptr<asec::MeshSource> src;
-    std::vector<std::shared_ptr<DisplayMesh>> display;
+    std::vector<std::shared_ptr<DisplayMesh>> display;  // OBJ: 화면 메시 전체 / 3MX: 커서 Z 용 거친 메시(텍스처 없음)
+    std::vector<asec::fs::path> streamRoots;            // 3MX: LOD 스트리밍 루트(비면 정적 표시)
     asec::Vec3 center;
     asec::Box3 bounds;
     size_t displayTris = 0, displayMeshes = 0;
@@ -100,6 +101,7 @@ private:
     std::shared_ptr<asec::MeshSource> src_;
     QString path_, kind_;
     size_t displayTris_ = 0;
+    bool streaming_ = false;
 
     // 단면 작업 스레드(마지막 요청 우선)
     std::thread worker_;

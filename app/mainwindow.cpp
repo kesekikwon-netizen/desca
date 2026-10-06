@@ -83,7 +83,7 @@ static QImage displayTexture(Texture& t) {
     return q;
 }
 
-static std::shared_ptr<DisplayMesh> makeDisplay(const Mesh& m, const Vec3& c, std::unordered_map<const Texture*, QImage>& texCache) {
+static std::shared_ptr<DisplayMesh> makeDisplay(const Mesh& m, const Vec3& c, std::unordered_map<const Texture*, QImage>& texCache, bool withTexture = true) {
     auto d = std::make_shared<DisplayMesh>();
     size_t n = m.vertexCount();
     d->pos.resize(n * 3);
@@ -102,7 +102,7 @@ static std::shared_ptr<DisplayMesh> makeDisplay(const Mesh& m, const Vec3& c, st
         if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }  // 위를 향하게(감김 방향 무관)
         for (uint32_t k : {a, b, e}) { d->nrm[3 * k] += nx; d->nrm[3 * k + 1] += ny; d->nrm[3 * k + 2] += nz; }
     }
-    if (m.texture) {
+    if (m.texture && withTexture) {
         auto it = texCache.find(m.texture.get());
         if (it == texCache.end()) it = texCache.emplace(m.texture.get(), displayTexture(*m.texture)).first;
         d->tex = it->second;
@@ -128,13 +128,20 @@ bool MainWindow::loadScene(const QString& path, OpenedScene& out, QString* err, 
         out.src = s;
         out.kind = "OBJ";
     } else {
+        // 3MX: 루트 타일 머리만 읽고 바로 연다. 화면은 평면 보기의 LOD 스트리밍이 거친 것부터 채운다.
         auto s = std::make_shared<TmxSource>();
         s->cache->textureDecoder = decodeTextureFull;
         if (!s->open(p, &e)) { if (err) *err = qs(e); return false; }
-        TileCache dc(size_t(1024) << 20);
+        out.streamRoots = {s->scene.rootFile};
+        // 커서 Z 용 거친 메시: 루트 타일 노드(지오메트리만, 텍스처 디코드 없음)
         Box3 bb;
-        if (!selectDisplayMeshes(dc, s->scene.rootFile, 2'000'000, disp, &bb, &e, progress)) { if (err) *err = qs(e); return false; }
-        out.bounds = bb.valid() ? bb : s->bounds;
+        {
+            TmxTile rt;
+            if (readTmxTile(s->scene.rootFile, rt, &e))
+                for (size_t i = 0; i < rt.nodes.size(); ++i)
+                    if (decodeNode(rt, i, &e)) for (auto& m : rt.nodes[i].meshes) { disp.push_back(m); bb.add(m->bbox); }
+        }
+        out.bounds = s->bounds.valid() ? s->bounds : bb;
         if (!s->bounds.valid()) s->bounds = out.bounds;
         out.src = s;
         out.kind = "3MX";
@@ -143,7 +150,7 @@ bool MainWindow::loadScene(const QString& path, OpenedScene& out, QString* err, 
     out.center = out.bounds.center();
     std::unordered_map<const Texture*, QImage> texCache;
     for (size_t i = 0; i < disp.size(); ++i) {
-        out.display.push_back(makeDisplay(*disp[i], out.center, texCache));
+        out.display.push_back(makeDisplay(*disp[i], out.center, texCache, out.streamRoots.empty()));
         out.displayTris += disp[i]->triangleCount();
         if (progress && (i % 16 == 0)) progress(0.7 + 0.3 * double(i) / disp.size());
     }
@@ -582,14 +589,17 @@ void MainWindow::applyScene(OpenedScene&& s) {
     gen_++;
     src_ = s.src; path_ = s.path; kind_ = s.kind; displayTris_ = s.displayTris;
     section_->clear(); last_ = SectionOutput();
-    plan_->setScene(std::move(s.display), s.center, s.bounds, src_->srs);
+    if (!s.streamRoots.empty()) plan_->setStreamingScene(s.streamRoots, s.center, s.bounds, src_->srs, std::move(s.display));
+    else plan_->setScene(std::move(s.display), s.center, s.bounds, src_->srs);
+    streaming_ = !s.streamRoots.empty();
     const SrsInfo& r = src_->srs;
     QString srsTxt = r.srs.empty() ? QStringLiteral("좌표계 미상(로컬)")
                    : r.verticalEpsg() > 0 ? QStringLiteral("좌표계 EPSG:%1 · 높이 EPSG:%2").arg(r.epsg()).arg(r.verticalEpsg())
                                           : QStringLiteral("좌표계 %1").arg(qs(r.srs));
     srsLabel_->setText(srsTxt);
     srsLabel_->setToolTip(QStringLiteral("SRSOrigin = %1, %2, %3").arg(r.origin.x, 0, 'f', 3).arg(r.origin.y, 0, 'f', 3).arg(r.origin.z, 0, 'f', 3));
-    info_->setText(QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
+    info_->setText(streaming_ ? QStringLiteral("%1 · LOD 스트리밍").arg(kind_)
+                              : QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
     setWindowTitle(QStringLiteral("%1 — 발굴 단면뷰어").arg(QFileInfo(path_).fileName()));
     showStatus(QStringLiteral("열림. 「단면선 그리기」(S)로 A, A′ 두 점을 찍으세요"));
     updateEnabled();
