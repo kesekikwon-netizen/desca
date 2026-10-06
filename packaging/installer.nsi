@@ -3,13 +3,13 @@ Unicode true
 !include "MUI2.nsh"
 !define APPNAME "발굴 단면뷰어"
 !define EXE "SectionViewer.exe"
-!define VERSION "1.1.0"
+!define VERSION "1.1.1"
 !define UNKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\ExcavSectionViewer"
 !ifndef SRCDIR
   !define SRCDIR "..\build-win\deploy\SectionViewer"
 !endif
 !ifndef OUTFILE
-  !define OUTFILE "..\dist\SectionViewer-1.1.0-Setup.exe"
+  !define OUTFILE "..\dist\SectionViewer-1.1.1-Setup.exe"
 !endif
 
 Name "${APPNAME}"
@@ -19,7 +19,7 @@ RequestExecutionLevel user
 SetCompressor /SOLID lzma
 BrandingText "${APPNAME} ${VERSION}"
 
-VIProductVersion "1.1.0.0"
+VIProductVersion "1.1.1.0"
 VIAddVersionKey /LANG=1042 "ProductName" "${APPNAME}"
 VIAddVersionKey /LANG=1042 "FileDescription" "${APPNAME} 설치"
 VIAddVersionKey /LANG=1042 "CompanyName" "${APPNAME}"

@@ -43,7 +43,7 @@
 using namespace asec;
 using clk = std::chrono::steady_clock;
 
-static const char* kVersion = "1.1.0";
+static const char* kVersion = "1.1.1";
 static constexpr double kMaxBandDepth = 5.0;   // 두께 띠 앞/뒤 최대(m) — 입면 영상 깊이 최대 5 m
 static constexpr double kDepthFade = 0.55;     // 깊이 음영 세기(가장 먼 면을 흰색 쪽으로 55%)
 // 모델별 설정 키(경로 기준, 대소문자 무시)

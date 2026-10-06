@@ -31,8 +31,11 @@ Windows 1.1.0 exe 를 wine(소프트웨어 GL)에서 같은 모델로 실행: �
 | 최종 단면 뒤 5 m 따뜻 | 병렬 전 936 ms(영상 438 ms) → 102–142 ms |
 | 미리보기 뒤 5 m | 차가움 ~66 ms, 따뜻 ~6 ms |
 | 앱 끌기 60프레임(뒤 5 m) | 미리보기 58회(32.5/s), 그리기 평균 4.5 ms·최악 22 ms, 놓은 뒤 최종 489 ms(부하 높을 때 1.9 s) |
+| 부하 낮을 때(load ~2) 다시 잼 | 최종 뒤 5 m 차가움 346 ms(영상 101) · 따뜻 97 ms, 뒤 0.5 m 254 / 31 ms, 미리보기 69 / 7 ms; 앱 끌기 37.7/s, 놓은 뒤 최종 722 ms |
 | 휠 확대 6칸(평면) | 애니메이션 ~720 ms, 커서 고정 오차 0.000 px, 최악 프레임 16–43 ms(새 LOD 텍스처 업로드 1건, llvmpipe), 끝난 뒤 LOD 깊이 2·대기 없음 |
 | 휠 확대 8칸 / 축소 14칸(단면) | ~550 / ~950 ms, 오차 0.000 px |
 
 다시 재는 법: `SectionViewer <3mx> --line … --back 5 --wheel-test --perf-log perf.csv --log run.log --quit`,
 `asec-info <3mx> --section AX AY BX BY --back 5`.
+
+Windows 1.1.1 휴대용 zip 을 wine 에서: 열기·피킹 Z=56.7652(잎)·단면·뒤 5 m 입면·휠 시험(오차 0 px)·PNG/DXF(ezdxf 감사 오류 0) 정상, asec_tests.exe 92건(91 통과·1 건너뜀).
