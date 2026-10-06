@@ -153,6 +153,38 @@ int main(int argc, char** argv) {
                    << QString::number(F.ms, 'f', 3) << "," << F.draw << "," << F.uploaded << "," << F.evicted << "," << F.wanted << "," << F.queued << ","
                    << F.loading << "," << QString::number(F.gpuBytes / 1048576.0, 'f', 2) << "," << F.maxDepth << "," << (F.idle ? 1 : 0) << "\n";
             }
+            // 단면선 끌기: 60 프레임(약 16 ms 간격) 동안 선을 옮기며 미리보기 요청 → 놓음(최종). 화면 프레임 시간과 미리보기 갱신 수
+            {
+                double L = std::min(b.mx.x - b.mn.x, 60.0) * 0.8;
+                double y0 = cy - (b.mx.y - b.mn.y) * 0.25, y1 = cy + (b.mx.y - b.mn.y) * 0.25;
+                pv->setCamera(cx, cy, mpp0);
+                processFor(100);
+                auto c0 = w.sectionCounters();
+                auto td = std::chrono::steady_clock::now();
+                double dworst = 0, dsum = 0;
+                for (int i = 0; i < 60; ++i) {
+                    auto tf = std::chrono::steady_clock::now();
+                    SectionLine l; l.a = Vec2(cx - L / 2, y0 + (y1 - y0) * i / 59.0); l.b = Vec2(cx + L / 2, y0 + (y1 - y0) * i / 59.0);
+                    w.dragLine(l, i == 59);
+                    pv->repaint();
+                    QApplication::processEvents(QEventLoop::AllEvents, 5);
+                    while (msSince(tf) < 16.0) QApplication::processEvents(QEventLoop::AllEvents, 2);
+                    double fms = msSince(tf);
+                    const auto& F = pv->lastFrame();
+                    dworst = std::max(dworst, F.ms); dsum += F.ms;
+                    ts << (path.size() + i) << "," << QString::number(msSince(t0), 'f', 2) << ",secdrag," << QString::number(cx, 'f', 3) << ","
+                       << QString::number((y0 + (y1 - y0) * i / 59.0), 'f', 3) << "," << QString::number(mpp0, 'g', 6) << "," << QString::number(fms, 'f', 3) << ","
+                       << QString::number(F.ms, 'f', 3) << "," << F.draw << "," << F.uploaded << "," << F.evicted << "," << F.wanted << "," << F.queued << ","
+                       << F.loading << "," << QString::number(F.gpuBytes / 1048576.0, 'f', 2) << "," << F.maxDepth << "," << (F.idle ? 1 : 0) << "\n";
+                }
+                double dragMs = msSince(td);
+                int pv1 = w.sectionCounters().previewsShown - c0.previewsShown;
+                auto tfin = std::chrono::steady_clock::now();
+                while (msSince(tfin) < 30000 && w.sectionCounters().finalsShown == c0.finalsShown) QApplication::processEvents(QEventLoop::AllEvents, 5);
+                log(QStringLiteral("section-drag: frames=60 drag-ms=%1 previews-shown=%2 (%3/s) paint-avg-ms=%4 paint-worst-ms=%5 final-after-release-ms=%6 final-tris=%7 final-compute-ms=%8")
+                        .arg(dragMs, 0, 'f', 0).arg(pv1).arg(pv1 * 1000.0 / dragMs, 0, 'f', 1).arg(dsum / 60, 0, 'f', 2).arg(dworst, 0, 'f', 2)
+                        .arg(msSince(tfin), 0, 'f', 0).arg(w.sectionCounters().lastTris).arg(w.sectionCounters().lastMs, 0, 'f', 0));
+            }
             ts.flush();
             log(QStringLiteral("perf: frames=%1 avg-ms=%2 worst-ms=%3 csv=%4 (GL=%5)").arg(path.size()).arg(sum / path.size(), 0, 'f', 2).arg(worst, 0, 'f', 2)
                     .arg(perfPath, QString::fromLatin1(reinterpret_cast<const char*>(pv->glRenderer().constData()))));

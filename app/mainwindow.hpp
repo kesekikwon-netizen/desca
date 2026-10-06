@@ -76,6 +76,10 @@ public:
     const asec::SrsInfo& srs() const;
     const asec::SrsReport& srsReport() const { return srsReport_; }
     QString cursorText() const;   // 자동화 로그: 좌표줄 X/Y/Z + Z 출처
+    struct SectionCounters { int previewsShown = 0, finalsShown = 0; double lastMs = 0; size_t lastTris = 0; };
+    const SectionCounters& sectionCounters() const { return secCounters_; }
+    /// 단면선 끌기 흉내(자동화): final=false 는 끄는 중, true 는 놓음
+    void dragLine(const asec::SectionLine& l, bool final) { plan_->setLine(l, true); requestSection(final); }
     PlanView* plan() const { return plan_; }
     SectionView* sectionView() const { return section_; }
     void selectRibbonTab(int i);
@@ -121,6 +125,7 @@ private:
     void showZSource(asec::ZSource s, const QString& detail);
     asec::ResultGate secGate_;   // GUI 스레드 소유: 이미 보여준 것보다 새 세대만 받음
     uint64_t secFloorGen_ = 0;   // 장면 바꿈/닫기 이후 세대만 받음
+    SectionCounters secCounters_;
     asec::SectionOutput last_;  // GUI 스레드 소유(마지막 완료 결과)
     bool lastFinal_ = false;
 

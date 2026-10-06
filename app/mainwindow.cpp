@@ -685,6 +685,8 @@ void MainWindow::onSectionDone(SectionOutput&& out, uint64_t gen, bool final, co
     if (!err.isEmpty()) { section_->setBusy(!newest); showStatus(err); return; }
     last_ = std::move(out);
     lastFinal_ = final;
+    (final ? secCounters_.finalsShown : secCounters_.previewsShown)++;
+    secCounters_.lastMs = last_.msCollect + last_.msCut + last_.msImage; secCounters_.lastTris = last_.stats.triangles;
     section_->setStyle(secStyle());
     section_->setResult(last_.result, toQImage(last_.image.img), last_.image.s0, last_.image.z1, last_.image.res, true);
     section_->setBusy(!(final && newest));
