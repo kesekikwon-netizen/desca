@@ -12,6 +12,11 @@ class MeshSource {
 public:
     virtual ~MeshSource() = default;
     virtual bool leafMeshes(const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) = 0;
+    /// 해상도 res(m)에 충분한 LOD 의 메시(미리보기). 기본 = 잎. res<=0 이면 잎
+    virtual bool bandMeshes(const BandQuad& band, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) {
+        (void)res;
+        return leafMeshes(band, out, st, err, cancel);
+    }
     SrsInfo srs;
     Box3 bounds;  // 로컬
 };
@@ -22,6 +27,7 @@ public:
     std::shared_ptr<TileCache> cache = std::make_shared<TileCache>();
     bool open(const fs::path& p, std::string* err);
     bool leafMeshes(const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) override;
+    bool bandMeshes(const BandQuad& band, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) override;
 };
 
 class StaticSource : public MeshSource {
@@ -37,12 +43,14 @@ struct SectionRequest {
     double imageRes = 0.004;   // m/px
     size_t maxImagePixels = size_t(24) << 20;
     double zMargin = 0.25;     // 표시 범위 위아래 여유
+    double meshRes = 0;        // >0: 미리보기 — 이 해상도(m)에 충분한 거친 LOD 로 계산(빠름). 0: 최고 해상도 잎(최종)
 };
 
 struct SectionOutput {
     SectionResult result;
     ElevationImage image;
     LeafStats stats;
+    bool previewLod = false;   // 거친 LOD 로 계산한 미리보기
     double msCollect = 0, msCut = 0, msImage = 0;
 };
 

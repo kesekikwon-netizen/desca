@@ -10,6 +10,7 @@
 #include <thread>
 #include "asec/engine.hpp"
 #include "asec/pointcloud.hpp"
+#include "asec/schedule.hpp"
 #include "asec/tiff.hpp"
 #include "planview.hpp"
 #include "theme.hpp"
@@ -103,14 +104,10 @@ private:
     size_t displayTris_ = 0;
     bool streaming_ = false;
 
-    // 단면 작업 스레드(마지막 요청 우선)
-    std::thread worker_;
-    std::mutex mu_;
-    std::condition_variable cv_;
-    bool quit_ = false, pendingHas_ = false;
-    struct Pending { std::shared_ptr<asec::MeshSource> src; asec::SectionRequest rq; uint64_t gen = 0; bool final = true; } pending_;
-    std::atomic<uint64_t> gen_{0};
-    std::atomic<bool> cancelSection_{false};
+    // 단면 작업(asec::CoalescingWorker): 끄는 동안 미리보기는 합치고(거친 LOD), 놓으면 잎으로 최종 계산
+    std::unique_ptr<asec::CoalescingWorker> secWorker_;
+    asec::ResultGate secGate_;   // GUI 스레드 소유: 이미 보여준 것보다 새 세대만 받음
+    uint64_t secFloorGen_ = 0;   // 장면 바꿈/닫기 이후 세대만 받음
     asec::SectionOutput last_;  // GUI 스레드 소유(마지막 완료 결과)
     bool lastFinal_ = false;
 
@@ -126,7 +123,6 @@ private:
     QWidget* buildCoordBar();
     void retranslate();
     void requestSection(bool final);
-    void workerLoop();
     void onSectionDone(asec::SectionOutput&& out, uint64_t gen, bool final, const QString& err);
     void runTask(const QString& what, std::function<bool(QString*)> work, std::function<void(bool, const QString&)> done);
     void setProgress(double f);

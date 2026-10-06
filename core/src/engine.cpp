@@ -18,6 +18,10 @@ bool TmxSource::leafMeshes(const BandQuad& band, std::vector<MeshPtr>& out, Leaf
     return collectLeafMeshes(*cache, scene.rootFile, band, out, st, err, cancel);
 }
 
+bool TmxSource::bandMeshes(const BandQuad& band, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) {
+    return collectBandMeshesForResolution(*cache, scene.rootFile, band, res, out, st, err, cancel);
+}
+
 bool StaticSource::leafMeshes(const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string*, const std::atomic<bool>*) {
     LeafStats s;
     for (auto& m : meshes)
@@ -36,7 +40,8 @@ bool computeSection(MeshSource& src, const SectionRequest& rq, SectionOutput& ou
     BandQuad band = sectionBand(rq.line, 0.0);
     // 단면 평면 자체(두께 0)도 포함되도록 띠가 비어 있으면 약간 넓힘
     if (rq.line.front + rq.line.back < 1e-6) band = sectionBand(SectionLine{rq.line.a, rq.line.b, 0.001, 0.001}, 0.0);
-    if (!src.leafMeshes(band, meshes, &out.stats, err, cancel)) return false;
+    out.previewLod = rq.meshRes > 0;
+    if (!(out.previewLod ? src.bandMeshes(band, rq.meshRes, meshes, &out.stats, err, cancel) : src.leafMeshes(band, meshes, &out.stats, err, cancel))) return false;
     out.msCollect = msSince(t0);
     if (cancel && cancel->load()) return false;
 

@@ -488,14 +488,12 @@ MainWindow::MainWindow() {
         cx_->setText(fmt(X, 3)); cy_->setText(fmt(Y, 3)); cz_->setText(fmt(zAbs, 3));
         msg_->setText(QStringLiteral("단면 거리 %1 m · 표고 %2 m").arg(fmt(s, 3), fmt(zAbs, 3)));
     };
-    worker_ = std::thread([this] { workerLoop(); });
+    secWorker_ = std::make_unique<CoalescingWorker>();
     updateEnabled();
 }
 
 MainWindow::~MainWindow() {
-    { std::lock_guard<std::mutex> lk(mu_); quit_ = true; cancelSection_ = true; }
-    cv_.notify_all();
-    if (worker_.joinable()) worker_.join();
+    secWorker_.reset();  // 실행 중인 단면 취소 + 합류
     cancelTask_ = true;
     if (task_.joinable()) task_.join();
 }
@@ -585,8 +583,7 @@ void MainWindow::openFile(const QString& path) {
 }
 
 void MainWindow::applyScene(OpenedScene&& s) {
-    { std::lock_guard<std::mutex> lk(mu_); cancelSection_ = true; pendingHas_ = false; }
-    gen_++;
+    secFloorGen_ = secWorker_->cancelAll();
     src_ = s.src; path_ = s.path; kind_ = s.kind; displayTris_ = s.displayTris;
     section_->clear(); last_ = SectionOutput();
     if (!s.streamRoots.empty()) plan_->setStreamingScene(s.streamRoots, s.center, s.bounds, src_->srs, std::move(s.display));
@@ -607,8 +604,7 @@ void MainWindow::applyScene(OpenedScene&& s) {
 
 void MainWindow::closeScene() {
     if (taskBusy_) return;
-    { std::lock_guard<std::mutex> lk(mu_); cancelSection_ = true; pendingHas_ = false; }
-    gen_++;
+    secFloorGen_ = secWorker_->cancelAll();
     src_.reset();
     plan_->clearScene(); section_->clear(); last_ = SectionOutput();
     srsLabel_->setText(QStringLiteral("좌표계 —")); info_->clear();
@@ -641,6 +637,8 @@ static SectionRequest makeRequest(const SectionLine& line, bool smooth, bool fin
     double L = SectionFrame(line).L;
     rq.imageRes = final ? std::max(0.003, L / 4000.0) : std::max(0.008, L / 700.0);
     rq.maxImagePixels = final ? size_t(24) << 20 : size_t(3) << 20;
+    // 미리보기: 영상 해상도에 충분한 거친 LOD(빠름). 최종: 최고 해상도 잎
+    rq.meshRes = final ? 0.0 : rq.imageRes;
     return rq;
 }
 
@@ -648,62 +646,47 @@ void MainWindow::requestSection(bool final) {
     if (!src_ || !plan_->hasLine()) return;
     SectionLine l = plan_->line(); l.front = front_->value(); l.back = back_->value();
     if (SectionFrame(l).L < 0.01) return;
-    {
-        std::lock_guard<std::mutex> lk(mu_);
-        pending_.src = src_;
-        pending_.rq = makeRequest(l, action("smooth")->isChecked(), final);
-        pending_.gen = ++gen_;
-        pending_.final = final;
-        pendingHas_ = true;
-        cancelSection_ = true;  // 진행 중인 계산은 버림
-    }
-    cv_.notify_one();
+    auto src = src_;
+    SectionRequest rq = makeRequest(l, action("smooth")->isChecked(), final);
+    secWorker_->submit(final, [this, src, rq](uint64_t gen, bool fin, const std::atomic<bool>* cancel) {
+        auto out = std::make_shared<SectionOutput>();
+        std::string err;
+        bool ok = computeSection(*src, rq, *out, &err, cancel);
+        if (cancel->load()) return;  // 더 새 요청이 이 계산을 취소함
+        QString e = ok ? QString() : (err.empty() ? QStringLiteral("계산 실패") : qs(err));
+        QMetaObject::invokeMethod(this, [this, out, gen, fin, e] { onSectionDone(e.isEmpty() ? std::move(*out) : SectionOutput(), gen, fin, e); },
+                                  Qt::QueuedConnection);
+    });
     section_->setBusy(true);
 }
 
-void MainWindow::workerLoop() {
-    while (true) {
-        Pending p;
-        {
-            std::unique_lock<std::mutex> lk(mu_);
-            cv_.wait(lk, [this] { return quit_ || pendingHas_; });
-            if (quit_) return;
-            p = pending_; pendingHas_ = false; cancelSection_ = false;
-        }
-        auto out = std::make_shared<SectionOutput>();
-        std::string err;
-        bool ok = computeSection(*p.src, p.rq, *out, &err, &cancelSection_);
-        if (gen_.load() != p.gen) continue;  // 더 새 요청이 있음
-        QString e = ok ? QString() : qs(err);
-        QMetaObject::invokeMethod(this, [this, out, p, ok, e] { onSectionDone(ok ? std::move(*out) : SectionOutput(), p.gen, p.final, ok ? QString() : (e.isEmpty() ? QStringLiteral("계산 실패") : e)); },
-                                  Qt::QueuedConnection);
-    }
-}
-
 void MainWindow::onSectionDone(SectionOutput&& out, uint64_t gen, bool final, const QString& err) {
-    if (gen != gen_.load()) return;
-    if (!err.isEmpty()) { section_->setBusy(false); showStatus(err); return; }
+    if (gen <= secFloorGen_ || !secGate_.accept(gen)) return;  // 오래된 결과(장면 바뀜 또는 더 새 결과가 이미 표시됨)
+    bool newest = gen == secWorker_->latestGen();
+    if (!err.isEmpty()) { section_->setBusy(!newest); showStatus(err); return; }
     last_ = std::move(out);
     lastFinal_ = final;
     section_->setStyle(secStyle());
     section_->setResult(last_.result, toQImage(last_.image.img), last_.image.s0, last_.image.z1, last_.image.res, true);
-    section_->setBusy(!final);
+    section_->setBusy(!(final && newest));
     size_t nv = 0, nClosed = 0;
     for (auto& pl : last_.result.profile) { nv += pl.size(); if (pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9) ++nClosed; }
     double L = SectionFrame(last_.result.line).L;
-    showStatus(QStringLiteral("단면 %1 m · 잎 타일 %2 · 삼각형 %3 · 윤곽 %4개(닫힘 %5) %6점 · %7 ms%8")
+    showStatus(QStringLiteral("%9 단면 %1 m · %10 %2 · 삼각형 %3 · 윤곽 %4개(닫힘 %5) %6점 · %7 ms%8")
                    .arg(L, 0, 'f', 2).arg(last_.stats.leafNodes).arg(last_.stats.triangles).arg(last_.result.profile.size()).arg(nClosed).arg(nv)
                    .arg(int(last_.msCollect + last_.msCut + last_.msImage))
-                   .arg(last_.stats.fallbackNodes ? QStringLiteral(" · 상위 LOD 대체 %1").arg(last_.stats.fallbackNodes) : QString()));
+                   .arg(last_.stats.fallbackNodes ? QStringLiteral(" · 상위 LOD 대체 %1").arg(last_.stats.fallbackNodes) : QString())
+                   .arg(last_.previewLod ? QStringLiteral("[미리보기·거친 LOD]") : QStringLiteral("[최종·잎]"))
+                   .arg(last_.previewLod ? QStringLiteral("타일") : QStringLiteral("잎 타일")));
     updateEnabled();
 }
 
 bool MainWindow::computeNow(const SectionLine& line, QString* err) {
     if (!src_) { if (err) *err = QStringLiteral("열린 메시가 없습니다"); return false; }
-    { std::lock_guard<std::mutex> lk(mu_); cancelSection_ = true; pendingHas_ = false; }
-    uint64_t g = ++gen_;
+    uint64_t g = secWorker_->cancelAll();
+    secFloorGen_ = g - 1;
     SectionLine l = line; l.front = front_->value(); l.back = back_->value();
-    plan_->setLine(l, true);
+    plan_->setLine(l, true);  // (onLineChanged 를 부르지 않음)
     SectionOutput out; std::string e;
     if (!computeSection(*src_, makeRequest(l, action("smooth")->isChecked(), true), out, &e)) { if (err) *err = qs(e); return false; }
     onSectionDone(std::move(out), g, true, QString());

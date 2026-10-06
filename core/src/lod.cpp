@@ -1,6 +1,7 @@
 #include "asec/lod.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <queue>
 #include <thread>
 
@@ -185,7 +186,9 @@ static bool boxOverlapXY(const Box3& a, const Box3& b) {
     return a.valid() && b.valid() && !(a.mx.x < b.mn.x || a.mn.x > b.mx.x || a.mx.y < b.mn.y || a.mn.y > b.mx.y);
 }
 
-static bool resRec(TileCache& c, const fs::path& p, const Box3& area, double res, std::vector<Job>& out, LeafStats& st, std::string* err, int depth,
+using OverlapFn = std::function<bool(const Box3&)>;
+
+static bool resRec(TileCache& c, const fs::path& p, const OverlapFn& overlap, double res, std::vector<Job>& out, LeafStats& st, std::string* err, int depth,
                    const std::atomic<bool>* cancel) {
     if (cancel && cancel->load()) return false;
     auto t = c.get(p, err);
@@ -194,13 +197,13 @@ static bool resRec(TileCache& c, const fs::path& p, const Box3& area, double res
     st.maxDepth = std::max(st.maxDepth, depth);
     for (size_t i = 0; i < t->nodes.size(); ++i) {
         const TmxNode& n = t->nodes[i];
-        if (n.bb.valid() && !boxOverlapXY(n.bb, area)) continue;
+        if (n.bb.valid() && !overlap(n.bb)) continue;
         bool enough = n.isLeaf() || (n.maxScreenDiameter > 0 && n.bb.diag() / res <= n.maxScreenDiameter);
         bool useSelf = enough;
         if (!enough) {
             for (auto& ch : n.children) {
                 std::string e2;
-                if (!resRec(c, ch, area, res, out, st, &e2, depth + 1, cancel)) {
+                if (!resRec(c, ch, overlap, res, out, st, &e2, depth + 1, cancel)) {
                     if (cancel && cancel->load()) return false;
                     useSelf = true; st.fallbackNodes++;
                 }
@@ -211,17 +214,31 @@ static bool resRec(TileCache& c, const fs::path& p, const Box3& area, double res
     return true;
 }
 
-bool collectMeshesForResolution(TileCache& c, const fs::path& root, const Box3& area, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err,
-                                const std::atomic<bool>* cancel) {
+static bool collectRes(TileCache& c, const fs::path& root, const OverlapFn& overlap, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err,
+                       const std::atomic<bool>* cancel) {
     LeafStats s;
     std::vector<Job> jobs;
-    bool ok = resRec(c, root, area, res, jobs, s, err, 0, cancel);
+    bool ok = resRec(c, root, overlap, res, jobs, s, err, 0, cancel);
     if (ok) ok = decodeJobs(c, jobs, err, cancel);
     if (ok)
         for (auto& j : jobs)
-            for (auto& m : j.tile->nodes[j.node].meshes) { out.push_back(m); s.meshes++; s.triangles += m->triangleCount(); }
+            for (auto& m : j.tile->nodes[j.node].meshes) {
+                if (m->bbox.valid() && !overlap(m->bbox)) continue;
+                out.push_back(m); s.meshes++; s.triangles += m->triangleCount();
+            }
     if (st) *st = s;
     return ok;
+}
+
+bool collectMeshesForResolution(TileCache& c, const fs::path& root, const Box3& area, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err,
+                                const std::atomic<bool>* cancel) {
+    return collectRes(c, root, [&](const Box3& b) { return boxOverlapXY(b, area); }, res, out, st, err, cancel);
+}
+
+bool collectBandMeshesForResolution(TileCache& c, const fs::path& root, const BandQuad& band, double res, std::vector<MeshPtr>& out, LeafStats* st,
+                                    std::string* err, const std::atomic<bool>* cancel) {
+    if (res <= 0) return collectLeafMeshes(c, root, band, out, st, err, cancel);
+    return collectRes(c, root, [&](const Box3& b) { return bandIntersectsBox(band, b); }, res, out, st, err, cancel);
 }
 
 namespace {

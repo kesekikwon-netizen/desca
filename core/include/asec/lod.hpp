@@ -39,6 +39,9 @@ bool collectLeafMeshes(TileCache& cache, const fs::path& root, const BandQuad& b
 /// 노드 대각선/res <= maxScreenDiameter 이면 그 노드, 아니면 자식으로). 잎은 항상 사용.
 bool collectMeshesForResolution(TileCache& cache, const fs::path& root, const Box3& areaXY, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err,
                                 const std::atomic<bool>* cancel = nullptr);
+/// 단면 미리보기용: 띠와 겹치는 노드 중 해상도 res(m)에 충분한 단계(위와 같은 규칙). res<=0 이면 잎(collectLeafMeshes)
+bool collectBandMeshesForResolution(TileCache& cache, const fs::path& root, const BandQuad& band, double res, std::vector<MeshPtr>& out, LeafStats* st,
+                                    std::string* err, const std::atomic<bool>* cancel = nullptr);
 
 /// 화면 표시용: 큰 노드부터 세분해 삼각형 예산 안에서 가장 고른 해상도 집합 선택.
 bool selectDisplayMeshes(TileCache& cache, const fs::path& root, size_t triBudget, std::vector<MeshPtr>& out, Box3* bbox, std::string* err,
