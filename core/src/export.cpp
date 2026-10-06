@@ -140,7 +140,14 @@ bool writeSectionSidecar(const fs::path& p, const SectionResult& r, const GeoRef
         j["horizontal_epsg"] = sd.horizontalEpsg;
         j["vertical_reference"] = sd.vertKind == VertKind::Ellipsoidal ? "ellipsoidal" : sd.vertKind == VertKind::Gravity ? "gravity-related" : sd.vertKind == VertKind::LocalEnu ? "local-enu" : "unspecified";
         if (sd.verticalEpsg) j["vertical_epsg"] = sd.verticalEpsg;
-        j["height_note"] = "Z = model SRS height as-is (no geoid conversion)";
+        j["vertical_datum"] = vdatumKey(sd.vdatum);
+        if (sd.heightDeclared) {
+            j["vertical_declared_by_user"] = true;
+            j["vertical_srs_original"] = sd.srsVerticalAscii;
+            j["height_note"] = "Z = model values as-is (no conversion); height datum label declared by user";
+        } else {
+            j["height_note"] = "Z = model SRS height as-is (no geoid conversion)";
+        }
     }
     j["A"] = {{"X", A.x}, {"Y", A.y}};
     j["A_prime"] = {{"X", B.x}, {"Y", B.y}};

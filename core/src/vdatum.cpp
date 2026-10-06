@@ -30,6 +30,20 @@ const VDatumInfo& vdatumInfo(VDatum d) {
     for (auto& e : kTable) if (e.id == d) return e;
     return kTable[0];
 }
+const char* vdatumKey(VDatum d) {
+    switch (d) {
+    case VDatum::None: return "none"; case VDatum::Ellipsoidal: return "ellipsoidal"; case VDatum::EGM96: return "egm96";
+    case VDatum::EGM2008: return "egm2008"; case VDatum::KVD1964: return "kvd1964"; case VDatum::KNGeoid: return "kngeoid";
+    case VDatum::LocalEnu: return "enu"; default: return "unknown";
+    }
+}
+VDatum vdatumFromKey(const std::string& k) {
+    for (VDatum d : {VDatum::None, VDatum::Ellipsoidal, VDatum::EGM96, VDatum::EGM2008, VDatum::KVD1964, VDatum::KNGeoid, VDatum::LocalEnu})
+        if (k == vdatumKey(d)) return d;
+    return VDatum::Unknown;
+}
+std::vector<VDatum> declarableVDatums() { return {VDatum::EGM96, VDatum::EGM2008, VDatum::KVD1964, VDatum::KNGeoid, VDatum::Ellipsoidal}; }
+
 VDatum vdatumFromEpsg(int epsg) {
     switch (epsg) {
     case 5773: case 5171: return VDatum::EGM96;     // 5171 = EGM96 geoid (datum)

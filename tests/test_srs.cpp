@@ -173,7 +173,11 @@ TEST_CASE("analyzeSrs: 실제 모델 원점 → 제주, 축 순서 정상 / x·y
     SrsInfo s; s.srs = kRealWkt; s.origin = Vec3(148093, 98119, 0); s.hasOrigin = true; s.metadataSrs = "EPSG:5186";
     Box3 lb; lb.add(Vec3(-150, -120, 20)); lb.add(Vec3(160, 130, 60));
     SrsReport r = analyzeSrs(s, lb);
-    CHECK(r.warnings.empty());
+    // iTwin "Promoted to 3D" → 타원체고 표기 확인 안내 1개만
+    REQUIRE(r.warnings.size() == 1);
+    CHECK(r.warnings[0].find("높이 기준 확인") != std::string::npos);
+    CHECK(r.warnings[0].find("EGM96") != std::string::npos);
+    CHECK(r.desc.promotedTo3D);
     CHECK(r.hasLatLon);
     CHECK(r.lat == Approx(33.476).margin(0.01)); CHECK(r.lon == Approx(126.442).margin(0.01));
     CHECK_FALSE(r.precisionWarning);
@@ -182,8 +186,8 @@ TEST_CASE("analyzeSrs: 실제 모델 원점 → 제주, 축 순서 정상 / x·y
 
     SrsInfo sw = s; sw.origin = Vec3(98119, 148093, 0);
     SrsReport r2 = analyzeSrs(sw, lb);
-    REQUIRE(r2.warnings.size() == 1);
-    CHECK(r2.warnings[0].find("축 순서") != std::string::npos);
+    REQUIRE(r2.warnings.size() == 2);
+    CHECK(r2.warnings[1].find("축 순서") != std::string::npos);
 
     SrsInfo z; z.srs = "EPSG:5186"; z.origin = Vec3(); z.hasOrigin = true;
     Box3 big; big.add(Vec3(148000, 98000, 20)); big.add(Vec3(148300, 98300, 60));
@@ -193,6 +197,7 @@ TEST_CASE("analyzeSrs: 실제 모델 원점 → 제주, 축 순서 정상 / x·y
     CHECK(r3.warnings.back().find("SRSOrigin=0") != std::string::npos);
 
     SrsInfo mm = s; mm.metadataSrs = "EPSG:5187";
+    mm.heightDeclared = VDatum::EGM96;  // 안내를 없애고 불일치 경고만 보기
     CHECK(analyzeSrs(mm, lb).warnings.size() == 1);
 
     SrsInfo none;

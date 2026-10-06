@@ -20,8 +20,10 @@ struct SrsInfo {
     std::string metadataSrs;  // 같은/위 폴더 metadata.xml 의 <SRS>(3MX 일 때 대조용, 없으면 빈 문자열)
     Vec3 toWorld(const Vec3& local) const { return local + origin; }
     Vec3 toLocal(const Vec3& world) const { return world - origin; }
-    /// 해석 결과(asec/srs.hpp). WKT·ENU·복합 모두
-    SrsDesc describe() const { return describeSrs(srs); }
+    /// 사용자가 지정한 실제 높이 기준(None = SRS 표기 그대로). 이름표만 — 높이 값은 바꾸지 않는다
+    VDatum heightDeclared = VDatum::None;
+    /// 해석 결과(asec/srs.hpp). WKT·ENU·복합 모두. 높이 기준 지정이 있으면 반영
+    SrsDesc describe() const { SrsDesc d = describeSrs(srs); applyHeightDeclaration(d, heightDeclared); return d; }
     /// 수평 EPSG(WKT 는 ID·REMARK·이름·TM 매개변수로 판별). 모르면 0
     int epsg() const;
     /// 수직 기준 EPSG(복합 "EPSG:h+v" 또는 WKT COMPOUNDCRS 의 VERTCRS ID). 타원체고·없음은 0.

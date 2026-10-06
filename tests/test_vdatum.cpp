@@ -2,9 +2,12 @@
 #include "catch_amalgamated.hpp"
 #include "asec/srs.hpp"
 #include "asec/vdatum.hpp"
+#include "asec/tmx.hpp"
+#include "asec/export.hpp"
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 #include <filesystem>
 
 using namespace asec;
@@ -125,4 +128,50 @@ TEST_CASE("지오이드 변환 틀: GTX 격자 읽기·쌍선형 보간·타원�
     CHECK(convertHeight(VDatum::EGM96, VDatum::EGM96, 0, 0, 5.0, out, empty));
     CHECK(out == 5.0);
     std::filesystem::remove(p);
+}
+
+static const char* kRealPromoted = R"WKT(PROJCRS["KGD2002 / Central Belt 2010",BASEGEOGCRS["KGD2002",DATUM["Korean Geodetic Datum 2002",ELLIPSOID["GRS 1980",6378137,298.257222101,LENGTHUNIT["metre",1]]],PRIMEM["Greenwich",0,ANGLEUNIT["degree",0.0174532925199433]]],CONVERSION["Korea Central Belt 2010",METHOD["Transverse Mercator",ID["EPSG",9807]],PARAMETER["Latitude of natural origin",38,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Longitude of natural origin",127,ANGLEUNIT["degree",0.0174532925199433]],PARAMETER["Scale factor at natural origin",1,SCALEUNIT["unity",1]],PARAMETER["False easting",200000,LENGTHUNIT["metre",1]],PARAMETER["False northing",600000,LENGTHUNIT["metre",1]]],CS[Cartesian,3],AXIS["northing (X)",north,ORDER[1],LENGTHUNIT["metre",1]],AXIS["easting (Y)",east,ORDER[2],LENGTHUNIT["metre",1]],AXIS["ellipsoidal height (h)",up,ORDER[3],LENGTHUNIT["metre",1]],REMARK["Promoted to 3D from EPSG:5186"]])WKT";
+
+TEST_CASE("높이 기준 지정: iTwin 타원체고 표기 모델을 EGM96 으로 — 이름표·수직 EPSG·내보내기만, 값 그대로") {
+    SrsInfo s; s.srs = kRealPromoted; s.origin = Vec3(148093, 98119, 0); s.hasOrigin = true;
+    Box3 lb; lb.add(Vec3(-20, -20, 54)); lb.add(Vec3(20, 20, 64));
+    SrsReport r0 = analyzeSrs(s, lb);
+    CHECK(r0.labelKo == "수평 EPSG:5186 / 높이 타원체고(GRS80)");
+    CHECK(s.verticalEpsg() == 0);
+    s.heightDeclared = VDatum::EGM96;
+    SrsReport r = analyzeSrs(s, lb);
+    CHECK(r.labelKo == "수평 EPSG:5186 / 높이 EGM96 지오이드 기준 높이 (EPSG:5773) [사용자 지정]");
+    CHECK(r.warnings.empty());  // 안내 사라짐
+    CHECK(r.desc.heightDeclared);
+    CHECK(r.desc.srsVerticalKo == "타원체고(GRS80)");
+    CHECK(r.tooltipKo.find("SRS 원래 표기: 타원체고(GRS80)") != std::string::npos);
+    CHECK(s.epsg() == 5186);
+    CHECK(s.verticalEpsg() == 5773);
+    CHECK(s.shortLabel() == "EPSG:5186+5773 [height datum declared by user, values not converted; SRS: h=ellipsoidal(GRS80)]");
+    // GeoTIFF 수직 GeoKey(4096) 가 지정값을 따름
+    GeoRef g = planGeoRef(s, 0, 0, 0.01);
+    CHECK(g.epsg == 5186); CHECK(g.vertEpsg == 5773);
+    CHECK(g.citation.find("declared") != std::string::npos);
+    // 값은 그대로: 원점·좌표 변환 동일
+    CHECK(s.toWorld(Vec3(0, 0, 56.8852)).z == 56.8852);
+    // 다른 선택
+    s.heightDeclared = VDatum::KVD1964; CHECK(s.verticalEpsg() == 5193);
+    CHECK(s.describe().labelKo() == "수평 EPSG:5186 / 높이 KVD1964 정표고(인천만 평균해수면) (EPSG:5193) [사용자 지정]");
+    s.heightDeclared = VDatum::EGM2008; CHECK(s.verticalEpsg() == 3855);
+    s.heightDeclared = VDatum::Ellipsoidal; CHECK(s.verticalEpsg() == 0); CHECK(s.describe().vertKind == VertKind::Ellipsoidal);
+    CHECK(analyzeSrs(s, lb).warnings.empty());  // 타원체고로 확인했으면 안내 없음
+    s.heightDeclared = VDatum::None; CHECK(analyzeSrs(s, lb).warnings.size() == 1);
+    // 복합 SRS(EPSG:5186+5193) 를 EGM96 으로 지정 → 원래 표기 보존
+    SrsInfo c; c.srs = "EPSG:5186+5193"; c.heightDeclared = VDatum::EGM96;
+    CHECK(c.describe().srsVerticalAscii == "EPSG:5193");
+    CHECK(c.verticalEpsg() == 5773);
+}
+
+TEST_CASE("높이 기준 지정: 저장 키 왕복, 선택지") {
+    for (VDatum d : declarableVDatums()) CHECK(vdatumFromKey(vdatumKey(d)) == d);
+    CHECK(vdatumFromKey("none") == VDatum::None);
+    CHECK(vdatumFromKey("garbage") == VDatum::Unknown);
+    auto v = declarableVDatums();
+    CHECK(v.front() == VDatum::EGM96);
+    CHECK(std::find(v.begin(), v.end(), VDatum::Ellipsoidal) != v.end());
 }

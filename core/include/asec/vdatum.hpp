@@ -35,6 +35,11 @@ struct VDatumInfo {
 const VDatumInfo& vdatumInfo(VDatum d);
 /// EPSG 번호로(모르면 Unknown)
 VDatum vdatumFromEpsg(int epsg);
+/// 저장용 키("none","ellipsoidal","egm96","egm2008","kvd1964","kngeoid","enu","unknown") ↔ 값
+const char* vdatumKey(VDatum d);
+VDatum vdatumFromKey(const std::string& key);
+/// 사용자가 "높이 기준 지정"으로 고를 수 있는 것(타원체고, EGM96, EGM2008, KVD1964, KNGeoid)
+std::vector<VDatum> declarableVDatums();
 /// 이름·격자 파일명 글자로(대소문자·기호 무시: "EGM96 height", "egm96_15.gtx", "KNGeoid18", "Korean Vertical Datum 1964", "Incheon")
 VDatum vdatumFromText(const std::string& text);
 

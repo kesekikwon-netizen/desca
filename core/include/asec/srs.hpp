@@ -42,6 +42,9 @@ struct SrsDesc {
     std::string verticalName;        // 예: "KVD1964 height" / "ellipsoidal height (h)"
     std::string verticalDatum;       // VDATUM/VERT_DATUM 이름(예: "EGM96 geoid")
     std::string geoidModel;          // WKT2 GEOIDMODEL / WKT1 EXTENSION PROJ4_GRIDS / PARAMETERFILE(예: "egm96_15.gtx")
+    bool promotedTo3D = false;       // WKT REMARK "Promoted to 3D from EPSG:…"(iTwin 이 2D 좌표계를 3D 로 승격 → 높이를 '타원체고'로 표기)
+    bool heightDeclared = false;     // 사용자가 "높이 기준 지정"으로 이름표를 바꿈(값 변환 없음)
+    std::string srsVerticalKo, srsVerticalAscii;  // 지정 전 SRS 원래 높이 표기(지정했을 때만)
     VDatum vdatum = VDatum::None;    // 식별한 높이 기준(EGM96·EGM2008·KVD1964·KNGeoid·타원체고 …). 표시용 — 높이 값은 안 바꿈
     std::string ellipsoid;           // 예: "GRS 1980"
     bool axisNorthFirst = false;     // WKT 공식 축 순서가 북→동(3MX 좌표 순서와 무관 — 표시용)
@@ -65,6 +68,9 @@ struct SrsDesc {
 
 /// SRS 문자열 해석(빈 문자열 = None)
 SrsDesc describeSrs(const std::string& srs);
+/// "높이 기준 지정": 높이 값은 그대로 두고 높이 기준 이름표만 v 로 바꾼다(None/Unknown 이면 아무것도 안 함).
+/// 수직 EPSG(GeoTIFF 4096·LAS 키)와 표기·툴팁이 지정값을 따르고, 원래 SRS 표기는 srsVertical* 에 남는다.
+void applyHeightDeclaration(SrsDesc& d, VDatum v);
 /// 내장 표: 수평 EPSG 이름(모르면 "")
 const char* epsgName(int epsg);
 /// 내장 표: 수직 EPSG 이름(모르면 "")
