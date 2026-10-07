@@ -29,9 +29,23 @@ struct SectionDoc {
 struct SectionXf { double s0 = 0, zTop = 0, ppm = 100; QRectF plot; double vex = 1; double ppmZ() const { return ppm * vex; } };
 struct SectionImgGeo { double s0 = 0, z1Local = 0, res = 0.01; };
 
+/// 조판 확인(--sheet-check)이 글자 상자·글꼴·변환을 재는 기록. 화면 그리기에서는 비운다.
+struct SheetPaintProbe {
+    QRectF plot, image, frame, compass, legend;
+    QVector<QRectF> labels;
+    QStringList labelText;
+    double fontPx = 0;
+    double neighborPx = 0;
+    double worldStep = 0;
+    bool uniform = true;
+    bool drewCutLine = false;
+};
+
 /// 보고서용 그리기(화면·내보내기 공용, 아무 스레드에서나 QImage 에 그릴 수 있음). ppm = 픽셀/m, ui = 글자·선 배율(DPI/96)
 void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const SectionXf& xf, double ui, const QImage& img, bool forExport,
-                     const QString& footer, const SectionImgGeo* geo = nullptr, bool busy = false, bool titleRow = true);
+                     const QString& footer, const SectionImgGeo* geo = nullptr, bool busy = false, bool titleRow = true,
+                     double contentDxPx = 0, double contentDyPx = 0, double viewZoom = 1, double viewPanX = 0, double viewPanY = 0,
+                     SheetPaintProbe* probe = nullptr);
 /// 레벨선 간격(화면 4 px / 인쇄 0.5 mm 보다 촘촘하면 솎음). ui = DPI/96
 asec::LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport);
 /// 내보내기용 크기·변환(여백 포함, 영상 픽셀 1:1 정렬)

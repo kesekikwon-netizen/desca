@@ -75,7 +75,10 @@ QLabel#hint, QLabel#statusInfo { color: #5E5D59; font-size: 12px; }
 QLabel#faint { color: #73726C; font-size: 11px; }
 QLabel#title { font-size: 17px; font-weight: 700; color: #141413; }
 QLabel#bigTitle { font-size: 26px; font-weight: 700; color: #141413; }
-QLabel#heroName { font-size: 30px; font-weight: 700; color: #141413; }
+QLabel#heroName { font-family: Batang, "Noto Serif KR", "Malgun Gothic"; font-size: 40px; font-weight: 500; color: #141413; }
+QToolButton#stepBtn { color: #73726C; font-size: 12px; border: none; padding: 2px 4px; background: transparent; }
+QToolButton#stepBtn[state="now"] { color: #141413; font-weight: 700; }
+QToolButton#stepBtn[state="ok"] { color: #3D3D3A; }
 QLabel#mono, QLineEdit#mono { font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; }
 QLabel#secName { font-size: 13px; font-weight: 700; color: #141413; }
 QWidget#dialogMain { background: #FAF9F5; }

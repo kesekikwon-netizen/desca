@@ -1,5 +1,14 @@
 # 바뀐 점 (CHANGELOG)
 
+## 1.2.1 이후 (2026-10-08, 휴대용 Kerf)
+- **이름 Kerf**(발굴 평·단면) — 창 제목·정보·표제란 만든 이·실행 파일 리소스, 새 아이콘(`packaging/assets/make_icons.py`), 그림으로 그린 시작 움직임 5초.
+- **.3sm(Bentley ScalableMesh) 열기** — `app/sm3convert.cpp`: SQLite(Qt Sql) 안 LOD 트리를 처음 한 번 3MX 캐시로 바꿔 3MX 와 같은 경로로 엶(원본 읽기 전용).
+  Bentley GCS WKT(`Origin Latitude`·`Scale Reduction`, `VERT_DATUM` 2002 = 타원체고) 인식 → EPSG:5186 + 타원체고(`tests/test_srs.cpp`).
+- **조판 탭 「도면 목록」** — 평면도 + 단면들, 누르면 그 도면 조판으로(용지·넣을 것·형식 이어 감, 축척은 맞춤). 저장·취소 단추의 잘못된 형변환 수정.
+- **조판 휠** — 그냥 휠 = 종이 보기 확대(축척 그대로), 「조판편집」 중 휠 = 멈춘 크기로 축척 변경(10 단위).
+- **조판 선명도** — 평면도는 보이는 범위만 고해상도로, 단면도 1.5 mm/px 재계산, 출력 최소 600 dpi, 축척 막대 48 mm 이내, 맞춤 축척은 모델 범위로 자른 뒤 계산.
+- **휴대용 zip** — `dist/Kerf-<버전>-portable-win64.zip`: Kerf.exe + Qt + Visual C++ 실행 부품 동봉(설치 불필요).
+
 ## 1.2.1 (2026-10-06)
 1.2.0 이후 바뀐 점. 실제 Windows 신고(제주 3MX)와 「뒤로 3 m 는 보여야 입면도를 그린다」「잘린 면이 정확해야 한다」 요청 처리.
 

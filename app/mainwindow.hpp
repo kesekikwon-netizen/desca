@@ -3,6 +3,7 @@
 #pragma once
 #include <QAction>
 #include <QMainWindow>
+#include <QPointer>
 #include <atomic>
 #include <condition_variable>
 #include <functional>
@@ -69,6 +70,18 @@ struct SheetParams {
     bool withImage = true, withLine = true, withLevels = true, withTitle = true;
     bool showBaseline = false; double baselineEl = 0;
     QString heightLabel, srsLabel, facing, date;
+    double imgDxMm = 0, imgDyMm = 0;   // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
+};
+/// 평면도 조판. 그림 칸은 정사영상만(단면선 없음). 바깥 좌표·나침반·범례·자는 단면도 조판과 같은 자리.
+struct PlanSheetParams {
+    asec::SheetSpec spec;
+    int format = 0;
+    double dpi = 300;
+    bool split = false;
+    bool wholeModel = false;    // false = 지금 왼쪽 화면
+    asec::Box3 area;             // 로컬 XY
+    QString title, heightLabel, srsLabel, date;
+    double imgDxMm = 0, imgDyMm = 0;   // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
 };
 struct PointParams { asec::PointFormat format = asec::PointFormat::XYZ; int area = 0; double spacing = 0; bool rgb = true; asec::Box3 box; };
 
@@ -78,6 +91,8 @@ public:
     ~MainWindow() override;
 
     // ---- 작업(동기). 대화상자는 작업 스레드에서, 명령줄 자동화는 GUI 스레드에서 직접 호출 ----
+    static QImage renderOpeningSplash(const QSize& size, double t = 1.0);   // t 0~1: 선 그림이 그려지는 정도(1 = 완성)
+    static void paintOpeningSplash(QPainter& p, const QSize& size, double t);   // 여는 화면 한 장면(t 0~1 = 5 초)
     static bool loadScene(const QString& path, OpenedScene& out, QString* err, const std::function<void(double)>& progress = {});
     void applyScene(OpenedScene&& s);
     bool computeNow(const asec::SectionLine& l, QString* err);  // 동기 단면(자동화용)
@@ -93,13 +108,29 @@ public:
                                  const std::atomic<bool>* cancel = nullptr, const std::function<void(size_t)>& progress = {});
     static bool exportProfileCsv(const SectionDoc& doc, const QString& path, QString* msg);
     /// 도면(용지): PDF(벡터 선 + 영상) / PNG / TIFF 는 용지 그대로, DXF 는 모델 공간 1:N. progress(0..1)
+    static bool exportSectionSvg(const SectionDoc& doc, asec::MeshSource& src, const SheetParams& p, const QString& path, QString* msg);
     static bool exportSheet(const SectionDoc& doc, asec::MeshSource& src, const SheetParams& p, const QString& path, QString* msg,
                             const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
     /// 용지 한 장 그리기(미리보기·내보내기 공용). pxPerMm = 장치 픽셀/mm, page = 나눠 붙이기 쪽 번호(0..)
-    static void paintSheet(QPainter& p, const SectionDoc& doc, const SheetParams& sp, double pxPerMm, int page, const QImage& img, const SectionImgGeo& geo);
+    static void paintSheet(QPainter& p, const SectionDoc& doc, const SheetParams& sp, double pxPerMm, int page, const QImage& img, const SectionImgGeo& geo,
+                           double viewZoom = 1, double viewPanX = 0, double viewPanY = 0, SheetPaintProbe* probe = nullptr);
+    static bool exportPlanSheet(asec::MeshSource& src, const PlanSheetParams& p, const QString& path, QString* msg,
+                                const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
+    static void paintPlanSheet(QPainter& p, const PlanSheetParams& sp, double pxPerMm, int page, const QImage& img,
+                               double imgX0, double imgY1, double imgRes, const asec::Vec3& origin,
+                               double viewZoom = 1, double viewPanX = 0, double viewPanY = 0, SheetPaintProbe* probe = nullptr);
+    bool runSheetCheck(const QString& outDir, QString* log);
     SheetParams defaultSheetParams() const;
-    void dlgSheet();                                   // Ctrl+P 「도면」 창
+    PlanSheetParams defaultPlanSheetParams() const;
+    void dlgChooseSheet();                            // 평면 / 단면 조판 고르기
+    void dlgHeightDatum();
+    QDialog* heightDatumDialog();
+    void dlgCoordEntry();
+    QDialog* coordEntryDialog();
+    void dlgSheet();                                   // 단면도 조판
+    void dlgPlanSheet();                               // 평면도 조판
     QDialog* buildSheetDialog(SheetParams& io, bool& accepted);   // 자동화(창 캡처)에서도 씀
+    QDialog* buildPlanSheetDialog(PlanSheetParams& io, const QImage& preview, double prevX0, double prevY1, double prevRes, bool& accepted);
     QWidget* startPage() const { return startPage_; }
     void showStart(bool on);
     bool undoTest(QString* log);                        // 자동화: 되돌리기/다시 점검
@@ -146,7 +177,24 @@ private:
     QSplitter* split_ = nullptr;
     QTabBar* tabs_ = nullptr;
     QStackedWidget* pages_ = nullptr;
-    QStackedWidget* body_ = nullptr;      // 0 시작 화면, 1 작업
+    QStackedWidget* body_ = nullptr;      // 0 시작 화면, 1 작업, 조판은 별도 위젯
+    QTabBar* viewTabs_ = nullptr;
+    QWidget* sheetHost_ = nullptr;
+    std::function<void()> embeddedSave_;
+    void showSheetTab(QWidget* page);
+    void showSheetTab(QDialog* d, std::function<void()> save);
+    // 조판 탭 왼쪽 목록(평면도 1줄 + 단면들). 작업 화면 단면 목록과 같은 선택을 씀
+    QPointer<QWidget> sheetSide_;
+    QPointer<class QListWidget> sheetList_;
+    bool sheetIsPlan_ = false;
+    std::shared_ptr<SheetParams> lastSheet_;          // 지금 조판의 단면도 설정(다른 단면으로 갈 때 용지·넣을 것·형식을 이어 감)
+    std::shared_ptr<PlanSheetParams> lastPlanSheet_;  // 목록에서 평면도로 돌아올 때 그대로
+    bool reusePlanSheet_ = false;
+    QWidget* buildSheetSide();
+    void refreshSheetList();
+    void openSheetFromList(int row);
+    void showWorkTab();
+    void saveEmbeddedSheet();
     QWidget* startPage_ = nullptr;
     QWidget* workArea_ = nullptr;
     QWidget* ctxBar_ = nullptr;
@@ -163,10 +211,15 @@ private:
     QComboBox* scaleCombo_ = nullptr;
     QLabel *lvLine_ = nullptr, *lvLabel_ = nullptr;
     QToolButton* depthChip_[5] = {};
+    QToolButton* stepBtn_[3] = {};
+    void refreshSteps();
     bool backUserSet_ = false;   // 뒤 깊이를 사용자가 직접 고름(아니면 기본 3 m 를 따름)
     QMenu* recentMenu_ = nullptr;
     QUndoStack* undo_ = nullptr;
     QWidget* sidePanel_ = nullptr;
+    QWidget* inspector_ = nullptr;
+    QLabel *inspName_ = nullptr, *inspLen_ = nullptr, *inspDepth_ = nullptr, *inspNote_ = nullptr, *inspBody_ = nullptr;
+    QLabel *stripCut_ = nullptr, *stripBand_ = nullptr;
     QListWidget* secList_ = nullptr;
     QLabel* secCount_ = nullptr;
     QLineEdit *cx_ = nullptr, *cy_ = nullptr, *cz_ = nullptr;
@@ -201,6 +254,7 @@ private:
     int current_ = -1;
     std::map<int, QImage> thumbs_;
     void refreshSectionList();
+    QWidget* sectionRowWidget(int i) const;   // 단면 목록 한 줄(썸네일·이름·길이·뒤 깊이) — 작업·조판 목록이 같이 씀
     void syncCurrentSection();     // 지금 단면선 → sections_[current_]
     void selectSection(int i);
     void addSection();
@@ -220,13 +274,13 @@ private:
     QWidget* buildCtxBar();
     QFrame* buildNotice();
     QWidget* buildSidePanel();
+    QWidget* buildInspector();
     QWidget* buildPlanFrame();
     QWidget* buildSectionFrame();
     void updateHeader();           // 단면 머리·정보 띠·높이 배지
     void updateCtx(int stage, const asec::SectionLine& l);
     void setActiveView(int v);     // 0 평면 1 단면
     void shiftLine(double d);      // 평행 이동(m, + = 보는 쪽)
-    void dlgCoordEntry();
     void dlgKeys();
     void setBackDepth(double v);
     void updateDepthChips();
@@ -265,6 +319,7 @@ private:
     QAction* action(const QString& key) const { return act_.at(key); }
     QAction* makeAction(const QString& key, const QString& ko, const QString& en, theme::Ico ico, const QString& shortcut = {}, bool checkable = false);
     QWidget* buildRibbon();
+    QWidget* buildSteps();
     QWidget* buildCoordBar();
     void retranslate();
     void requestSection(bool final);
@@ -286,7 +341,6 @@ private:
     SectionStyle secStyle() const;
     void report(bool ok, const QString& m);
     void applySrsReport();
-    void dlgHeightDatum();
 public:
     /// 높이 기준 지정(이름표만, 값 변환 없음). persist = 모델별 설정 + 마지막 지정값 저장
     void setHeightDeclaration(asec::VDatum v, bool persist);

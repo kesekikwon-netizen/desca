@@ -63,6 +63,134 @@ SheetAdvice adviseSheet(const SheetSpec& s, double lenM, double heightM, const s
     return a;
 }
 
+double snapScaleDenom10(double denom) {
+    if (!(denom > 0) || !std::isfinite(denom)) return 10;
+    double n = std::round(denom / 10.0) * 10.0;
+    if (n < 10) n = 10;
+    return n;
+}
+
+double fitDenomStep10(const SheetSpec& s, double widthM, double heightM) {
+    widthM = std::max(0.0, widthM);
+    heightM = std::max(0.0, heightM);
+    SheetSpec probe = s;
+    probe.denom = 1000;
+    SheetLayout base = layoutSheet(probe, 1, 1);
+    double d = std::max(widthM * 1000.0 / base.plotW, heightM * 1000.0 / base.plotH);
+    double n = std::ceil((d - 0.5) / 10.0) * 10.0;
+    if (!(n >= 10) || !std::isfinite(n)) n = 10;
+    for (int guard = 0; guard < 1000000; ++guard) {
+        SheetSpec t = s;
+        t.denom = n;
+        SheetLayout L = layoutSheet(t, widthM, heightM);
+        if (L.contentW <= L.plotW + 1.0 && L.contentH <= L.plotH + 1.0) return n;
+        n += 10;
+    }
+    return n;
+}
+
+double outsideStepMeters(double mPerMm, double minMm) {
+    if (!(mPerMm > 0) || !std::isfinite(mPerMm)) return 1;
+    if (!(minMm > 0)) minMm = 28;
+    double step = 1;
+    for (int n = 0; n < 15; ++n) {
+        double p = std::pow(10.0, double(n));
+        for (double m : {1.0, 2.0, 5.0}) {
+            double c = m * p;
+            if (c / mPerMm >= minMm) return c;
+            step = c;
+        }
+    }
+    return step;
+}
+
+static bool rectContains(double ax, double ay, double aw, double ah, double bx, double by, double bw, double bh, double eps) {
+    return ax <= bx + eps && ay <= by + eps && ax + aw + eps >= bx + bw && ay + ah + eps >= by + bh;
+}
+
+PlanPlace placePlan(const SheetSpec& spec, double x0, double x1, double y0, double y1, double viewZoom, double dxMm, double dyMm, int col, int row, bool split) {
+    PlanPlace p;
+    if (x1 < x0) std::swap(x0, x1);
+    if (y1 < y0) std::swap(y0, y1);
+    double zoom = (viewZoom > 1e-6 && std::isfinite(viewZoom)) ? viewZoom : 1;
+    double rw = std::max(0.0, x1 - x0), rh = std::max(0.0, y1 - y0);
+    SheetLayout L = layoutSheet(spec, rw, rh);
+    p.plotX = L.plotX; p.plotY = L.plotY; p.plotW = L.plotW; p.plotH = L.plotH;
+    p.mPerMm = std::max(1e-12, spec.denom) / 1000.0 / zoom;
+    p.dxMm = dxMm; p.dyMm = dyMm;
+    if (split) {
+        double base = std::max(1e-12, spec.denom) / 1000.0;
+        p.cX = x0 + (col + 0.5) * L.plotW * base;
+        p.cY = y1 - (row + 0.5) * L.plotH * base;
+    } else {
+        p.cX = 0.5 * (x0 + x1);
+        p.cY = 0.5 * (y0 + y1);
+    }
+    p.visX0 = p.cX - (p.plotW * 0.5 + dxMm) * p.mPerMm;
+    p.visX1 = p.cX + (p.plotW * 0.5 - dxMm) * p.mPerMm;
+    p.visYTop = p.cY + (p.plotH * 0.5 + dyMm) * p.mPerMm;
+    p.visYBot = p.cY - (p.plotH * 0.5 - dyMm) * p.mPerMm;
+    double rx0 = split ? p.visX0 : x0, rx1 = split ? p.visX1 : x1;
+    double ry0 = split ? p.visYBot : y0, ry1 = split ? p.visYTop : y1;
+    p.worldX0 = std::min(p.visX0, rx0);
+    p.worldX1 = std::max(p.visX1, rx1);
+    p.worldYBot = std::min(p.visYBot, ry0);
+    p.worldYTop = std::max(p.visYTop, ry1);
+    p.imgX = p.xMm(p.worldX0);
+    p.imgY = p.yMm(p.worldYTop);
+    p.imgW = std::max(0.0, p.worldX1 - p.worldX0) / p.mPerMm;
+    p.imgH = std::max(0.0, p.worldYTop - p.worldYBot) / p.mPerMm;
+    p.imageFillsPlot = rectContains(p.imgX, p.imgY, p.imgW, p.imgH, p.plotX, p.plotY, p.plotW, p.plotH, 0.05);
+    p.rangeInsideImage = rectContains(p.imgX, p.imgY, p.imgW, p.imgH, p.xMm(x0), p.yMm(y1), rw / p.mPerMm, rh / p.mPerMm, 0.05);
+    p.tickStep = outsideStepMeters(p.mPerMm);
+    return p;
+}
+
+SectionPaperWindow sectionPaperWindow(double lenM, double heightM, double zTopAbs, double plotWmm, double plotHmm, double denom, double viewZoom, double dxMm, double dyMm, int col, int row, bool split) {
+    SectionPaperWindow w;
+    double zoom = (viewZoom > 1e-6 && std::isfinite(viewZoom)) ? viewZoom : 1;
+    double base = std::max(1e-12, denom) / 1000.0;
+    double baseWm = plotWmm * base, baseHm = plotHmm * base;
+    double sCenter, zCenter;
+    if (split) {
+        sCenter = (col + 0.5) * baseWm;
+        zCenter = zTopAbs - (row + 0.5) * baseHm;
+    } else {
+        sCenter = lenM <= baseWm ? lenM * 0.5 : baseWm * 0.5;
+        zCenter = heightM <= baseHm ? zTopAbs - heightM * 0.5 : zTopAbs - baseHm * 0.5;
+    }
+    w.mPerMm = base / zoom;
+    sCenter -= dxMm * w.mPerMm;
+    zCenter += dyMm * w.mPerMm;
+    w.visLen = plotWmm * w.mPerMm;
+    w.visHeight = plotHmm * w.mPerMm;
+    w.s0 = sCenter - w.visLen * 0.5;
+    w.zTop = zCenter + w.visHeight * 0.5;
+    return w;
+}
+
+OutsideTicks outsideTicks(double lo, double hi, int maxCount) {
+    OutsideTicks t;
+    if (!std::isfinite(lo) || !std::isfinite(hi)) return t;
+    if (hi < lo) std::swap(lo, hi);
+    if (maxCount < 1) maxCount = 1;
+    if (hi - lo < 1e-9) { t.first = lo; t.step = 1; t.count = 1; return t; }
+    if (maxCount < 2) maxCount = 2;
+    const double raw = (hi - lo) / double(maxCount);
+    const double p = std::pow(10.0, std::floor(std::log10(std::max(raw, 1e-12))));
+    double step = p;
+    for (double m : {1.0, 2.0, 5.0, 10.0}) {
+        if (m * p + 1e-15 >= raw) { step = m * p; break; }
+    }
+    const double first = std::ceil(lo / step - 1e-9) * step;
+    int n = 0;
+    for (double x = first; x <= hi + step * 1e-8 && n < 10000; x += step) ++n;
+    t.step = step;
+    t.first = first;
+    t.count = n;
+    return t;
+}
+
 std::string formatAzimuth(double az) {
     az = std::fmod(az, 360.0); if (az < 0) az += 360.0;
     char b[48];

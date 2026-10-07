@@ -274,6 +274,11 @@ void readVertical(const WktNode& v, const WktNode& wrapper, SrsDesc& d) {
         for (auto* ex : dat->children("EXTENSION")) if (ieq(ex->str(0), "PROJ4_GRIDS")) d.geoidModel = ex->str(1);
     if (d.geoidModel.empty())
         if (const WktNode* pf = findDeep(wrapper, "PARAMETERFILE")) d.geoidModel = pf->str(1);
+    // WKT1 VERT_DATUM 종류 2002 = 타원체고(OGC 01-009). Bentley GCS 는 VERT_CS["Ellipsoid Height",VERT_DATUM["Ellipsoid",2002]]
+    if (dat && !d.verticalEpsg && (std::lround(dat->num(1, 0)) == 2002 || ieq(dat->str(0), "Ellipsoid"))) {
+        d.vertKind = VertKind::Ellipsoidal;
+        d.verticalName = "ellipsoidal height";
+    }
 }
 
 void readTm(const WktNode& n, SrsDesc& d) {
@@ -287,9 +292,10 @@ void readTm(const WktNode& n, SrsDesc& d) {
     for (auto* p : holder->children("PARAMETER")) {
         std::string k = norm(p->str(0));
         double v = p->num(1);
-        if (k == "latitudeofnaturalorigin" || k == "latitudeoforigin") { d.tmLat0 = v; got[0] = true; }
+        // Bentley GCS(3SM 등): "Origin Latitude", "Scale Reduction"
+        if (k == "latitudeofnaturalorigin" || k == "latitudeoforigin" || k == "originlatitude") { d.tmLat0 = v; got[0] = true; }
         else if (k == "longitudeofnaturalorigin" || k == "centralmeridian") { d.tmLon0 = v; got[1] = true; }
-        else if (k == "scalefactoratnaturalorigin" || k == "scalefactor") { d.tmK0 = v; got[2] = true; }
+        else if (k == "scalefactoratnaturalorigin" || k == "scalefactor" || k == "scalereduction") { d.tmK0 = v; got[2] = true; }
         else if (k == "falseeasting") { d.tmFE = v; got[3] = true; }
         else if (k == "falsenorthing") { d.tmFN = v; got[4] = true; }
     }

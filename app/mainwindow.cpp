@@ -1,6 +1,10 @@
 #include "mainwindow.hpp"
+#ifdef KERF_HAS_3SM
+#include "sm3convert.hpp"
+#endif
 
 #include <QApplication>
+#include <QButtonGroup>
 #include <QStyle>
 #include <QUndoStack>
 #include <QMenu>
@@ -26,6 +30,9 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPainter>
+#include <QPainterPath>
+#include <cmath>
+#include <algorithm>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRadioButton>
@@ -141,6 +148,16 @@ bool MainWindow::loadScene(const QString& path, OpenedScene& out, QString* err, 
         out.src = s;
         out.kind = "OBJ";
     } else {
+        if (ext == ".3sm") {   // ScalableMesh: 처음 한 번 3MX 캐시로 바꾼 뒤 3MX 와 똑같이 연다(원본은 읽기만)
+#ifdef KERF_HAS_3SM
+            QString tmx, ce;
+            if (!convert3smTo3mx(path, tmx, &ce, progress)) { if (err) *err = ce; return false; }
+            p = toFs(tmx);
+#else
+            if (err) *err = QStringLiteral("이 빌드는 .3sm 을 열 수 없습니다");
+            return false;
+#endif
+        }
         // 3MX: 루트 타일 머리만 읽고 바로 연다. 화면은 평면 보기의 LOD 스트리밍이 거친 것부터 채운다.
         auto s = std::make_shared<TmxSource>();
         s->cache->textureDecoder = decodeTextureFull;
@@ -159,7 +176,7 @@ bool MainWindow::loadScene(const QString& path, OpenedScene& out, QString* err, 
         out.bounds = s->bounds.valid() ? s->bounds : bb;
         if (!s->bounds.valid()) s->bounds = out.bounds;
         out.src = s;
-        out.kind = "3MX";
+        out.kind = ext == ".3sm" ? "3SM" : "3MX";
     }
     if (!out.bounds.valid()) { if (err) *err = QStringLiteral("메시가 비어 있습니다"); return false; }
     out.center = out.bounds.center();
@@ -224,7 +241,8 @@ void MainWindow::updateEnabled() {
     bool sc = bool(src_), sec = section_->hasResult(), busy = taskBusy_;
     for (const char* k : {"draw", "fit", "top", "zoomin", "zoomout", "plan", "xyz", "las", "close", "height"}) action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
     for (const char* k : {"flip", "clear", "move"}) action(k)->setEnabled(sc && plan_->hasLine());
-    for (const char* k : {"dxf", "secimg", "csv", "info", "sheet"}) action(k)->setEnabled(sec && !busy);
+    for (const char* k : {"dxf", "secimg", "csv", "info"}) action(k)->setEnabled(sec && !busy);
+    for (const char* k : {"sheet", "plansheet", "sectionsheet"}) action(k)->setEnabled(sc && !busy);
     for (const char* k : {"addsec", "secjson", "secimport", "image", "line", "levels", "fade", "smooth", "listpanel"}) action(k)->setEnabled(sc && !busy);
     for (QWidget* wd : {static_cast<QWidget*>(front_), static_cast<QWidget*>(back_)}) wd->setEnabled(sc);
     for (auto* c : depthChip_) if (c) c->setEnabled(sc);
@@ -255,7 +273,7 @@ void MainWindow::runTask(const QString& what, std::function<bool(QString*)> work
 void MainWindow::chooseOpen() {
     QSettings st;
     QString f = QFileDialog::getOpenFileName(this, QStringLiteral("실사 메시 열기"), st.value("dir/open").toString(),
-                                             QStringLiteral("3MX 실사 메시 (*.3mx);;OBJ 메시 (*.obj);;모든 파일 (*.*)"));
+                                             QStringLiteral("실사 메시 (*.3mx *.3sm *.obj);;3MX 실사 메시 (*.3mx);;3SM ScalableMesh (*.3sm);;OBJ 메시 (*.obj);;모든 파일 (*.*)"));
     if (f.isEmpty()) return;
     st.setValue("dir/open", QFileInfo(f).absolutePath());
     openFile(f);
@@ -299,7 +317,7 @@ void MainWindow::applyScene(OpenedScene&& s) {
     refreshSrs();
     info_->setText(streaming_ ? QStringLiteral("%1%2 · LOD 스트리밍").arg(kind_, s.layers > 1 ? QStringLiteral(" · 레이어 %1개").arg(s.layers) : QString())
                               : QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
-    setWindowTitle(QStringLiteral("%1 — 발굴 단면뷰어 %2").arg(QFileInfo(path_).fileName(), QString::fromUtf8(kVersion)));
+    setWindowTitle(QStringLiteral("%1 — Kerf %2").arg(QFileInfo(path_).fileName(), QString::fromUtf8(kVersion)));
     showStart(false);
     addRecent(path_);
     restoreModelState();
@@ -329,7 +347,7 @@ void MainWindow::closeScene() {
     src_.reset(); path_.clear();
     sections_.clear(); thumbs_.clear(); current_ = -1; refreshSectionList();
     undo_->clear();
-    setWindowTitle(QStringLiteral("발굴 단면뷰어 %1").arg(QString::fromUtf8(kVersion)));
+    setWindowTitle(QStringLiteral("Kerf %1").arg(QString::fromUtf8(kVersion)));
     showStart(true);
     updateEnabled();
     updateHeader();
@@ -339,13 +357,13 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
     if (e->mimeData()->hasUrls())
         for (auto& u : e->mimeData()->urls()) {
             QString f = u.toLocalFile().toLower();
-            if (f.endsWith(".3mx") || f.endsWith(".obj")) { e->acceptProposedAction(); return; }
+            if (f.endsWith(".3mx") || f.endsWith(".3sm") || f.endsWith(".obj")) { e->acceptProposedAction(); return; }
         }
 }
 void MainWindow::dropEvent(QDropEvent* e) {
     for (auto& u : e->mimeData()->urls()) {
         QString f = u.toLocalFile();
-        if (f.toLower().endsWith(".3mx") || f.toLower().endsWith(".obj")) { openFile(f); return; }
+        if (f.toLower().endsWith(".3mx") || f.toLower().endsWith(".3sm") || f.toLower().endsWith(".obj")) { openFile(f); return; }
     }
 }
 
@@ -399,7 +417,9 @@ void MainWindow::onSectionDone(SectionOutput&& out, uint64_t gen, bool final, co
     (final ? secCounters_.finalsShown : secCounters_.previewsShown)++;
     secCounters_.lastMs = last_.msCollect + last_.msCut + last_.msImage; secCounters_.lastTris = last_.stats.triangles;
     section_->setStyle(secStyle());
-    section_->setResult(last_.result, toQImage(last_.image.img), last_.image.s0, last_.image.z1, last_.image.res, !fitNextResult_);
+    QImage secIm = toQImage(last_.image.img);
+    section_->setResult(last_.result, secIm, last_.image.s0, last_.image.z1, last_.image.res, !fitNextResult_);
+    if (plan_) plan_->setSectionPlane(secIm, last_.result.line, last_.image.s0, last_.image.z1, last_.image.res);
     if (fitNextResult_ && final) fitNextResult_ = false;
     section_->setBusy(!(final && newest));
     size_t nv = 0, nClosed = 0;
@@ -420,6 +440,7 @@ void MainWindow::onSectionDone(SectionOutput&& out, uint64_t gen, bool final, co
             vexHint = QStringLiteral(" · 기복 %1 cm 라 평평해 보이면 X: 세로 ×%2 과장(화면만)").arg(vexRelief_ * 100, 0, 'f', 0).arg(vexSuggest_);
         showStatus(QStringLiteral("%1 단면 %2 m 완료 — 다음: Ctrl+P 「도면」, 숫자키 1–5 뒤 깊이, [ ] 평행 이동%3").arg(sectionName()).arg(L, 0, 'f', 2).arg(vexHint));
         if (current_ >= 0) { thumbs_[current_] = makeThumb(); refreshSectionList(); }
+        saveModelState();
     } else showStatus(last_.cutFromLeaf ? QStringLiteral("미리보기 — 단면선은 잎(정확), 배경 영상만 거친 LOD · 최종 계산 중…") : QStringLiteral("미리보기(거친 LOD) — 최종(잎) 계산 중…"));
     msg_->setToolTip(detail);
     updateEnabled();
@@ -469,7 +490,7 @@ bool MainWindow::exportSectionImage(const SectionDoc& doc0, MeshSource& src, con
     canvas.fill(Qt::white);
     {
         QPainter pt(&canvas);
-        QString footer = QStringLiteral("발굴 단면뷰어 · 1:%1 · %2 dpi · %3").arg(p.denom, 0, 'f', 0).arg(p.dpi, 0, 'f', 0).arg(QDate::currentDate().toString("yyyy-MM-dd"));
+        QString footer = QStringLiteral("Kerf · 1:%1 · %2 dpi · %3").arg(p.denom, 0, 'f', 0).arg(p.dpi, 0, 'f', 0).arg(QDate::currentDate().toString("yyyy-MM-dd"));
         paintSectionDoc(pt, doc, QRectF(0, 0, sz.width(), sz.height()), xf, ui, img, true, footer, &geo);
     }
     const int dpm = int(std::lround(p.dpi / 0.0254));
@@ -891,12 +912,107 @@ void MainWindow::dlgInfo() {
     QMessageBox mb(this); mb.setWindowTitle(QStringLiteral("단면 정보 (Section Info)")); mb.setTextFormat(Qt::RichText); mb.setText(t); mb.exec();
 }
 
+void MainWindow::paintOpeningSplash(QPainter& p, const QSize& sz, double t) {
+    // 사진 없이 선과 색 면으로만 그린 일러스트 모션: 레벨선이 내려오고 → A·A′ 가 서고 → 흙 면과 단면선이 왼쪽부터 그려진다.
+    t = std::clamp(t, 0.0, 1.0);
+    auto seg = [&](double a, double b) { double u = std::clamp((t - a) / (b - a), 0.0, 1.0); return 1 - std::pow(1 - u, 3.0); };   // OutCubic
+    const QRect im(QPoint(0, 0), sz.isEmpty() ? QSize(960, 600) : sz);
+    p.fillRect(im, QColor(0xFA, 0xF9, 0xF5));
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::TextAntialiasing);
+    const double k = im.width() / 960.0;
+    auto X = [&](double s) { return (80 + s * 260) * k; };
+    auto Y = [&](double z) { return (150 + (57.6 - z) * 150) * k; };
+    // 1) 레벨선: 위에서 아래로 한 줄씩(선마다 시차), 50 cm 선이 조금 진함
+    const double lv = seg(0.05, 0.32);
+    for (int i = 0; i <= 16; ++i) {
+        double z = 57.6 - i * 0.1;
+        double u = std::clamp(lv * 17.0 - i * 0.8, 0.0, 1.0);
+        if (u <= 0) continue;
+        bool major = (i % 5) == 1 && z <= 57.5 + 1e-6;
+        p.setPen(QPen(major ? QColor(0xA0, 0x9E, 0x97) : QColor(0xEE, 0xED, 0xE7), std::max(1.0, (major ? 1.1 : 0.75) * k)));
+        p.drawLine(QPointF(60 * k, Y(z)), QPointF((60 + 840 * u) * k, Y(z)));
+    }
+    // 2) 단면선 모양
+    QPainterPath cut;
+    cut.moveTo(X(0), Y(57.25));
+    cut.cubicTo(X(0.6), Y(57.2), X(0.9), Y(56.3), X(1.4), Y(56.15));
+    cut.cubicTo(X(1.9), Y(56.05), X(2.2), Y(56.4), X(2.6), Y(57.22));
+    cut.lineTo(X(3.2), Y(57.28));
+    const double reveal = seg(0.38, 0.80);
+    // 3) 흙 면(층 띠): 단면선 아래, 왼쪽에서 오른쪽으로 드러남. 사진 대신 평평한 색 띠
+    if (reveal > 0) {
+        QPainterPath soil = cut;
+        soil.lineTo(X(3.2), Y(55.9)); soil.lineTo(X(0), Y(55.9)); soil.closeSubpath();
+        p.save();
+        p.setClipRect(QRectF(0, 0, (X(0) + (X(3.2) - X(0)) * reveal), im.height()));
+        p.setClipPath(soil, Qt::IntersectClip);
+        struct Band { double z0, z1; QColor c; };
+        const Band bands[] = {{57.6, 57.05, QColor(0xE3, 0xDA, 0xCC)}, {57.05, 56.6, QColor(0xD9, 0xB9, 0x9B)}, {56.6, 56.25, QColor(0xB5, 0x57, 0x3A)}, {56.25, 55.9, QColor(0x8F, 0x42, 0x29)}};
+        for (const Band& b : bands) p.fillRect(QRectF(X(0), Y(b.z0), X(3.2) - X(0), Y(b.z1) - Y(b.z0)), b.c);
+        p.restore();
+    }
+    // 4) 단면선: 길이를 따라 점을 이어 그림
+    if (reveal > 0) {
+        QPainterPath part;
+        const int n = 160, m = std::max(1, int(n * reveal));
+        part.moveTo(cut.pointAtPercent(0));
+        for (int i = 1; i <= m; ++i) part.lineTo(cut.pointAtPercent(double(i) / n));
+        p.setPen(QPen(QColor(0xFF, 0x00, 0x00), std::max(1.5, 2.4 * k), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(part);
+    }
+    // 5) A · A′ 끝선과 이름: 단면선이 시작되기 전에 선다
+    const double ab = seg(0.28, 0.40);
+    if (ab > 0) {
+        p.setOpacity(ab);
+        p.setPen(QPen(QColor(0xFF, 0x00, 0x00, 110), std::max(1.0, 1.0 * k), Qt::DashLine));
+        p.drawLine(QPointF(X(0), Y(57.6)), QPointF(X(0), Y(55.9)));
+        p.drawLine(QPointF(X(3.2), Y(57.6)), QPointF(X(3.2), Y(55.9)));
+        p.setFont(theme::uiFont(int(std::lround(18 * k)), true));
+        p.setPen(QColor(0xFF, 0x00, 0x00));
+        p.drawText(QRectF(X(0) - 20 * k, Y(57.6) - 28 * k, 40 * k, 22 * k), Qt::AlignCenter, QStringLiteral("A"));
+        p.drawText(QRectF(X(3.2) - 24 * k, Y(57.6) - 28 * k, 48 * k, 22 * k), Qt::AlignCenter, QStringLiteral("A′"));
+        p.setOpacity(1.0);
+    }
+    // 6) 이름·안내(처음부터 보임)
+    p.setPen(QColor(0x14, 0x14, 0x13));
+    QFont title = theme::uiFont(int(std::lround(36 * k)));
+    title.setFamilies({QStringLiteral("Batang"), QStringLiteral("Noto Serif KR"), QStringLiteral("Malgun Gothic")});
+    p.setFont(title);
+    p.drawText(QRectF(48 * k, 28 * k, 700 * k, 48 * k), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("Kerf"));
+    p.setFont(theme::uiFont(int(std::lround(14 * k))));
+    p.setPen(QColor(0x5E, 0x5D, 0x59));
+    p.drawText(QRectF(48 * k, 76 * k, 700 * k, 24 * k), Qt::AlignLeft | Qt::AlignVCenter,
+               QStringLiteral("발굴 평·단면도 · 3MX·OBJ 실사 메시 · %1").arg(QString::fromUtf8(kVersion)));
+    // 7) 아래 기반암 띠 + 상태 글
+    p.fillRect(QRectF(0, im.height() - 72 * k, im.width(), 72 * k), QColor(0x26, 0x26, 0x24));
+    p.setPen(QColor(0xFA, 0xF9, 0xF5));
+    p.setFont(theme::uiFont(int(std::lround(14 * k))));
+    const QString status = t >= 0.80 ? QStringLiteral("준비 완료") : t >= 0.30 ? QStringLiteral("잠시 후 화면이 열립니다") : QStringLiteral("앱을 준비하고 있습니다");
+    p.drawText(QRectF(48 * k, im.height() - 64 * k, 500 * k, 24 * k), Qt::AlignLeft | Qt::AlignVCenter, status);
+    p.setPen(QColor(0xC2, 0xC0, 0xB6));
+    p.setFont(theme::uiFont(int(std::lround(12 * k))));
+    p.drawText(QRectF(48 * k, im.height() - 38 * k, 700 * k, 22 * k), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("원본 파일은 바꾸지 않습니다"));
+    p.drawText(QRectF(im.width() - 420 * k, im.height() - 38 * k, 372 * k, 22 * k), Qt::AlignRight | Qt::AlignVCenter,
+               QStringLiteral("© 2026 Kerf · Qt 6.8"));
+    // 8) 진행 막대(기반암 띠 맨 위 3 px)
+    p.fillRect(QRectF(0, im.height() - 72 * k, im.width() * t, 3 * k), QColor(0xD9, 0x77, 0x57));
+}
+
+QImage MainWindow::renderOpeningSplash(const QSize& size, double t) {
+    QImage im(size.isEmpty() ? QSize(960, 600) : size, QImage::Format_RGB32);
+    QPainter p(&im);
+    paintOpeningSplash(p, im.size(), t);
+    return im;
+}
+
 void MainWindow::dlgAbout() {
     QMessageBox mb(this);
-    mb.setWindowTitle(QStringLiteral("프로그램 정보"));   // Qt 가 「 - 발굴 단면뷰어 x.y.z」를 붙임
+    mb.setWindowTitle(QStringLiteral("프로그램 정보"));   // Qt 가 「 - Kerf x.y.z」를 붙임
     mb.setIconPixmap(windowIcon().pixmap(64, 64));
     mb.setTextFormat(Qt::RichText);
-    mb.setText(QStringLiteral("<b>발굴 단면뷰어</b> v%1<br>3MX 실사 메시 단면 · 10 cm 레벨선 · DXF / GeoTIFF / 점군 내보내기<br><br>"
+    mb.setText(QStringLiteral("<b>Kerf</b> v%1 · 발굴 평·단면<br>3MX 실사 메시 단면 · 10 cm 레벨선 · DXF / GeoTIFF / 점군 내보내기<br><br>"
                               "<small>Qt %2 (LGPLv3, 동적 링크) · OpenCTM (zlib) · stb (공개 도메인/MIT) · nlohmann/json (MIT)<br>"
                               "3MX 는 공개 형식 사양에 따라 직접 읽습니다.</small>").arg(kVersion).arg(qVersion()));
     mb.exec();
@@ -953,34 +1069,77 @@ void MainWindow::setHeightDeclaration(VDatum v, bool persist) {
                                  : QStringLiteral("높이 기준을 %1(으)로 지정 — 이름표만 바뀌고 Z 값은 그대로입니다").arg(qs(vdatumInfo(v).nameKo)));
 }
 
-void MainWindow::dlgHeightDatum() {
-    if (!src_) return;
+QDialog* MainWindow::heightDatumDialog() {
+    if (!src_) return nullptr;
     SrsDesc raw = describeSrs(src_->srs.srs);
-    QStringList items;
-    std::vector<VDatum> vals;
-    items << QStringLiteral("SRS 표기 그대로 — %1").arg(qs(raw.verticalKo())); vals.push_back(VDatum::None);
-    for (VDatum d : declarableVDatums()) {
-        const VDatumInfo& in = vdatumInfo(d);
-        items << (in.epsg ? QStringLiteral("%1 (EPSG:%2)").arg(qs(in.nameKo)).arg(in.epsg) : qs(in.nameKo));
-        vals.push_back(d);
+    auto* d = new QDialog(this);
+    d->setWindowTitle(QStringLiteral("높이 기준 지정"));
+    d->setFixedWidth(560);
+    auto* v = new QVBoxLayout(d);
+    v->setContentsMargins(24, 20, 24, 20);
+    v->setSpacing(10);
+    auto* q = new QLabel(QStringLiteral("이 모델의 높이는 어느 기준입니까?"));
+    QFont serif;
+    serif.setFamilies({QStringLiteral("Batang"), QStringLiteral("Noto Serif KR"), QStringLiteral("Malgun Gothic")});
+    serif.setPixelSize(20);
+    q->setFont(serif);
+    q->setWordWrap(true);
+    v->addWidget(q);
+    auto* hint = new QLabel(QStringLiteral("Z 값은 바꾸지 않고 이름표만 바꿉니다. 이 이름이 도면 범례·표제란과 상태줄에 들어갑니다."));
+    hint->setWordWrap(true);
+    hint->setObjectName("hint");
+    v->addWidget(hint);
+    struct Row { VDatum datum; QString title; QString note; bool recommend; };
+    std::vector<Row> rows;
+    rows.push_back({VDatum::None, QStringLiteral("파일 표기 그대로 — %1").arg(qs(raw.verticalKo())),
+                    raw.promotedTo3D ? QStringLiteral("iTwin이 EPSG:%1을 3D로 올리며 붙인 이름").arg(raw.horizontalEpsg) : QStringLiteral("파일에 적힌 높이 이름"), false});
+    for (VDatum vd : declarableVDatums()) {
+        const VDatumInfo& in = vdatumInfo(vd);
+        QString title = in.epsg ? QStringLiteral("%1  EPSG:%2").arg(qs(in.nameKo)).arg(in.epsg) : qs(in.nameKo);
+        bool rec = raw.promotedTo3D && vd == VDatum::EGM96;
+        rows.push_back({vd, title, rec ? QStringLiteral("측량 높이를 그대로 넣은 경우") : QString(), rec});
     }
+    auto* group = new QButtonGroup(d);
     int cur = 0;
-    for (size_t i = 0; i < vals.size(); ++i) if (vals[i] == src_->srs.heightDeclared) cur = int(i);
-    QString text = QStringLiteral(
-        "이 모델의 Z 값이 실제로 어떤 높이 기준인지 지정합니다.\n"
-        "높이 값은 바뀌지 않고, 화면·DXF·GeoTIFF 수직 키·LAS·JSON 의 이름표만 바뀝니다.\n\n"
-        "SRS 원래 표기: %1%2\n\n"
-        "측량값(예: 지오이드 보정된 EGM96 높이)을 iTwin 에 그대로 넣었다면 Z 는 그 측량 높이 기준입니다.")
-        .arg(qs(raw.verticalKo()),
-             raw.promotedTo3D ? QStringLiteral("\n(iTwin 이 EPSG:%1 을 3D 로 승격하며 붙인 이름표 — 실제 값과 다를 수 있음)").arg(raw.horizontalEpsg) : QString());
-    bool ok = false;
-    QString pick = QInputDialog::getItem(this, QStringLiteral("높이 기준 지정 (Height Datum)"), text, items, cur, false, &ok);
-    if (!ok) return;
-    int i = int(items.indexOf(pick));
-    if (i < 0) return;
-    setHeightDeclaration(vals[size_t(i)], true);
-    commitState(QStringLiteral("높이 기준"));
-    saveModelState();
+    for (int i = 0; i < int(rows.size()); ++i) if (rows[size_t(i)].datum == src_->srs.heightDeclared) cur = i;
+    for (int i = 0; i < int(rows.size()); ++i) {
+        auto* rb = new QRadioButton(rows[size_t(i)].recommend ? rows[size_t(i)].title + QStringLiteral("    추천") : rows[size_t(i)].title);
+        rb->setChecked(i == cur);
+        group->addButton(rb, i);
+        v->addWidget(rb);
+        if (!rows[size_t(i)].note.isEmpty()) {
+            auto* n = new QLabel(rows[size_t(i)].note);
+            n->setObjectName("faint");
+            n->setContentsMargins(22, 0, 0, 4);
+            v->addWidget(n);
+        }
+    }
+    auto* foot = new QHBoxLayout;
+    foot->addStretch();
+    auto* cancel = new QPushButton(QStringLiteral("취소"));
+    auto* ok = new QPushButton(QStringLiteral("지정"));
+    ok->setObjectName("primary");
+    ok->setDefault(true);
+    foot->addWidget(cancel);
+    foot->addWidget(ok);
+    v->addLayout(foot);
+    QObject::connect(cancel, &QPushButton::clicked, d, &QDialog::reject);
+    QObject::connect(ok, &QPushButton::clicked, d, [this, d, group, rows] {
+        int id = group->checkedId();
+        if (id < 0) { d->reject(); return; }
+        setHeightDeclaration(rows[size_t(id)].datum, true);
+        commitState(QStringLiteral("높이 기준"));
+        saveModelState();
+        d->accept();
+    });
+    return d;
+}
+
+void MainWindow::dlgHeightDatum() {
+    QDialog* d = heightDatumDialog();
+    if (!d) return;
+    d->exec();
+    d->deleteLater();
 }
 
 // ---------------------------------------------------------------- 커서 정밀 Z(잎 메시, CPU double)

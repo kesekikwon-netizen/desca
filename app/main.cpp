@@ -1,4 +1,4 @@
-// 발굴 단면뷰어 진입점. 명령줄 자동화(화면 캡처·내보내기 시험용):
+// Kerf(발굴 평·단면) 진입점. 명령줄 자동화(화면 캡처·내보내기 시험용):
 //   SectionViewer [파일.3mx|.obj] [--line AX AY BX BY] [--local] [--front m] [--back m] [--size WxH] [--tab N]
 //                 [--shot out.png] [--export-png f] [--export-tiff f] [--export-geotiff f] [--export-dxf f] [--dxf3d]
 //                 [--export-plan f] [--plan-view] [--export-xyz f] [--export-las f] [--area whole|band|view] [--spacing m] [--norgb]
@@ -16,6 +16,9 @@
 //   --vex N: 단면 화면 세로 과장(1·2·5·10, 화면만) / 창 제목 중복 검사는 항상 로그(window-title=…)
 //   --plan-cam X Y mpp: 캡처 전에 평면 카메라를 실좌표 중심·m/px 로(평면-단면 정합 확인)
 #include <QApplication>
+#include <QLabel>
+#include <QListWidget>
+#include <QPixmap>
 #include <QPainter>
 #include <algorithm>
 #include <QDialog>
@@ -28,6 +31,12 @@
 #include <QSurfaceFormat>
 #include <QTextStream>
 #include <QTimer>
+#include <QPushButton>
+#include <QSpinBox>
+#include <QDir>
+#include <QGuiApplication>
+#include <QEventLoop>
+#include <QElapsedTimer>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include "asec/pick.hpp"
@@ -129,6 +138,48 @@ static void runCutCheck(MainWindow& w, LogFn log) {
     }
 }
 
+// 여는 화면 창: 테두리 없는 맨 위 창, 화면 가운데. t = 지난 시간 / 전체(5 초)
+class OpeningSplash : public QWidget {
+public:
+    OpeningSplash() : QWidget(nullptr, Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint) {
+        setFixedSize(960, 600);
+        setAttribute(Qt::WA_OpaquePaintEvent);
+        if (QScreen* sc = QGuiApplication::primaryScreen()) move(sc->availableGeometry().center() - rect().center());
+    }
+    void run(int ms, const QString& captureDir = QString()) {
+        total_ = ms;
+        int nextCap = 1000;   // captureDir 이 있으면 1·2·3·4·5 초 장면을 그 창에서 직접 찍음(시험용)
+        clock_.start();
+        show(); raise(); activateWindow();
+        QTimer tick; tick.setInterval(16);
+        QEventLoop loop;
+        QObject::connect(&tick, &QTimer::timeout, this, [&] {
+            repaint();
+            const qint64 e = clock_.elapsed();
+            if (!captureDir.isEmpty() && (e >= nextCap || e >= total_) && nextCap <= total_) {
+                grab().save(QStringLiteral("%1/splash_live_%2s.png").arg(captureDir).arg(nextCap / 1000));
+                fprintf(stdout, "splash-live %d ms (t=%.2f) visible=%d pos=%d,%d\n", int(e), std::min(1.0, e / double(total_)), isVisible() ? 1 : 0, x(), y());
+                fflush(stdout);
+                nextCap += 1000;
+            }
+            if (e >= total_ && (captureDir.isEmpty() || nextCap > total_)) loop.quit();
+        });
+        tick.start();
+        loop.exec();
+        tick.stop();
+        close();
+    }
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        const double t = total_ > 0 ? std::min(1.0, clock_.elapsed() / double(total_)) : 1.0;
+        MainWindow::paintOpeningSplash(p, size(), t);
+    }
+private:
+    QElapsedTimer clock_;
+    int total_ = 5000;
+};
+
 int main(int argc, char** argv) {
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--settings") {   // 시험용: 사용자 설정을 건드리지 않게
@@ -140,9 +191,9 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QApplication::setOrganizationName("ExcavSection");
     QApplication::setApplicationName("SectionViewer");
-    // 표시 이름 = 창 제목 끝과 같게(「… — 발굴 단면뷰어 x.y.z」). Qt(Windows·X11)는 제목이 표시 이름으로 끝나지 않으면
-    // 「 - 표시 이름」을 덧붙여 「발굴 단면뷰어」가 두 번 보였음(1.2.0 신고)
-    QApplication::setApplicationDisplayName(QStringLiteral("발굴 단면뷰어 %1").arg(QString::fromUtf8(kVersion)));
+    // 표시 이름 = 창 제목 끝과 같게(「… — Kerf x.y.z」). Qt(Windows·X11)는 제목이 표시 이름으로 끝나지 않으면
+    // 「 - 표시 이름」을 덧붙여 앱 이름이 두 번 보였음(1.2.0 신고)
+    QApplication::setApplicationDisplayName(QStringLiteral("Kerf %1").arg(QString::fromUtf8(kVersion)));
     QFont f = theme::uiFont(13); f.setStyleStrategy(QFont::PreferAntialias);   // 한글 본문 13 px
     QApplication::setFont(f);
     app.setStyle("Fusion");
@@ -152,16 +203,20 @@ int main(int argc, char** argv) {
     app.setWindowIcon(ic);
 
     QStringList a = app.arguments();
-    QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot;
+    QString splashLive;   // --splash-live DIR: 실제 여는 화면 창을 5 초 돌리며 1초마다 찍음
+    int sheetWheel = 0;
+    int sheetPick = -1;   // --sheet-pick N: 조판 탭 왼쪽 도면 목록 N 번째 줄을 누름(0 = 평면도)
+    bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
+    QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, coordShot;
     bool undoTest = false, split = false; double sheetScale = 0, sectionScale = 0;
     QString lodShot;
-    double camX = 0, camY = 0, camMpp = 0, vexArg = 0;
+    double camX = 0, camY = 0, camMpp = 0, vexArg = 0, pitchArg = -1;
     bool cutCheck = false;
     std::vector<std::array<double, 4>> extraLines;
     bool haveLine = false, local = false, quit = false;
     double ax = 0, ay = 0, bx = 0, by = 0, front = -1, back = -1, denom = 20, dpi = 300, spacing = 0;
     int W = 0, H = 0, tab = -1;
-    bool dxf3d = false, rgb = true, planView = false, hover = false, wheelTest = false;
+    bool dxf3d = false, rgb = true, planView = false, hover = false, wheelTest = false, syncCursor = false;
     std::vector<std::pair<double, double>> picks;
     QString area = "whole";
     QList<QPair<QString, QString>> exports;
@@ -190,26 +245,53 @@ int main(int argc, char** argv) {
         else if (s == "--quit") quit = true;
         else if (s == "--pick" && i + 2 < a.size()) { picks.push_back({a[i + 1].toDouble(), a[i + 2].toDouble()}); i += 2; }
         else if (s == "--hover") hover = true;
+        else if (s == "--sync-cursor") syncCursor = true;
         else if (s == "--vex") vexArg = nx().toDouble();
         else if (s == "--cut-check") cutCheck = true;
         else if (s == "--plan-cam" && i + 3 < a.size()) { camX = a[i + 1].toDouble(); camY = a[i + 2].toDouble(); camMpp = a[i + 3].toDouble(); i += 3; }
+        else if (s == "--plan-pitch") pitchArg = nx().toDouble();
         else if (s == "--settings") nx();
         else if (s == "--export-dialog-shot") dialogShot = nx();
+        else if (s == "--datum-shot") datumShot = nx();
+        else if (s == "--coord-shot") coordShot = nx();
         else if (s == "--ctx-shot") ctxShot = nx();
         else if (s == "--lod-shot") lodShot = nx();
         else if (s == "--section-scale") sectionScale = nx().toDouble();
         else if (s == "--start-shot") startShot = nx();
+        else if (s == "--splash-shot") splashShot = nx();
+        else if (s == "--splash-live") splashLive = nx();
         else if (s == "--undo-test") undoTest = true;
         else if (s == "--paper") paperArg = nx().toUpper();
         else if (s == "--sheet-scale") sheetScale = nx().toDouble();
+        else if (s == "--sheet-check") sheetCheck = nx();
+        else if (s == "--open-sheet") openSheet = nx();
+        else if (s == "--sheet-wheel") sheetWheel = nx().toInt();
+        else if (s == "--sheet-edit") sheetEdit = true;
+        else if (s == "--sheet-pick") sheetPick = nx().toInt();
         else if (s == "--split") split = true;
         else if (s == "--extra-line" && i + 4 < a.size()) { extraLines.push_back({a[i + 1].toDouble(), a[i + 2].toDouble(), a[i + 3].toDouble(), a[i + 4].toDouble()}); i += 4; }
         else if (s.startsWith("--export-")) exports.append({s.mid(9), nx()});
         else if (!s.startsWith("--")) file = s;
     }
 
+    if (!splashLive.isEmpty()) { QDir().mkpath(splashLive); OpeningSplash sp; sp.run(5000, splashLive); return 0; }
+    if (!splashShot.isEmpty() && file.isEmpty()) {
+        QImage im = MainWindow::renderOpeningSplash(QSize(960, 600));
+        bool ok = im.save(splashShot);
+        for (double tt : {0.2, 0.45, 0.7}) {   // 중간 장면(움직임 확인용): 이름 뒤에 _tNN
+            QString f = splashShot; f.insert(f.lastIndexOf('.') < 0 ? f.size() : f.lastIndexOf('.'), QStringLiteral("_t%1").arg(int(tt * 100)));
+            MainWindow::renderOpeningSplash(QSize(960, 600), tt).save(f);
+        }
+        fprintf(stdout, "splash-shot %s: %s (%dx%d)\n", ok ? "ok" : "FAILED", splashShot.toUtf8().constData(), im.width(), im.height());
+        return ok ? 0 : 6;
+    }
     MainWindow w;
     if (W > 0 && H > 0) w.resize(W, H);
+    if (file.isEmpty() && startShot.isEmpty() && shot.isEmpty() && !quit) {
+        // 여는 화면: 화면 가운데 맨 위에 5 초 동안 선 그림 모션(초당 60 번 다시 그림)
+        OpeningSplash splash;
+        splash.run(5000);
+    }
     w.show();
     if (file.isEmpty() && !startShot.isEmpty()) {   // 시작 화면 캡처
         processFor(800);
@@ -228,7 +310,7 @@ int main(int argc, char** argv) {
         if (logOk) { logF.write(b); logF.flush(); }
         fputs(b.constData(), stdout); fflush(stdout);
     };
-    bool automated = haveLine || !shot.isEmpty() || !exports.isEmpty() || quit || !perfPath.isEmpty() || !startShot.isEmpty();
+    bool automated = haveLine || !shot.isEmpty() || !exports.isEmpty() || quit || !perfPath.isEmpty() || !startShot.isEmpty() || !sheetCheck.isEmpty();
     if (!automated) { QTimer::singleShot(0, &w, [&] { w.openFile(file); }); return app.exec(); }
 
     processFor(200);
@@ -498,6 +580,17 @@ int main(int argc, char** argv) {
             ok = MainWindow::exportPointCloud(*src, p, w.plan()->line(), path, &m);
         } else if (kind == "csv") {
             ok = MainWindow::exportProfileCsv(w.sectionDoc(), path, &m);
+        } else if (kind == "plan-svg") {
+            PlanSheetParams sp = w.defaultPlanSheetParams();
+            sp.format = 4;
+            sp.spec.denom = sheetScale > 0 ? sheetScale : snapScaleDenom10(denom);
+            if (!paperArg.isEmpty()) { sp.spec.paper = paperArg.startsWith("A3") ? Paper::A3 : Paper::A4; sp.spec.landscape = !paperArg.endsWith("P"); }
+            ok = MainWindow::exportPlanSheet(*src, sp, path, &m);
+        } else if (kind == "svg") {
+            SheetParams sp = w.defaultSheetParams();
+            sp.spec.denom = sheetScale > 0 ? sheetScale : denom; sp.dpi = dpi;
+            if (!paperArg.isEmpty()) { sp.spec.paper = paperArg.startsWith("A3") ? Paper::A3 : Paper::A4; sp.spec.landscape = !paperArg.endsWith("P"); }
+            ok = w.hasSection() && MainWindow::exportSectionSvg(w.sectionDoc(), *src, sp, path, &m);
         } else if (kind == "pdf" || kind == "sheet-png" || kind == "sheet-tiff" || kind == "sheet-dxf") {
             SheetParams sp = w.defaultSheetParams();
             sp.format = kind == "pdf" ? 0 : kind == "sheet-dxf" ? 1 : kind == "sheet-png" ? 2 : 3;
@@ -510,6 +603,26 @@ int main(int argc, char** argv) {
         } else m = "unknown export kind";
         log(QStringLiteral("export-%1 %2: %3").arg(kind, ok ? "ok" : "FAILED", QString(m).replace('\n', " | ")));
         if (!ok) rc = 4;
+    }
+    if (!coordShot.isEmpty() && w.source()) {
+        std::unique_ptr<QDialog> dlg(w.coordEntryDialog());
+        if (dlg) {
+            dlg->show();
+            processFor(400);
+            bool ok = dlg->grab().save(coordShot);
+            log(QStringLiteral("coord-shot %1: %2").arg(ok ? "ok" : "FAILED", coordShot));
+            dlg->close();
+        }
+    }
+    if (!datumShot.isEmpty() && w.source()) {
+        std::unique_ptr<QDialog> dlg(w.heightDatumDialog());
+        if (dlg) {
+            dlg->show();
+            processFor(400);
+            bool ok = dlg->grab().save(datumShot);
+            log(QStringLiteral("datum-shot %1: %2").arg(ok ? "ok" : "FAILED", datumShot));
+            dlg->close();
+        }
     }
     if (!dialogShot.isEmpty() && w.hasSection()) {   // 도면 창 캡처(넘침 경고가 보이게 기본 1:40 A4 가로)
         SheetParams sp = w.defaultSheetParams();
@@ -535,6 +648,51 @@ int main(int argc, char** argv) {
         while (msC() < 30000 && !pv->streamIdle()) QApplication::processEvents(QEventLoop::AllEvents, 10);
         processFor(300);
         log(QStringLiteral("plan-cam: X=%1 Y=%2 mpp=%3 depth=%4 idle=%5").arg(camX, 0, 'f', 3).arg(camY, 0, 'f', 3).arg(camMpp).arg(pv->lastFrame().maxDepth).arg(pv->streamIdle() ? 1 : 0));
+    }
+    if (pitchArg >= 0) { w.plan()->setViewPitch(pitchArg); processFor(200); log(QStringLiteral("plan-pitch: %1").arg(pitchArg, 0, 'f', 1)); }
+    if (syncCursor && w.hasSection()) {
+        SectionView* sv = w.sectionView();
+        QPointF at(sv->width() * 0.42, sv->height() * 0.48);
+        QMouseEvent ev(QEvent::MouseMove, at, sv->mapToGlobal(at), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(sv, &ev);
+        processFor(200);
+    }
+    if (openSheet == QStringLiteral("plan")) { w.dlgPlanSheet(); processFor(500); }
+    else if (openSheet == QStringLiteral("section") && w.hasSection()) { w.dlgSheet(); processFor(300); }
+    auto sheetScaleText = [&]() { QString t; for (QSpinBox* sb : w.findChildren<QSpinBox*>()) if (sb->isVisible() && sb->prefix() == QStringLiteral("1:")) t = QString::number(sb->value()); return t; };
+    if (!openSheet.isEmpty() && sheetPick >= 0) {
+        QListWidget* lw = nullptr;
+        if (QWidget* page = w.findChild<QWidget*>(QStringLiteral("sheetPage"))) lw = page->findChild<QListWidget*>(QStringLiteral("sectionList"));
+        if (lw && sheetPick < lw->count()) {
+            log(QStringLiteral("sheet-pick: rows=%1 pick=%2").arg(lw->count()).arg(sheetPick));
+            emit lw->itemClicked(lw->item(sheetPick));
+            processFor(2500);
+            QString head;
+            if (QWidget* dlg = w.findChild<QWidget*>(QStringLiteral("sheetDialog"))) {
+                if (QWidget* hd = dlg->findChild<QWidget*>(QStringLiteral("dialogHead")))
+                    for (QLabel* l : hd->findChildren<QLabel*>()) head += l->text() + QStringLiteral(" | ");
+            } else head = QStringLiteral("(plan)");
+            log(QStringLiteral("sheet-pick head: %1").arg(head));
+        } else log(QStringLiteral("sheet-pick: list not found"));
+    }
+    if (!openSheet.isEmpty() && sheetEdit) {
+        for (QPushButton* b : w.findChildren<QPushButton*>()) if (b->isVisible() && b->text() == QStringLiteral("조판편집")) { b->click(); break; }
+        processFor(100);
+        log(QStringLiteral("sheet-edit: on"));
+    }
+    if (!openSheet.isEmpty() && sheetWheel != 0) log(QStringLiteral("sheet-scale before wheel: 1:%1").arg(sheetScaleText()));
+    if (!openSheet.isEmpty() && sheetWheel != 0) {   // 실제 휠 이벤트 → 멈춘 뒤 보이는 범위를 다시 렌더하는지 확인용
+        if (QWidget* pv = w.findChild<QWidget*>(QStringLiteral("sheetPreview"))) {
+            QPointF at(pv->width() * 0.45, pv->height() * 0.45);
+            for (int i = 0; i < std::abs(sheetWheel); ++i) {
+                QWheelEvent ev(at, pv->mapToGlobal(at), QPoint(), QPoint(0, sheetWheel > 0 ? 120 : -120), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+                QApplication::sendEvent(pv, &ev);
+                processFor(30);
+            }
+            processFor(2500);
+            log(QStringLiteral("sheet-wheel: %1 notches sent").arg(sheetWheel));
+            log(QStringLiteral("sheet-scale after wheel: 1:%1").arg(sheetScaleText()));
+        } else log(QStringLiteral("sheet-wheel: preview not found"));
     }
     if (!shot.isEmpty()) {
         processFor(500);
@@ -582,6 +740,12 @@ int main(int argc, char** argv) {
         auto t2 = std::chrono::steady_clock::now();
         while (msSince(t2) < 30000 && !pv->streamIdle()) QApplication::processEvents(QEventLoop::AllEvents, 10);
         pv->fitAll(); processFor(200);
+    }
+    if (!sheetCheck.isEmpty()) {
+        QString rep;
+        bool ck = w.runSheetCheck(sheetCheck, &rep);
+        log(rep);
+        if (!ck) rc = 8;
     }
     if (quit) return rc;
     return app.exec();

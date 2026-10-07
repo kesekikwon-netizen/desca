@@ -28,6 +28,8 @@ bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const f
         else d.text(layer, P(s, zAbs), th, txt, ha, va);
     };
     DxfWriter d;
+    d.addLayer("DRAW_SOIL", 7, 25);      // 빈 층 · 토층선 0.25 mm
+    d.addLayer("DRAW_OUTLINE", 7, 35);   // 빈 층 · 유구 윤곽 0.35 mm
     d.addLayer("LEVEL_10CM", 9, 9);
     d.addLayer("LEVEL_50CM", 8, 18);
     d.addLayer("LEVEL_1M", 8, 25);

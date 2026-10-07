@@ -49,6 +49,52 @@ struct SheetAdvice {
 /// 표준 축척(분모 오름차순)에서 추천을 고름
 SheetAdvice adviseSheet(const SheetSpec& s, double lenM, double heightM, const std::vector<double>& stdDenoms = {10, 20, 40, 50, 100, 200, 500});
 
+/// 평면도 축척 분모. 10 단위로 맞추고 최소 10, 상한 없음. 0 이하·비수는 10.
+double snapScaleDenom10(double denom);
+/// 범위(m)가 그림 칸에 들어가는 가장 작은 10 단위 분모. 1 mm 이내 넘침은 들어간 것으로 본다.
+double fitDenomStep10(const SheetSpec& s, double widthM, double heightM);
+/// 바깥 눈금 간격(m). 종이에서 한 칸이 minMm 이상이 되는 가장 작은 1·2·5×10ⁿ.
+double outsideStepMeters(double mPerMm, double minMm = 28);
+
+/// 평면도 조판 배치(mm, y 아래). 휠·이동은 그림 좌표만 바꾸고 글자 배율은 없다.
+struct PlanPlace {
+    double mPerMm = 0;
+    double cX = 0, cY = 0;
+    double dxMm = 0, dyMm = 0;
+    double plotX = 0, plotY = 0, plotW = 0, plotH = 0;
+    double imgX = 0, imgY = 0, imgW = 0, imgH = 0;   // 범위와 칸을 함께 담는 영상 사각형
+    double worldX0 = 0, worldX1 = 0, worldYBot = 0, worldYTop = 0;
+    double visX0 = 0, visX1 = 0, visYBot = 0, visYTop = 0;   // 그림 칸이 비추는 실좌표
+    double tickStep = 1;
+    bool imageFillsPlot = false;
+    bool rangeInsideImage = false;
+    double xMm(double worldX) const { return plotX + plotW * 0.5 + (worldX - cX) / mPerMm + dxMm; }
+    double yMm(double worldY) const { return plotY + plotH * 0.5 - (worldY - cY) / mPerMm + dyMm; }
+};
+/// x0..x1, y0..y1 는 맞출 범위(로컬 m). split 이면 그 범위를 쪽으로 자른다.
+PlanPlace placePlan(const SheetSpec& spec, double x0, double x1, double y0, double y1,
+                    double viewZoom, double dxMm, double dyMm, int col = 0, int row = 0, bool split = false);
+
+/// 단면도 조판의 그림 칸이 비추는 거리·표고. 휠은 m/mm 만 바꾸고 글자 배율은 없다.
+struct SectionPaperWindow {
+    double mPerMm = 0;
+    double s0 = 0;       // 그림 칸 왼쪽의 거리(m, A 가 0)
+    double zTop = 0;     // 그림 칸 위의 절대 표고(m)
+    double visLen = 0;
+    double visHeight = 0;
+};
+SectionPaperWindow sectionPaperWindow(double lenM, double heightM, double zTopAbs, double plotWmm, double plotHmm,
+                                      double denom, double viewZoom, double dxMm, double dyMm, int col = 0, int row = 0, bool split = false);
+
+/// 그림 칸 바깥 좌표 눈금. [lo, hi] 안에 최대 maxCount개(1·2·5×10ⁿ 간격).
+struct OutsideTicks {
+    double step = 1;
+    double first = 0;
+    int count = 0;
+    double at(int i) const { return first + double(i) * step; }
+};
+OutsideTicks outsideTicks(double lo, double hi, int maxCount = 6);
+
 /// 방위각(북 0°, 시계 방향) → "N 90.4° E" (180° 넘으면 "N 45.0° W")
 std::string formatAzimuth(double azDeg);
 /// 단면 보기가 바라보는 쪽(A→A′ 왼쪽 법선 = 두께 '뒤' 쪽): A→A′ 방위각 → "북쪽을 봄" 등 8방위

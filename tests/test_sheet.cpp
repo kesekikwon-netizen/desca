@@ -1,4 +1,5 @@
 #include "catch_amalgamated.hpp"
+#include "asec/orbit.hpp"
 #include "asec/sheet.hpp"
 
 using namespace asec;
@@ -45,6 +46,34 @@ TEST_CASE("sheet: fit denominator is the tightest integer scale", "[sheet]") {
     CHECK_FALSE(layoutSheet(t, 38.0, 6.0).fits);
 }
 
+TEST_CASE("orbit: middle drag up lowers pitch past the right-button floor", "[orbit]") {
+    CHECK(orbitPitch(45, -10, false) == Approx(48));
+    CHECK(orbitPitch(45, -10, true) == Approx(42));
+    CHECK(orbitPitch(5, -40, true) < 0);
+    CHECK(orbitPitch(20, 1000, false) == Approx(8));
+    CHECK(orbitPitch(0, -1000, true) == Approx(-89));
+    CHECK(orbitPitch(80, -100, false) == Approx(90));
+}
+
+TEST_CASE("sheet: plan scale steps of 10 and outside coordinate ticks", "[sheet]") {
+    CHECK(snapScaleDenom10(10) == 10);
+    CHECK(snapScaleDenom10(14) == 10);
+    CHECK(snapScaleDenom10(15) == 20);
+    CHECK(snapScaleDenom10(100000) == 100000);
+    CHECK(snapScaleDenom10(0) == 10);
+    CHECK(snapScaleDenom10(-30) == 10);
+    OutsideTicks t = outsideTicks(0, 100, 6);
+    CHECK(t.step == 20);
+    CHECK(t.count == 6);
+    CHECK(t.at(0) == 0);
+    CHECK(t.at(5) == 100);
+    OutsideTicks u = outsideTicks(148000.2, 148038.7, 6);
+    CHECK(u.step == 10);
+    CHECK(u.first == Approx(148010));
+    CHECK(u.count == 3);
+    CHECK(u.at(2) <= 148038.7 + 1e-6);
+}
+
 TEST_CASE("sheet: azimuth text, facing, names, recent list", "[sheet]") {
     CHECK(formatAzimuth(90.4) == "N 90.4\xC2\xB0 E");
     CHECK(formatAzimuth(270) == "N 90.0\xC2\xB0 W");
@@ -79,4 +108,35 @@ TEST_CASE("sheet: section list json round trip", "[sheet]") {
     CHECK(w[1].by == 98140); CHECK(w[1].front == Approx(0.2));
     CHECK_FALSE(sectionsFromJson("{\"x\":1}", w, &cur, &err));
     CHECK_FALSE(sectionsFromJson("not json", w, &cur, &err));
+}
+
+TEST_CASE("sheet: plan cover scale, outside step, section window", "[sheet]") {
+    SheetSpec s;
+    CHECK(fitDenomStep10(s, 26.9, 16.1) == 110);
+    CHECK(fitDenomStep10(s, 38.0, 6.0) == 160);
+    CHECK(outsideStepMeters(0.11) == 5);
+    CHECK(outsideStepMeters(0.055) == 2);
+    s.denom = 110;
+    PlanPlace a = placePlan(s, 148074.0, 148100.9, 98103.4, 98119.5, 1, 0, 0);
+    CHECK(a.imageFillsPlot);
+    CHECK(a.rangeInsideImage);
+    CHECK(a.tickStep == 5);
+    CHECK(a.plotW == Approx(245));
+    CHECK(a.plotH == Approx(146));
+    PlanPlace z = placePlan(s, 148074.0, 148100.9, 98103.4, 98119.5, 2.07, 0, 0);
+    CHECK(z.imageFillsPlot);
+    CHECK(z.rangeInsideImage);
+    CHECK(z.tickStep == 2);
+    CHECK(z.mPerMm < a.mPerMm);
+    PlanPlace m = placePlan(s, 148074.0, 148100.9, 98103.4, 98119.5, 1, 12, 0);
+    CHECK(std::abs((m.visX0 - a.visX0) - (-12 * a.mPerMm)) < 1e-6);
+    CHECK(m.plotX == a.plotX);
+    CHECK(m.plotY == a.plotY);
+    SectionPaperWindow w0 = sectionPaperWindow(3, 2, 60, a.plotW, a.plotH, 40, 1, 0, 0);
+    SectionPaperWindow w1 = sectionPaperWindow(3, 2, 60, a.plotW, a.plotH, 40, 2, 0, 0);
+    CHECK(w0.s0 == Approx(-(a.plotW * 0.04 - 3) / 2));
+    CHECK(w1.visLen == Approx(w0.visLen / 2));
+    CHECK(w1.mPerMm == Approx(w0.mPerMm / 2));
+    SectionPaperWindow sh = sectionPaperWindow(3, 2, 60, a.plotW, a.plotH, 40, 1, 12, 0);
+    CHECK(sh.s0 == Approx(w0.s0 - 12 * w0.mPerMm));
 }

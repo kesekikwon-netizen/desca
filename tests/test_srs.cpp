@@ -213,3 +213,19 @@ TEST_CASE("metadata.xml: XML 엔터티(&quot;)가 든 WKT 도 읽힌다") {
     REQUIRE(parseMetadataXml("<ModelMetadata><SRS>VERT_CS[&quot;KVD1964 height&quot;,AUTHORITY[&quot;EPSG&quot;,&quot;5193&quot;]]</SRS></ModelMetadata>", s));
     CHECK(s.srs == "VERT_CS[\"KVD1964 height\",AUTHORITY[\"EPSG\",\"5193\"]]");
 }
+
+// iTwin Capture Modeler 가 내보낸 ScalableMesh(.3sm, 광령리 유구배치.3sm) 의 SMMasterHeader.GCS 원문 — Bentley GCS 매개변수 이름
+static const char* kBentley3smWkt = R"WKT(COMPD_CS["Korea 2000 / Central Be",PROJCS["Korea 2000 / Central Be",GEOGCS["Korean2000.LL",DATUM["Korean2000",SPHEROID["GRS1980",6378137.000,298.25722210],TOWGS84[0.0000,0.0000,0.0000,-0.000000,-0.000000,-0.000000,0.00000000]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]],PROJECTION["Transverse Mercator"],PARAMETER["False Easting",200000.000],PARAMETER["False Northing",600000.000],PARAMETER["Scale Reduction",1.000000000000],PARAMETER["Central Meridian",127.00000000000000],PARAMETER["Origin Latitude",38.00000000000000],UNIT["Meter",1.00000000000000]],VERT_CS["Ellipsoid Height",VERT_DATUM["Ellipsoid",2002],UNIT["Meter",1.000000]]])WKT";
+
+TEST_CASE("SRS: Bentley GCS WKT1(3SM) — Origin Latitude·Scale Reduction 이름, VERT_CS Ellipsoid Height(2002) → 5186 + 타원체고") {
+    SrsDesc d = describeSrs(kBentley3smWkt);
+    CHECK(d.horizontalEpsg == 5186);
+    CHECK(d.horizontalHow == "매개변수");
+    CHECK(d.hasTm);
+    CHECK(d.tmLat0 == 38); CHECK(d.tmLon0 == 127); CHECK(d.tmK0 == 1); CHECK(d.tmFE == 200000); CHECK(d.tmFN == 600000);
+    CHECK(d.vertKind == VertKind::Ellipsoidal);
+    CHECK(d.vdatum == VDatum::Ellipsoidal);
+    CHECK(d.shortAscii() == "EPSG:5186 h=ellipsoidal(GRS80)");
+    SrsInfo s; s.srs = kBentley3smWkt;
+    CHECK(s.epsg() == 5186);
+}

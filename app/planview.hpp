@@ -66,9 +66,15 @@ public:
     const asec::SectionLine& line() const { return line_; }
     bool hasLine() const { return hasLine_; }
     void setBand(double front, double back);
+    /// 단면 커서가 가리키는 거리(A 에서 m). 켜지면 단면선 위에 고리를 그린다.
+    void setSyncMark(bool on, double s);
+    /// 단면 영상을 단면 평면에 세운다. z1·s0·res 는 단면 영상 지리(로컬 m).
+    void setSectionPlane(const QImage& img, const asec::SectionLine& line, double s0, double z1, double res);
+    void setViewPitch(double deg);
 
     void fitAll();
     void topView();
+    void homeView();
     void zoomBy(double f);
     /// 현재 화면에 보이는 로컬 XY 범위(평면 기준)
     bool viewRectLocal(asec::Box3& out) const;
@@ -153,10 +159,18 @@ private:
     // 단면선(로컬 XY)
     asec::SectionLine line_;
     bool hasLine_ = false;
+    bool syncOn_ = false;
+    double syncS_ = 0;
+    QImage planeImg_;
+    asec::SectionLine planeLine_;
+    double planeS0_ = 0, planeZ1_ = 0, planeRes_ = 0;
+    bool planeOn_ = false, planeDirty_ = false;
+    unsigned planeTex_ = 0;
+    void drawSectionPlane();
     int drawStage_ = -1;  // -1 편집, 0 A 대기, 1 B 대기
     int dragHandle_ = -1; // 0 A, 1 B, 2 가운데(전체 이동)
     QPointF dragStartMouse_; asec::SectionLine dragStartLine_;
-    bool panning_ = false, orbiting_ = false;
+    bool panning_ = false, orbiting_ = false, orbitLift_ = false;
     QPoint lastMouse_;
 
     void freeGpu();
@@ -166,6 +180,7 @@ private:
     QPointF localToScreen(double x, double y, double z) const;
     double refZ() const;
     void paintOverlay(QPainter& p);
+    bool compassHit(const QPointF& p) const;
     void paintEmpty(QPainter& p);
     void paintLodCard(QPainter& p);
     asec::Vec2 lockAxis(const asec::Vec2& w, Qt::KeyboardModifiers m) const;

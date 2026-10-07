@@ -1,4 +1,5 @@
 #include "planview.hpp"
+#include "asec/orbit.hpp"
 #include <QElapsedTimer>
 #include <QTimer>
 
@@ -255,14 +256,21 @@ void PlanView::initializeGL() {
     prog_ = std::make_unique<QOpenGLShaderProgram>();
     prog_->addShaderFromSourceCode(QOpenGLShader::Vertex,
         "attribute vec3 aPos; attribute vec2 aUv; attribute vec3 aNrm;\n"
-        "uniform mat4 uMvp; varying vec2 vUv; varying float vShade;\n"
+        "uniform mat4 uMvp; uniform vec3 uPlaneP; uniform vec3 uPlaneN;\n"
+        "varying vec2 vUv; varying float vShade; varying float vSide;\n"
         "void main(){ gl_Position = uMvp * vec4(aPos, 1.0); vUv = aUv;\n"
-        "  vShade = 0.55 + 0.45 * max(dot(normalize(aNrm + vec3(0.0,0.0,1e-6)), normalize(vec3(0.3, 0.4, 0.85))), 0.0); }\n");
+        "  vShade = 0.55 + 0.45 * max(dot(normalize(aNrm + vec3(0.0,0.0,1e-6)), normalize(vec3(0.3, 0.4, 0.85))), 0.0);\n"
+        "  vSide = dot(aPos - uPlaneP, uPlaneN); }\n");
     prog_->addShaderFromSourceCode(QOpenGLShader::Fragment,
         "#ifdef GL_ES\nprecision mediump float;\n#endif\n"
-        "uniform sampler2D uTex; uniform float uHasTex; varying vec2 vUv; varying float vShade;\n"
-        "void main(){ vec4 c = texture2D(uTex, vUv); vec3 g = vec3(0.80, 0.78, 0.74) * vShade;\n"
-        "  gl_FragColor = vec4(mix(g, c.rgb, uHasTex), 1.0); }\n");
+        "uniform sampler2D uTex; uniform float uHasTex; uniform float uAlpha; uniform float uPass;\n"
+        "varying vec2 vUv; varying float vShade; varying float vSide;\n"
+        "void main(){\n"
+        "  if (uPass > 1.5 && vSide >= 0.0) discard;\n"
+        "  if (uPass > 0.5 && uPass < 1.5 && vSide < 0.0) discard;\n"
+        "  vec4 c = texture2D(uTex, vUv); vec3 g = vec3(0.80, 0.78, 0.74) * vShade;\n"
+        "  float a = (uPass > 1.5) ? 0.22 : uAlpha;\n"
+        "  gl_FragColor = vec4(mix(g, c.rgb, uHasTex), a); }\n");
     prog_->bindAttributeLocation("aPos", 0);
     prog_->bindAttributeLocation("aUv", 1);
     prog_->bindAttributeLocation("aNrm", 2);
@@ -337,6 +345,12 @@ void PlanView::fitAll() {
 }
 
 void PlanView::topView() { yaw_ = 0; pitch_ = 90; updateMatrices(); update(); }
+
+void PlanView::homeView() {
+    yaw_ = 0;
+    pitch_ = 90;
+    fitAll();
+}
 
 void PlanView::drawGpu(const Gpu& g) {
     glBindBuffer(GL_ARRAY_BUFFER, g.vbo);
@@ -541,9 +555,16 @@ void PlanView::paintGL() {
         prog_->bind();
         prog_->setUniformValue("uMvp", proj_ * view_);
         prog_->setUniformValue("uTex", 0);
+        prog_->setUniformValue("uAlpha", 1.0f);
+        prog_->setUniformValue("uPass", 0.0f);
         glActiveTexture(GL_TEXTURE0);
-        if (streamer_) paintStreaming(proj_ * view_);
-        else for (auto& g : gpu_) drawGpu(g);
+        auto drawMeshes = [&]() {
+            if (streamer_) paintStreaming(proj_ * view_);
+            else for (auto& g : gpu_) drawGpu(g);
+        };
+        // 단면선 한쪽을 흐리게 하는 「앞쪽 숨기기」는 쓰지 않는다(사용자 요청 2026-10-07). 메시는 언제나 그대로
+        drawMeshes();
+        drawSectionPlane();
         glDisableVertexAttribArray(0); glDisableVertexAttribArray(1); glDisableVertexAttribArray(2);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -635,6 +656,9 @@ void PlanView::paintOverlay(QPainter& p) {
         p.setPen(Qt::NoPen); p.setBrush(theme::Ink); p.drawPath(arr);
         QFont f = theme::uiFont(11, true); p.setFont(f); p.setPen(theme::Ink);
         p.drawText(QRectF(c.x() - 20, c.y() - 37, 40, 13), Qt::AlignCenter, "N");
+        p.setFont(theme::uiFont(9));
+        p.setPen(theme::Muted);
+        p.drawText(QRectF(c.x() - 28, c.y() + 24, 56, 12), Qt::AlignCenter, QStringLiteral("제자리"));
         double len = niceStep(mpp_ * 120, 1);
         double px = len / mpp_;
         QRectF sb(16, height() - 28, px, 6);
@@ -680,11 +704,67 @@ void PlanView::paintOverlay(QPainter& p) {
         QPointF a0 = mid + nu * 6, a1 = mid + nu * 22, sd(nu.y(), -nu.x());
         QPen ap(theme::SectionRed, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin); p.setPen(ap);
         p.drawLine(a0, a1); p.drawLine(a1, a1 - nu * 6 + sd * 4); p.drawLine(a1, a1 - nu * 6 - sd * 4);
+        if (line_.back > 1e-6 && pitch_ < 88.0) {
+            double zTop = planeOn_ ? planeZ1_ : z + 0.5;
+            double zBot = planeOn_ ? planeZ1_ - std::max(0.2, planeImg_.height() * planeRes_) : z - 1.5;
+            auto C = [&](double s, double zz) {
+                Vec2 q = f.planXY(s, line_.back);
+                return localToScreen(q.x, q.y, zz);
+            };
+            QPolygonF wall;
+            wall << C(0, zTop) << C(f.L, zTop) << C(f.L, zBot) << C(0, zBot);
+            p.setPen(QPen(theme::SectionRed, 1.2));
+            p.setBrush(QColor(255, 0, 0, 36));
+            p.drawPolygon(wall);
+        }
     }
-    // 단면선(고대비): 흰 테 3 px(양쪽) 아래 + 빨강 굵기(설정, 기본 2.5 px) — 정사영상 위에서도 또렷하게
-    const double redW = std::clamp(QSettings().value("view/planLineWidth", 2.5).toDouble(), 1.5, 5.0);
-    p.setPen(QPen(QColor(255, 255, 255), redW + 6.0, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
+    // 단면선: 흰 테 7 px 위 순수 빨강(설정, 기본 3 px)
+    const double redW = std::clamp(QSettings().value("view/planLineWidth", 3.0).toDouble(), 1.5, 5.0);
+    p.setPen(QPen(QColor(255, 255, 255), 7.0, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
     p.setPen(QPen(theme::SectionRed, redW, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
+    const double pxLen = std::hypot(B.x() - A.x(), B.y() - A.y());
+    if (hasLine_ && f.L > 0.4 && pxLen >= 80) {
+        p.setFont(theme::monoFont(11));
+        for (double s = 0.5; s < f.L - 1e-4; s += 0.5) {
+            QPointF c = S(f.planXY(s, 0));
+            QPointF side = S(f.planXY(s, 0.4)) - c;
+            double sl = std::hypot(side.x(), side.y());
+            QPointF along = pxLen > 1 ? (B - A) / pxLen : QPointF(1, 0);
+            QPointF n = sl > 1e-3 ? side / sl : QPointF(-along.y(), along.x());
+            const bool meter = std::abs(s - std::round(s)) < 1e-6;
+            double h = meter ? 7.0 : 4.0;
+            p.setPen(QPen(Qt::white, meter ? 3.0 : 2.0, Qt::SolidLine, Qt::RoundCap));
+            p.drawLine(c - n * h, c + n * h);
+            p.setPen(QPen(theme::Ink, 1.2, Qt::SolidLine, Qt::RoundCap));
+            p.drawLine(c - n * h, c + n * h);
+            if (meter) {
+                QString t = QStringLiteral("%1 m").arg(s, 0, 'f', 0);
+                QPointF at = c - n * 16;
+                QRectF tr(at.x() - 18, at.y() - 8, 36, 16);
+                p.setPen(theme::Ink);
+                p.drawText(tr, Qt::AlignCenter, t);
+            }
+        }
+    }
+    if (hasLine_ && line_.back > 1e-6 && f.L > 1e-6 && pxLen >= 80) {   // 선이 화면에서 짧으면(80 px 미만) 눈금처럼 숨김
+        // 띠 바깥 끝보다 더 바깥(보는 쪽)으로 밀어 단면선·손잡이와 겹치지 않게
+        const QPointF mid = S(f.planXY(f.L / 2, 0)), edge = S(f.planXY(f.L / 2, line_.back));
+        QPointF nrm = edge - mid; const double nl = std::hypot(nrm.x(), nrm.y());
+        nrm = nl > 1e-6 ? nrm / nl : QPointF(0, -1);
+        QString t = QStringLiteral("뒤 %1 m").arg(line_.back, 0, 'f', 2);
+        QFontMetrics fm(theme::uiFont(11));
+        QRectF tr(0, 0, fm.horizontalAdvance(t) + 10, 18);
+        tr.moveCenter(edge + nrm * (std::abs(nrm.x()) * tr.width() / 2 + std::abs(nrm.y()) * tr.height() / 2 + 8));
+        p.setPen(QPen(theme::Edge, 1)); p.setBrush(QColor(255, 255, 255, 230)); p.drawRoundedRect(tr, 3, 3);
+        p.setFont(theme::uiFont(11)); p.setPen(theme::Ink2); p.drawText(tr, Qt::AlignCenter, t);
+    }
+    if (syncOn_ && hasLine_ && f.L > 1e-6) {
+        double ss = std::clamp(syncS_, 0.0, f.L);
+        QPointF c = S(f.planXY(ss, 0));
+        p.setPen(QPen(Qt::white, 5)); p.setBrush(Qt::NoBrush); p.drawEllipse(c, 8, 8);
+        p.setPen(QPen(theme::Ink, 2)); p.drawEllipse(c, 8, 8);
+        p.setPen(Qt::NoPen); p.setBrush(theme::Ink); p.drawEllipse(c, 2, 2);
+    }
     // 손잡이 + 이름(흰 바탕 칩)
     p.setFont(theme::uiFont(13, true));
     QPointF d = B - A; double dl = std::hypot(d.x(), d.y()); QPointF du = dl > 0 ? d / dl : QPointF(1, 0);
@@ -726,10 +806,86 @@ void PlanView::setDrawMode(bool on) {
 
 void PlanView::setLine(const SectionLine& l, bool has) { line_ = l; hasLine_ = has; update(); }
 void PlanView::setBand(double front, double back) { line_.front = front; line_.back = back; update(); }
+void PlanView::setSyncMark(bool on, double s) {
+    if (syncOn_ == on && std::abs(syncS_ - s) < 1e-4) return;
+    syncOn_ = on; syncS_ = s; update();
+}
+
+void PlanView::setViewPitch(double deg) {
+    pitch_ = std::clamp(deg, 8.0, 90.0);
+    updateMatrices();
+    update();
+}
+
+void PlanView::setSectionPlane(const QImage& img, const SectionLine& line, double s0, double z1, double res) {
+    planeLine_ = line;
+    planeS0_ = s0;
+    planeZ1_ = z1;
+    planeRes_ = res;
+    planeOn_ = !img.isNull() && res > 0 && SectionFrame(line).L > 1e-4;
+    planeImg_ = planeOn_ ? img : QImage();
+    planeDirty_ = planeOn_;
+    update();
+}
+
+void PlanView::drawSectionPlane() {
+    if (!planeOn_ || !prog_) return;
+    if (planeDirty_) {
+        if (!planeTex_) glGenTextures(1, &planeTex_);
+        QImage im = planeImg_.convertToFormat(QImage::Format_RGBA8888).mirrored();
+        glBindTexture(GL_TEXTURE_2D, planeTex_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, im.width(), im.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, im.constBits());
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        planeDirty_ = false;
+    }
+    if (!planeTex_) return;
+    SectionFrame f(planeLine_);
+    const double s0 = planeS0_, s1 = planeS0_ + planeImg_.width() * planeRes_;
+    const double zTop = planeZ1_, zBot = planeZ1_ - planeImg_.height() * planeRes_;
+    auto P = [&](double s, double z) {
+        Vec2 q = f.planXY(s, 0.02);
+        return QVector3D(float(q.x - center_.x), float(q.y - center_.y), float(z - center_.z));
+    };
+    QVector3D v[4] = {P(s0, zBot), P(s1, zBot), P(s1, zTop), P(s0, zTop)};
+    float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    int idx[6] = {0, 1, 2, 0, 2, 3};
+    float inter[6 * 8];
+    for (int i = 0; i < 6; ++i) {
+        int k = idx[i];
+        inter[i * 8 + 0] = v[k].x(); inter[i * 8 + 1] = v[k].y(); inter[i * 8 + 2] = v[k].z();
+        inter[i * 8 + 3] = uv[k][0]; inter[i * 8 + 4] = uv[k][1];
+        inter[i * 8 + 5] = 0; inter[i * 8 + 6] = 0; inter[i * 8 + 7] = 1;
+    }
+    GLuint vbo = 0;
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(inter), inter, GL_STREAM_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glEnableVertexAttribArray(0); glEnableVertexAttribArray(1); glEnableVertexAttribArray(2);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(0));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(12));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 32, reinterpret_cast<void*>(20));
+    glBindTexture(GL_TEXTURE_2D, planeTex_);
+    prog_->setUniformValue("uHasTex", 1.0f);
+    prog_->setUniformValue("uAlpha", 1.0f);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    prog_->setUniformValue("uAlpha", 1.0f);
+    glDeleteBuffers(1, &vbo);
+}
+
+bool PlanView::compassHit(const QPointF& p) const {
+    QPointF c(width() - 34, 40);
+    return QRectF(c.x() - 28, c.y() - 42, 56, 80).contains(p);
+}
 
 void PlanView::mousePressEvent(QMouseEvent* e) {
     lastMouse_ = e->pos();
     if (!hasScene_) { if (e->button() == Qt::LeftButton && onOpenRequest) onOpenRequest(); return; }
+    if (e->button() == Qt::LeftButton && compassHit(e->position())) { homeView(); return; }
     Vec2 w;
     bool ok = screenToLocalXY(e->position(), w);
     if (e->button() == Qt::LeftButton && drawStage_ >= 0 && ok) {
@@ -752,8 +908,9 @@ void PlanView::mousePressEvent(QMouseEvent* e) {
         dragHandle_ = near(A) ? 0 : near(B) ? 1 : near((A + B) / 2) ? 2 : -1;
         if (dragHandle_ >= 0) { dragStartMouse_ = e->position(); dragStartLine_ = line_; setCursor(Qt::ClosedHandCursor); return; }
     }
-    if (e->button() == Qt::LeftButton || e->button() == Qt::MiddleButton) { panning_ = true; setCursor(Qt::ClosedHandCursor); }
-    if (e->button() == Qt::RightButton) { orbiting_ = true; setCursor(Qt::SizeAllCursor); }
+    if (e->button() == Qt::LeftButton) { panning_ = true; orbitLift_ = false; setCursor(Qt::ClosedHandCursor); }
+    if (e->button() == Qt::MiddleButton) { orbiting_ = true; orbitLift_ = true; setCursor(Qt::SizeAllCursor); }
+    if (e->button() == Qt::RightButton) { orbiting_ = true; orbitLift_ = false; setCursor(Qt::SizeAllCursor); }
 }
 
 void PlanView::mouseMoveEvent(QMouseEvent* e) {
@@ -794,7 +951,7 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
     }
     if (orbiting_) {
         yaw_ = std::fmod(yaw_ - d.x() * 0.4 + 360.0, 360.0);
-        pitch_ = std::clamp(pitch_ - d.y() * 0.3, 8.0, 90.0);
+        pitch_ = orbitPitch(pitch_, d.y(), orbitLift_);
         update();
         return;
     }
@@ -802,7 +959,7 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         double z = refZ() + center_.z;
         QPointF A = localToScreen(line_.a.x, line_.a.y, z), B = localToScreen(line_.b.x, line_.b.y, z);
         auto near = [&](QPointF q) { return std::hypot(q.x() - e->position().x(), q.y() - e->position().y()) < 11; };
-        setCursor(drawStage_ >= 0 ? Qt::CrossCursor : (near(A) || near(B) || near((A + B) / 2)) ? Qt::OpenHandCursor : Qt::ArrowCursor);
+        setCursor(drawStage_ >= 0 ? Qt::CrossCursor : (near(A) || near(B) || near((A + B) / 2)) ? Qt::OpenHandCursor : compassHit(e->position()) ? Qt::PointingHandCursor : Qt::ArrowCursor);
     }
 }
 

@@ -5,6 +5,7 @@
 #include <QTimer>
 #include <QPainter>
 #include <QPainterPath>
+#include <QRegion>
 #include <QWheelEvent>
 #include <cmath>
 #include "theme.hpp"
@@ -74,7 +75,8 @@ LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport) {
 }
 
 void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const SectionXf& xf, double ui, const QImage& img, bool forExport,
-                     const QString& footer, const SectionImgGeo* geo, bool busy_, bool titleRow) {
+                     const QString& footer, const SectionImgGeo* geo, bool busy_, bool titleRow, double contentDxPx, double contentDyPx,
+                     double viewZoom, double viewPanX, double viewPanY, SheetPaintProbe* probe) {
     const SectionResult& r_ = d.r;
     const SectionStyle& st_ = d.st;
     const SectionImgGeo ig = geo ? *geo : SectionImgGeo{d.imgS0, d.imgZ1, d.imgRes};
@@ -84,12 +86,26 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     p.setRenderHint(QPainter::SmoothPixmapTransform);
     p.fillRect(area, Qt::white);
     const QRectF pr = xf.plot;
+    if (probe) {
+        const QTransform tr = p.worldTransform();
+        probe->uniform = std::abs(tr.m11() - tr.m22()) < 1e-4 && std::abs(tr.m12()) < 1e-4 && std::abs(tr.m21()) < 1e-4;
+        probe->plot = pr;
+        probe->fontPx = std::max(8, int(std::lround(11 * ui)));
+    }
     const double oz = r_.srs.origin.z;
     const SectionFrame f(r_.line);
-    auto X = [&](double s) { return pr.left() + (s - xf.s0) * xf.ppm; };
     const double vex = forExport ? 1.0 : std::max(1.0, xf.vex);   // 내보내기는 언제나 1:1
     const double ppmZ = xf.ppm * vex;
-    auto Y = [&](double zAbs) { return pr.top() + (xf.zTop - zAbs) * ppmZ; };
+    const QPointF zc(pr.left() + (0.5 * f.L - xf.s0) * xf.ppm,
+                     pr.top() + (xf.zTop - (0.5 * (r_.zMin + r_.zMax) + oz)) * ppmZ);
+    auto X = [&](double s) {
+        double x = pr.left() + (s - xf.s0) * xf.ppm + contentDxPx;
+        return zc.x() + (x - zc.x()) * viewZoom + viewPanX;
+    };
+    auto Y = [&](double zAbs) {
+        double y = pr.top() + (xf.zTop - zAbs) * ppmZ + contentDyPx;
+        return zc.y() + (y - zc.y()) * viewZoom + viewPanY;
+    };
     const double sVis0 = xf.s0, sVis1 = xf.s0 + pr.width() / xf.ppm;
     const double zVis1 = xf.zTop, zVis0 = xf.zTop - pr.height() / ppmZ;
     QFont small = theme::uiFont(std::max(8, int(std::lround(11.5 * ui))));
@@ -129,7 +145,8 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     }
     // 3) 입면 영상(레벨선 위)
     if (st_.showImage && !img.isNull()) {
-        QRectF tr(X(ig.s0), Y(ig.z1Local + oz), img.width() * ig.res * xf.ppm, img.height() * ig.res * ppmZ);
+        QRectF tr(X(ig.s0), Y(ig.z1Local + oz), img.width() * ig.res * xf.ppm * viewZoom, img.height() * ig.res * ppmZ * viewZoom);
+        if (probe) probe->image = tr;
         p.setOpacity(st_.imageOpacity);
         p.drawImage(tr, img);
         p.setOpacity(1.0);
@@ -183,6 +200,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     // 5) 단면선(잘린 면): 그림 칸 안에서 맨 마지막 — 입면 배경·기준선·축척 막대·안내 상자가 절대 가리지 않음.
     //    순수 빨강 약 2 px(인쇄 0.35 mm), 안티에일리어싱, 둥근 이음. 닫힌 고리(나무·돌 덩어리)는 닫아서 그림
     if (st_.showLine) {
+        if (probe) probe->drewCutLine = true;
         p.setBrush(Qt::NoBrush);
         // 화면: 설정 굵기(기본 2 px) / 인쇄: 0.35 mm
         const double lw = forExport ? 0.35 / 25.4 * 96.0 * ui : std::clamp(st_.lineWidthPx, 1.0, 4.0) * ui;
@@ -210,48 +228,71 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     p.setBrush(Qt::NoBrush);
     p.drawRect(pr);
 
-    // 7) 표고 라벨(왼쪽·오른쪽), 겹치지 않는 간격
+    // 7) 표고 라벨은 그림 칸 왼쪽·오른쪽 여백에서만 세로로 움직인다
     if (st_.showLevels) {
+        p.save();
+        const QRectF sideL(area.left(), pr.top(), std::max(0.0, pr.left() - area.left()), pr.height());
+        const QRectF sideR(pr.right(), pr.top(), std::max(0.0, area.right() - pr.right()), pr.height());
+        QRegion sideClip;
+        sideClip += sideL.toAlignedRect();
+        sideClip += sideR.toAlignedRect();
+        p.setClipRegion(sideClip);
         const int lab = lp.labelCm;
         for (auto& lv : levels) {
             if (lv.cm % lab != 0) continue;
-            double y = Y(lv.z);
-            if (y < pr.top() + fm.height() * 0.3 || y > pr.bottom() - fm.height() * 0.3) continue;
+            double ys = Y(lv.z);
+            if (ys < pr.top() + fm.height() * 0.3 || ys > pr.bottom() - fm.height() * 0.3) continue;
             p.setFont(lv.cls == LevelClass::Master ? monoBold : mono);
             p.setPen(theme::LevelText);
             QString t = QString::fromStdString(formatElevation(lv.z));
-            p.drawText(QRectF(area.left(), y - fm.height() / 2, pr.left() - area.left() - 8 * ui, fm.height()), Qt::AlignRight | Qt::AlignVCenter, t);
+            QRectF labL(area.left(), ys - fm.height() / 2, std::max(0.0, pr.left() - area.left() - 8 * ui), fm.height());
+            p.drawText(labL, Qt::AlignRight | Qt::AlignVCenter, t);
+            if (probe) {
+                probe->labels.push_back(labL);
+                probe->labelText << t;
+                if (probe->neighborPx <= 0 && probe->labels.size() >= 2)
+                    probe->neighborPx = std::abs(probe->labels.back().center().y() - probe->labels[probe->labels.size() - 2].center().y());
+                probe->worldStep = lab / 100.0;
+                probe->fontPx = p.font().pixelSize();
+            }
             p.setPen(QPen(theme::LevelMajor, 1.0 * ui));
-            p.drawLine(QPointF(pr.left() - 5 * ui, y), QPointF(pr.left(), y));
-            p.drawLine(QPointF(pr.right(), y), QPointF(pr.right() + 5 * ui, y));
+            p.drawLine(QPointF(pr.left() - 5 * ui, ys), QPointF(pr.left(), ys));
+            p.drawLine(QPointF(pr.right(), ys), QPointF(pr.right() + 5 * ui, ys));
             p.setPen(theme::LevelText);
-            p.drawText(QRectF(pr.right() + 8 * ui, y - fm.height() / 2, 60 * ui, fm.height()), Qt::AlignLeft | Qt::AlignVCenter, t);
+            p.drawText(QRectF(pr.right() + 8 * ui, ys - fm.height() / 2, std::max(0.0, area.right() - pr.right() - 10 * ui), fm.height()), Qt::AlignLeft | Qt::AlignVCenter, t);
         }
         p.setFont(small); p.setPen(theme::Idle);
         p.drawText(QRectF(area.left() + 4 * ui, pr.top() - fm.height() - 4 * ui, pr.left() - area.left(), fm.height()), Qt::AlignLeft, QStringLiteral("표고(m)"));
+        p.restore();
     }
-    // 8) 거리축
+    // 8) 거리 숫자는 그림 칸 아래 여백에서만 가로로 움직인다
+    p.save();
+    p.setClipRect(QRectF(pr.left(), pr.bottom(), pr.width(), std::max(0.0, area.bottom() - pr.bottom())));
     p.setFont(mono);
     for (long k = long(std::ceil(sVis0 / dStep)); k * dStep <= sVis1 + 1e-9; ++k) {
-        double s = k * dStep, x = X(s);
-        if (x < pr.left() - 0.5 || x > pr.right() + 0.5) continue;
+        double s = k * dStep, xs = X(s);
+        if (xs < pr.left() - 0.5 || xs > pr.right() + 0.5) continue;
         p.setPen(QPen(theme::Outline, 1.0 * ui));
-        p.drawLine(QPointF(x, pr.bottom()), QPointF(x, pr.bottom() + 5 * ui));
+        p.drawLine(QPointF(xs, pr.bottom()), QPointF(xs, pr.bottom() + 5 * ui));
         p.setPen(theme::LevelText);
-        p.drawText(QRectF(x - 40 * ui, pr.bottom() + 6 * ui, 80 * ui, fm.height()), Qt::AlignHCenter | Qt::AlignTop, fmtDist(s, dStep));
+        p.drawText(QRectF(xs - 40 * ui, pr.bottom() + 6 * ui, 80 * ui, fm.height()), Qt::AlignHCenter | Qt::AlignTop, fmtDist(s, dStep));
     }
     p.setFont(small);
     p.setPen(theme::Idle);
     p.drawText(QRectF(pr.right() - 160 * ui, pr.bottom() + 6 * ui + fm.height(), 160 * ui, fm.height()), Qt::AlignRight, QStringLiteral("A 로부터 거리(m)"));
-    // 9) A / A′ 표시
+    p.restore();
+    // 9) A / A′ 는 그림 칸 위 여백에서만 가로로 움직인다
+    p.save();
+    p.setClipRect(QRectF(pr.left(), area.top(), pr.width(), std::max(0.0, pr.top() - area.top())));
     p.setFont(title);
     for (int k = 0; k < 2; ++k) {
-        double x = X(k ? f.L : 0);
-        if (x < pr.left() - 20 || x > pr.right() + 20) continue;
-        QRectF tr(x - 18 * ui, pr.top() - 24 * ui, 36 * ui, 20 * ui);
+        double xs = X(k ? f.L : 0);
+        if (xs < pr.left() - 20 || xs > pr.right() + 20) continue;
+        QRectF tr(xs - 18 * ui, pr.top() - 24 * ui, 36 * ui, 20 * ui);
         p.setPen(theme::SectionRed);
         p.drawText(tr, Qt::AlignCenter, k ? QStringLiteral("A′") : QStringLiteral("A"));
     }
+    p.restore();
     // 11) 제목(내보내기 영상만 — 화면은 보기 머리·정보 띠가 대신, 도면은 표제란이 대신)
     if (titleRow) {
     p.setFont(title); p.setPen(theme::Ink);
