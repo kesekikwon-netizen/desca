@@ -613,7 +613,6 @@ QWidget* MainWindow::buildCoordBar() {
     zSrc_ = new QLabel(QStringLiteral("—")); zSrc_->setObjectName("zSrc"); zSrc_->setMinimumWidth(64);
     h->addWidget(zSrc_);
     h->addSpacing(8);
-    h->addWidget(lab(QStringLiteral("축척"), "coordKey"));
     scaleCombo_ = new QComboBox; scaleCombo_->setEditable(true); scaleCombo_->setFixedWidth(84); scaleCombo_->setFocusPolicy(Qt::ClickFocus);
     for (int d : {10, 20, 40, 50, 100, 200}) scaleCombo_->addItem(QStringLiteral("1:%1").arg(d), d);
     scaleCombo_->addItem(QStringLiteral("맞춤"), 0);
@@ -623,7 +622,13 @@ QWidget* MainWindow::buildCoordBar() {
         if (d <= 0) { section_->fit(); section_->update(); } else section_->setScreenDenom(d);
         updateHeader();
     });
-    h->addWidget(scaleCombo_);
+    // v4 단계 4: 단면 화면 축척 칸은 단면 머리 하나(상태줄에서 뺌). 단면 머리는 이 줄보다 먼저 만들어지므로 「세로 ×1」 바로 뒤에 끼운다
+    if (secTitleBar_ && vexBtn_) {
+        auto* sl = static_cast<QHBoxLayout*>(secTitleBar_->layout());
+        sl->insertWidget(sl->indexOf(vexBtn_) + 1, scaleCombo_);
+    } else {
+        h->addWidget(lab(QStringLiteral("축척"), "coordKey")); h->addWidget(scaleCombo_);
+    }
     h->addSpacing(8);
     info_ = new QLabel; info_->setObjectName("statusInfo"); info_->setVisible(false);
     h->addWidget(info_);
