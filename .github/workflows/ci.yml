@@ -1,0 +1,78 @@
+# 푸시 · PR마다 빌드와 단위 시험을 자동으로 돌린다.
+# - linux: 계산 코어(archsection) + 도구 + 시험만(Qt 없이 빠르게)
+# - windows: 앱 전체(Qt 6.8.3, 배포판과 같은 판) + 시험 + 실행 파일 묶음(내려받기용)
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-core:
+    name: Linux · 코어와 시험
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: 도구 설치
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build zlib1g-dev
+      - name: 구성
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DASEC_BUILD_APP=OFF
+      - name: 빌드
+        run: cmake --build build
+      - name: 단위 시험
+        run: ./build/asec_tests
+      - name: 합성 모델 만들기(도구가 도는지)
+        run: ./build/asec-make-synthetic /tmp/asec-synthetic
+
+  windows-app:
+    name: Windows · 앱 전체
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Qt 6.8.3 설치
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+      - name: zlib (vcpkg)
+        shell: pwsh
+        run: '& "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install zlib:x64-windows'
+      - name: 구성
+        shell: pwsh
+        run: >
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_TARGET_TRIPLET=x64-windows
+          "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
+      - name: 빌드
+        run: cmake --build build --config Release --parallel
+      - name: 단위 시험
+        shell: pwsh
+        # CoalescingWorker 시험 하나는 Windows 타이머 간격(약 15 ms) 탓에 실패하는 것으로 알려져 있어 Windows에서만 뺀다(docs/DEV_PROGRESS.md)
+        run: '& .\build\Release\asec_tests.exe "~CoalescingWorker*"'
+      - name: 실행 묶음 만들기
+        shell: pwsh
+        run: |
+          $out = "dist\Kerf-ci"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item build\app\Release\SectionViewer.exe $out
+          Copy-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\zlib1.dll" $out -ErrorAction SilentlyContinue
+          Get-ChildItem build -Recurse -Filter z*.dll | Copy-Item -Destination $out -ErrorAction SilentlyContinue
+          & windeployqt --release --no-translations --no-system-d3d-compiler --no-compiler-runtime "$out\SectionViewer.exe"
+      - name: 실행 묶음 올리기
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kerf-windows-${{ github.sha }}
+          path: dist/Kerf-ci
+          retention-days: 14

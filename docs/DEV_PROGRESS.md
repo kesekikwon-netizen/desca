@@ -17,7 +17,7 @@
 | 마지막 갱신 | 2026-10-09 · Claude Code (Opus) |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
-| 바뀐 파일(내용) | `app/mainwindow_ui.cpp` · `app/sheetexport.cpp` · `app/theme.hpp` · 새 파일 `docs/DEV_PROGRESS.md` · `docs/design-v4/**` · `CLAUDE.md` |
+| 바뀐 파일(내용) | 모두 커밋됨 — `git log --oneline 4422b4e..HEAD` · CI: `.github/workflows/ci.yml` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
 | 시험 | `asec_tests` 108 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 |
 | 최근 캡처 | `C:\dev\tmp\kerf-shots\work-v4b.png` (이 PC에만) |
@@ -51,7 +51,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 | 5 | 정보 줄 · 상태줄 · 커서 | 🟨 | 정보 줄에서 길이 · 앞뒤 · 화면 축척 숨김. **남음:** 빈 구간 core 함수 + 「잘린 선 n줄 · 빈 구간」, 상태줄 축척 칸 빼기 |
 | 6 | 오른쪽 판 읽기 전용 | 🟨 | 「이 단면으로 도면」 없앰 → 「좌표 입력 · 복사」. **남음:** 탭 없애기 확인, 연필 |
 | 7 | 높이 배지 하나 | ✅ | 단면 머리 배지 숨김, 상태줄 배지만 |
-| 8 | 그리는 동안 안내 한 곳 | ⬜ | 도구 줄 글 「단면선 그리기」(옛 이름)도 고칠 것 |
+| 8 | 그리는 동안 안내 한 곳 | ✅ | 도구 줄 「단면선 긋기 › A/A′ 찾는 중」, 그동안 상태줄은 좌표만. 캡처 `draw-v4.png`. `--ui-audit` 항목은 단계 1에서 |
 | 9 | 홈 화면 | ⬜ | |
 | 10 | 목록 하나 | 🟨 | 조판 목록 머리 「단면 목록」으로. **남음:** 줄 모양 · 도면 상태 줄 · 고르기 칸 |
 | 11 | 조판: 고르는 곳 하나 · 모드 칩 · 리본 접기 | 🟨 | 「작업으로」 단추 숨김, 문서 탭 줄 새 모양(조판 열릴 때만 보임). **남음:** 「도면 종류」 제거 · 모드 칩 · 리본 접기 |
@@ -85,8 +85,15 @@ C:\dev\kerf-v4c\asec_tests.exe
   - **이 PC에서 푸시할 때는 이 명령을 쓴다:** `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push`
   - GitHub에서 보기: https://github.com/kesekikwon-netizen/desca/tree/feature/design-v2
 
+### 2026-10-09 · Claude Code — 단계 8, GitHub Actions
+- **무엇을:** `buildCtxBar` 도구 이름 「단면선 긋기」, 단계 글 「› A 찾는 중 · 시작점 A를 클릭하세요 / › A′ 찾는 중 · 끝점 A′를 클릭하세요」, 「닫기」 → 아이콘 「취소」(= Esc). `onDrawModeChanged` · `onDrawProgress`에서 상태줄 안내 문장을 없앰(그리는 동안 상태줄은 좌표만).
+- **확인:** `cmake --build C:\dev\kerf-v4c` → exit 0. `--ctx-shot C:\dev\tmp\kerf-shots\draw-v4.png` → `ctx-shot ok … ctxbar=1`, 도구 줄 글과 빈 상태줄 왼쪽을 캡처로 확인.
+- **판정:** 앞선 캡처에서 그리기 모드가 켜져 보인 것은 재사용한 `--settings` 폴더의 상태 탓으로 판단 — 새 설정 폴더로는 재현 안 됨 — 잘못이면: 시작 때 그리기 모드가 켜지는 버그가 숨어 있을 수 있음(단계 1 `--ui-audit` 때 다시 볼 것).
+- **GitHub Actions 추가:** `.github/workflows/ci.yml` — 푸시 · PR마다 ① Linux(ubuntu-24.04): 코어 · 도구 · `asec_tests` 전부 · 합성 모델 ② Windows(windows-2022): Qt 6.8.3(배포판과 같은 판) + VS 2022 + vcpkg zlib로 앱 전체 빌드, `asec_tests "~CoalescingWorker*"`(Windows 타이머 탓 알려진 실패만 뺌), windeployqt 묶음을 내려받기 파일(Artifacts, 14일)로 올림. 결과는 GitHub › Actions 탭.
+  - **판정:** Linux에서는 앱을 빌드하지 않음 — 우분투 기본 Qt가 6.4라 6.8 API를 못 쓸 수 있음 — 잘못이면: Linux 앱 빌드 깨짐을 늦게 앎(배포는 Windows라 영향 적음).
+
 ## 5. 다음 할 일 (위에서부터)
-1. 단계 8 — 도구 줄 글을 「단면선 긋기 › A 찾는 중 / A′ 찾는 중」으로, 그리는 동안 상태줄 「다음:」 숨김. 캡처에서 그리기 모드가 켜진 이유 확인.
+0. GitHub › Actions에서 CI 첫 결과 확인(실패하면 먼저 고친다).
 2. 단계 4 남은 것 — 상태줄 축척 칸을 단면 머리로.
 3. 단계 1 — `--ui-audit` 만들기(FINAL_PLAN 기대값).
 4. 단계 5 — 빈 구간 core 함수(시험 먼저) + 정보 줄 글.
