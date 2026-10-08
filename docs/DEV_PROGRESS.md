@@ -16,7 +16,7 @@
 | --- | --- |
 | 마지막 갱신 | 2026-10-09 · Claude Code (Opus) |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
-| 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다. 해시는 `git log --oneline`으로 확인 |
+| 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
 | 바뀐 파일(내용) | `app/mainwindow_ui.cpp` · `app/sheetexport.cpp` · `app/theme.hpp` · 새 파일 `docs/DEV_PROGRESS.md` · `docs/design-v4/**` · `CLAUDE.md` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
 | 시험 | `asec_tests` 108 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 |
@@ -81,6 +81,9 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **무엇을:** 사용자 허락으로 줄바꿈만 바뀐 대기 155개를 풀고(`git restore --staged .`), 지금까지의 개발 · 진행 기록 · 지시서를 첫 커밋으로 묶음.
 - **확인:** `git diff --cached --name-only` → 0개. 커밋 `ae6e1ce` 뒤 `git status` 깨끗함.
 - **푸시 실패:** `git push -u origin feature/design-v2` → 403 「Permission … denied to kwonyoungin11」. 이 PC의 GitHub 로그인 계정에 저장소 쓰기 권한이 없다. **해결은 사용자가:** 저장소 주인(kesekikwon-netizen)이 Settings › Collaborators에 kwonyoungin11을 더하거나, 이 PC에서 주인 계정으로 다시 로그인. 해결 전까지 커밋은 이 PC에만 있다 — 다음 AI는 푸시 전에 `git push`가 되는지 먼저 확인할 것.
+- **푸시 해결(같은 날):** 원인은 git이 Windows 자격 증명(kwonyoungin11)을 쓰고, 저장소 주인 계정(kesekikwon-netizen)은 `gh`에만 로그인돼 있던 것. 설정을 바꾸지 않고 그 명령에서만 `gh` 로그인을 쓰게 해 푸시했다 → `origin/feature/design-v2` 생성 · 추적 설정됨.
+  - **이 PC에서 푸시할 때는 이 명령을 쓴다:** `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push`
+  - GitHub에서 보기: https://github.com/kesekikwon-netizen/desca/tree/feature/design-v2
 
 ## 5. 다음 할 일 (위에서부터)
 1. 단계 8 — 도구 줄 글을 「단면선 긋기 › A 찾는 중 / A′ 찾는 중」으로, 그리는 동안 상태줄 「다음:」 숨김. 캡처에서 그리기 모드가 켜진 이유 확인.
