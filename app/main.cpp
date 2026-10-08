@@ -10,7 +10,7 @@
 //   --hover: 평면 보기 가운데로 마우스 이동을 흉내 → 좌표줄 Z 와 Z 출처(대략 → 잎 표면)를 로그
 //   --perf-log: 평면 보기 카메라 경로(맞춤→확대→이동→축소)를 재생하며 프레임마다 시간·LOD 상태를 CSV 로 기록
 //   1.2: --settings DIR(설정을 DIR 의 INI 로 — 시험용) --export-pdf f / --export-sheet-png f / --export-sheet-tiff f / --export-sheet-dxf f
-//        [--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split] --export-dialog-shot f --undo-test --ctx-shot f
+//        [--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split] --export-dialog-shot f --undo-test --ctx-shot f --ui-audit DIR
 //        --extra-line AX AY BX BY(단면 목록에 더함, 반복 가능) --start-shot f(파일 없이: 시작 화면)
 //   --cut-check: 잘린 면 정확도(단면선 윗면 vs 잎 연직 피킹, 미리보기 vs 최종) + 단면선이 배경 위에 순수 빨강으로 그려졌는지(화면·내보내기)
 //   --vex N: 단면 화면 세로 과장(1·2·5·10, 화면만) / 창 제목 중복 검사는 항상 로그(window-title=…)
@@ -207,7 +207,7 @@ int main(int argc, char** argv) {
     int sheetWheel = 0;
     int sheetPick = -1;   // --sheet-pick N: 조판 탭 왼쪽 도면 목록 N 번째 줄을 누름(0 = 평면도)
     bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
-    QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, coordShot;
+    QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, coordShot, uiAuditDir;
     bool undoTest = false, split = false; double sheetScale = 0, sectionScale = 0;
     QString lodShot;
     double camX = 0, camY = 0, camMpp = 0, vexArg = 0, pitchArg = -1;
@@ -261,6 +261,7 @@ int main(int argc, char** argv) {
         else if (s == "--splash-shot") splashShot = nx();
         else if (s == "--splash-live") splashLive = nx();
         else if (s == "--undo-test") undoTest = true;
+        else if (s == "--ui-audit") uiAuditDir = nx();   // v4 단계 1: 겹침 · 자리 규칙 잠금 시험(DIR 에 ui-audit.txt · 캡처)
         else if (s == "--paper") paperArg = nx().toUpper();
         else if (s == "--sheet-scale") sheetScale = nx().toDouble();
         else if (s == "--sheet-check") sheetCheck = nx();
@@ -500,6 +501,12 @@ int main(int argc, char** argv) {
         while (msSince(te) < 60000 && w.sectionCounters().finalsShown == c0.finalsShown) QApplication::processEvents(QEventLoop::AllEvents, 10);
         processFor(300);
         log(QStringLiteral("sections: %1").arg(w.sectionCount()));
+    }
+    if (!uiAuditDir.isEmpty()) {   // v4 단계 1
+        QDir().mkpath(uiAuditDir);
+        QString al; const bool ok = w.uiAudit(uiAuditDir, &al);
+        for (const QString& line : al.split(QLatin1Char('\n'))) log(line);
+        if (!ok) rc = 9;
     }
     if (undoTest) {
         QString ul; bool ok = w.undoTest(&ul);

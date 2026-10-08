@@ -10,6 +10,8 @@
 #include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QElapsedTimer>
+#include <QSet>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFile>
@@ -406,6 +408,7 @@ QWidget* MainWindow::buildSectionFrame() {
     // 세로:가로 — 누르면 화면 세로 과장(×1·×2·×5·×10, X 키로 돌아가며). 기복이 작으면 추천을 함께 보여 줌
     vexBtn_ = new QToolButton; vexBtn_->setObjectName("vexBtn"); vexBtn_->setFocusPolicy(Qt::NoFocus);
     vexBtn_->setAutoRaise(true); vexBtn_->setPopupMode(QToolButton::InstantPopup);
+    vexBtn_->setIcon(theme::icon(theme::Ico::Vex, 16)); vexBtn_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);   // v4 D11
     {
         auto* m = new QMenu(vexBtn_);
         for (int k : {1, 2, 5, 10}) {
@@ -635,6 +638,7 @@ QWidget* MainWindow::buildCoordBar() {
     progress_ = new QProgressBar; progress_->setTextVisible(false); progress_->setRange(0, 1000); progress_->setVisible(false); progress_->setFixedWidth(120); h->addWidget(progress_);
     srsLabel_ = new QLabel(QStringLiteral("좌표계 —")); srsLabel_->setObjectName("srsLabel"); h->addWidget(srsLabel_);
     heightBadge2_ = new QToolButton; heightBadge2_->setObjectName("heightBadge"); heightBadge2_->setFocusPolicy(Qt::NoFocus);
+    heightBadge2_->setIcon(theme::icon(theme::Ico::Height, 14)); heightBadge2_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);   // v4 D11
     QObject::connect(heightBadge2_, &QToolButton::clicked, this, [this] { dlgHeightDatum(); });
     h->addWidget(heightBadge2_);
     return w;
@@ -1684,4 +1688,117 @@ int MainWindow::addSectionAt(const SectionLine& l) {
     sections_.push_back(s);
     refreshSectionList();
     return int(sections_.size()) - 1;
+}
+
+// ---------------------------------------------------------------- v4 단계 1: --ui-audit (같은 일 단추 겹침 · 자리 규칙 잠금 시험)
+// 보이는 단추를 훑어 FINAL_PLAN §5 단계 1의 기대값과 견준다. 키 지름길 · 오른쪽 클릭 메뉴는 셈에서 뺀다.
+// 아직 만들지 않은 조판 쪽 항목(lists-match · sheet …)은 「not-checked」로 적고 결과에는 넣지 않는다(단계 10 · 11에서 더함).
+bool MainWindow::uiAudit(const QString& dir, QString* out) {
+    QStringList L;
+    bool ok = true;
+    auto pump = [](int ms) { QElapsedTimer t; t.start(); while (t.elapsed() < ms) QApplication::processEvents(QEventLoop::AllEvents, 10); };
+    // 단추 이름: 글자(없으면 툴팁)에서 키 표시 · ▾ · & 를 떼어 낸 앞부분
+    auto label = [](QAbstractButton* b) {
+        QString t = b->text().isEmpty() ? b->toolTip() : b->text();
+        t.remove(QChar(0x25BE)); t.remove(QLatin1Char('&'));
+        for (const QString& cut : {QStringLiteral("  "), QStringLiteral(" ("), QStringLiteral("\t")}) { int i = t.indexOf(cut); if (i > 0) t = t.left(i); }
+        return t.trimmed();
+    };
+    // 평면 머리와 단면 머리는 서로 다른 화면을 다루므로 같은 이름이어도 겹침이 아니다
+    auto scope = [this](QWidget* w) {
+        for (QWidget* p = w; p; p = p->parentWidget()) { if (p == planTitle_) return 1; if (p == secTitleBar_) return 2; }
+        return 0;
+    };
+    auto skip = [](QAbstractButton* b) {
+        const QString n = b->objectName();
+        return n == QLatin1String("chip") || n == QLatin1String("stepBtn") || (b->text().trimmed().isEmpty() && b->toolTip().isEmpty());
+    };
+
+    // 1) 탭
+    QStringList names;
+    for (int i = 0; i < tabs_->count(); ++i) names << tabs_->tabText(i).section(QLatin1Char(' '), 0, 0);
+    const bool tabsOk = names == QStringList{QStringLiteral("파일"), QStringLiteral("홈"), QStringLiteral("보기"), QStringLiteral("자료")};
+    L << QStringLiteral("ui-audit tabs=%1 names=%2%3").arg(tabs_->count()).arg(names.join(QLatin1Char(','))).arg(tabsOk ? QString() : QStringLiteral("  FAIL"));
+    ok &= tabsOk;
+
+    // 2) 한 줄 리본 · 홈 묶음 · 흙색 주 단추
+    const int ribH = pages_->maximumHeight();
+    const int homeGroups = pages_->count() > 1 ? int(pages_->widget(1)->findChildren<QLabel*>(QStringLiteral("groupLabel")).size()) : 0;
+    int primary = 0;
+    for (auto* b : findChildren<QToolButton*>(QStringLiteral("ribbonTile"))) if (b->property("primary").toBool()) ++primary;
+    const bool ribOk = ribH <= 44 && homeGroups == 2 && primary == 1;   // 홈 = 「단면」 · 「뒤 깊이」 이름 둘 + 오른쪽 끝 주 단추 「도면」
+    L << QStringLiteral("ui-audit ribbon rows=1 height=%1 home-groups=%2 primary=%3%4").arg(ribH).arg(homeGroups + 1).arg(primary).arg(ribOk ? QString() : QStringLiteral("  FAIL"));
+    ok &= ribOk;
+
+    // 3) 겹침 · 아이콘 · 툴팁 — 리본 탭을 하나씩 바꿔 가며 그때 보이는 단추 전부
+    const int keepTab = tabs_->currentIndex();
+    QStringList dups, noIcon, noTip;
+    QSet<QString> seenDup, seenIcon, seenTip;
+    for (int t = 0; t < tabs_->count(); ++t) {
+        tabs_->setCurrentIndex(t);
+        pump(120);
+        if (!dir.isEmpty()) grab().save(QDir(dir).filePath(QStringLiteral("ribbon-%1.png").arg(t)));
+        struct E { QAbstractButton* b; int sc; };
+        std::map<QString, std::vector<E>> byName;
+        for (auto* b : findChildren<QAbstractButton*>()) {
+            if (!b->isVisibleTo(this) || skip(b)) continue;
+            const QString n = label(b);
+            if (n.isEmpty()) continue;
+            byName[n].push_back({b, scope(b)});
+            const bool iconOnly = b->text().trimmed().isEmpty();
+            if (b->icon().isNull() && !iconOnly && !seenIcon.contains(n)) { seenIcon.insert(n); noIcon << n; }
+            if (iconOnly && b->toolTip().isEmpty() && b->accessibleName().isEmpty() && !seenTip.contains(n)) { seenTip.insert(n); noTip << n; }
+        }
+        for (const auto& [n, es] : byName) {
+            bool dup = false;
+            for (size_t i = 0; i < es.size() && !dup; ++i)
+                for (size_t j = i + 1; j < es.size() && !dup; ++j)
+                    if (!(es[i].sc && es[j].sc && es[i].sc != es[j].sc)) dup = true;
+            if (dup && !seenDup.contains(n)) { seenDup.insert(n); dups << n; }
+        }
+    }
+    tabs_->setCurrentIndex(keepTab);
+    pump(60);
+    L << QStringLiteral("ui-audit dup-actions=%1 dup-labels=%1").arg(dups.size());
+    for (const QString& d : dups) L << QStringLiteral("dup: %1").arg(d);
+    L << QStringLiteral("ui-audit same-name-different-action=not-checked");
+    ok &= dups.isEmpty();
+
+    // 4) 축척 칸 · 높이 배지는 화면에 하나씩
+    int scales = 0, badges = 0;
+    for (auto* c : findChildren<QComboBox*>()) if (c->isVisibleTo(this) && c->findText(QStringLiteral("맞춤")) >= 0) ++scales;
+    for (auto* b : findChildren<QToolButton*>(QStringLiteral("heightBadge"))) if (b->isVisibleTo(this)) ++badges;
+    L << QStringLiteral("ui-audit scale-controls=%1 height-badges=%2%3").arg(scales).arg(badges).arg(scales == 1 && badges == 1 ? QString() : QStringLiteral("  FAIL"));
+    ok &= scales == 1 && badges == 1;
+
+    // 5) 그리는 동안 상태줄 「다음:」 문장이 없는가
+    int hint = -1;
+    if (src_) {
+        const SectionLine keep = plan_->line(); const bool hadLine = plan_->hasLine();
+        plan_->setDrawMode(true); pump(150);
+        hint = msg_->text().trimmed().isEmpty() ? 0 : 1;
+        if (!dir.isEmpty()) grab().save(QDir(dir).filePath(QStringLiteral("draw.png")));
+        plan_->setDrawMode(false); plan_->setLine(keep, hadLine); pump(100);
+    }
+    L << QStringLiteral("ui-audit next-hint-visible-while-tool=%1%2").arg(hint < 0 ? QStringLiteral("not-checked") : QString::number(hint)).arg(hint == 1 ? QStringLiteral("  FAIL") : QString());
+    ok &= hint != 1;
+
+    // 6) 아직 만들지 않은 조판 쪽 항목
+    L << QStringLiteral("ui-audit lists-match=not-checked");
+    L << QStringLiteral("ui-audit sheet type-selectors=not-checked primary=not-checked notices-outside-check=not-checked");
+
+    // 7) 아이콘 · 툴팁(D11)
+    L << QStringLiteral("ui-audit icons-missing=%1 tooltip-missing=%2").arg(noIcon.size()).arg(noTip.size());
+    for (const QString& n : noIcon) L << QStringLiteral("no-icon: %1").arg(n);
+    for (const QString& n : noTip) L << QStringLiteral("no-tooltip: %1").arg(n);
+    ok &= noIcon.isEmpty() && noTip.isEmpty();
+
+    if (!dir.isEmpty()) grab().save(QDir(dir).filePath(QStringLiteral("work.png")));
+    L << QStringLiteral("ui-audit RESULT %1").arg(ok ? QStringLiteral("ok") : QStringLiteral("fail"));
+    if (!dir.isEmpty()) {
+        QFile f(QDir(dir).filePath(QStringLiteral("ui-audit.txt")));
+        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) f.write((L.join(QLatin1Char('\n')) + QLatin1Char('\n')).toUtf8());
+    }
+    if (out) *out = L.join(QLatin1Char('\n'));
+    return ok;
 }

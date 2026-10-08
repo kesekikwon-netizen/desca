@@ -43,7 +43,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 | −2 | 저장소 정리(줄바꿈만 바뀐 155개 대기 풀기) | ✅ | 2026-10-09 `git restore --staged .` → 대기 0, 내용 변화 없음 |
 | −1 | 기준선 빌드 · 시험 | ✅ | §2. 108/110 |
 | 0 | 잘린 선 빈 구간 원인 조사 | ⬜ | |
-| 1 | `--ui-audit` | ⬜ | 원래 순서상 먼저였으나 눈에 보이는 리본부터 했다(아래 판정 기록) |
+| 1 | `--ui-audit` | 🟨 | 탭 · 리본 · 겹침 · 축척 칸 · 높이 배지 · 그리는 동안 문장 · 아이콘 · 툴팁 검사 — 지금 RESULT ok. **남음:** lists-match(단계 10) · sheet 항목(단계 11) · same-name-different-action |
 | 2 | 탭 넷 | ✅ | 파일 · 홈 · 보기 · 자료. 측정 탭 없앰 |
 | 3 | 한 줄 리본 + 홈 3묶음 | 🟨 | 44 px · 아이콘 옆 글자 · 홈=단면/뒤 깊이/도면 · 목록 머리 「＋ 새 단면」 없앰. **남음:** 1280 px 좁은 창 글자 숨기기 |
 | 3a | 아이콘 81개 | 🟨 | 리본은 18 px 기존 Ico. **남음:** Icons 화판 모양으로 theme.hpp `icon()` 다시 그리기, `--icon-sheet` |
@@ -96,11 +96,18 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **무엇을:** `buildCoordBar()`에서 만드는 `scaleCombo_`를 상태줄 대신 단면 머리 `vexBtn_` 바로 뒤에 끼움(단면 머리가 먼저 만들어지므로 `insertWidget`). 상태줄의 「축척」 글 없앰.
 - **확인:** 빌드 exit 0. 캡처 `work-v4d.png` — 단면 머리: 토글 4 · 「세로:가로 1:1 · ×5 권장」 · 「1:72.3 ▾」 · 맞춤 · 확대 · 축소 · 크게 / 상태줄: 문장 · X Y Z · 좌표계 · 높이 배지(축척 없음).
 
+### 2026-10-09 · Claude Code — CI 확인, 단계 1(일부)
+- **CI:** 첫 두 실행(`d436e15`, `15b648d`) 모두 Linux · Windows 통과.
+- **무엇을:** `MainWindow::uiAudit(dir, log)`(mainwindow_ui.cpp 끝) + `main.cpp` 옵션 `--ui-audit DIR`(실패 시 종료 코드 9). 리본 탭을 하나씩 바꿔 보이는 단추를 모아 이름(글자, 없으면 툴팁 — 키 표시 · ▾ 뗌)이 두 곳 이상이면 겹침. 평면 머리와 단면 머리끼리는 다른 화면이라 겹침에서 뺌. 칩(뒤 깊이 숫자) · 걸음 단추도 뺌. DIR에 `ui-audit.txt` · `ribbon-0..3.png` · `draw.png` · `work.png`.
+  - 아이콘 없는 단추 2개가 잡혀 고침: 「세로 ×」에 새 아이콘 `Ico::Vex`(theme.hpp, 위아래 화살표), 상태줄 높이 배지에 `Ico::Height`.
+- **확인:** 빌드 exit 0(새 경고 없음). `SectionViewer.exe Synthetic.3mx --line … --ui-audit C:\dev\tmp\ui --quit` → exit 0, `ui-audit RESULT ok`(tabs=4 · ribbon height=44 home-groups=3 primary=1 · dup 0 · scale 1 · badge 1 · next-hint 0 · icons 0 · tooltip 0). 고치기 전에는 `icons-missing=2 … RESULT fail` → exit 9(시험이 실제로 잡는 것 확인).
+- **판정:** 조판 쪽 항목은 지금 「not-checked」로 적고 결과에서 뺌 — 조판을 아직 안 고쳐서 — 잘못이면: 단계 10 · 11 전까지 그 겹침은 잠기지 않음. CI에는 아직 넣지 않음 — 앱이 OpenGL 창을 쓰므로 GitHub Windows 러너에서 화면 없이 도는지 확인 전 — 잘못이면: 겹침 회귀를 로컬에서만 잡음.
+
 ## 5. 다음 할 일 (위에서부터)
-0. GitHub › Actions에서 CI 첫 결과 확인(실패하면 먼저 고친다).
-3. 단계 1 — `--ui-audit` 만들기(FINAL_PLAN 기대값).
-4. 단계 5 — 빈 구간 core 함수(시험 먼저) + 정보 줄 글.
-5. 이후 FINAL_PLAN 순서대로.
+1. 단계 5 — 빈 구간 core 함수(시험 먼저) + 정보 줄 「잘린 선 n줄 · 빈 구간 m곳」 + 「평면에서 보기」.
+2. 단계 0 — 합성 모델에서 잘린 선이 0–2 m · 10–12 m에만 있는 원인 조사(지금 앱에서도 「잘린 선 2줄」로 재현됨).
+3. 단계 6 남은 것(연필), 단계 3 남은 것(좁은 창), 단계 9 홈 화면.
+4. 이후 FINAL_PLAN 순서대로(10 목록 → 11 조판 → 12 점검 …). 단계 10 · 11을 하면 `--ui-audit`의 not-checked 항목을 채운다.
 
 ## 6. 기록 규칙
 - 단계를 마치면: §1 표(마지막 갱신 · 바뀐 파일 · 빌드 · 시험), §3 상태, §4에 새 기록(무엇을 · 확인 명령과 결과 · 판정 · 남은 문제), §5 다음 할 일.

@@ -274,7 +274,7 @@ QToolButton#ribbonTile:checked, QToolButton:checked, QToolButton#chip:checked { 
 
 // ---- 아이콘: 먹색 선(데이터 색 아이콘만 빨강·회색 획 유지)
 enum class Ico { Open, Draw, Flip, Plan, Fit, Orbit, Image, Line, Levels, Dxf, Png, Smooth, Tif, Geo, Xyz, Las, Csv, ZoomIn, ZoomOut, Close, Info, Clear, View1, View2, Lang, Band,
-                 Recent, Sheet, Undo, Redo, Measure, Height, Move, Add, Max, Picture, Keys };
+                 Recent, Sheet, Undo, Redo, Measure, Height, Move, Add, Max, Picture, Keys, Vex };
 
 inline QIcon icon(Ico k, int S = 32, QColor inkColor = Ink) {
     QIcon ic;
@@ -414,6 +414,12 @@ inline QIcon icon(Ico k, int S = 32, QColor inkColor = Ink) {
             p.drawRoundedRect(QRectF(4, 9, 24, 15), 3, 3);
             for (int x = 8; x <= 24; x += 4) p.drawPoint(QPointF(x, 14));
             p.drawLine(QPointF(10, 19.5), QPointF(22, 19.5));
+            break;
+        case Ico::Vex:   // v4 아이콘 설계도 「세로 과장」: 위아래 화살표 + 가운데 짧은 가로 눈금
+            p.drawLine(QPointF(16, 4.5), QPointF(16, 27.5));
+            p.drawLine(QPointF(11.5, 9), QPointF(16, 4.5)); p.drawLine(QPointF(20.5, 9), QPointF(16, 4.5));
+            p.drawLine(QPointF(11.5, 23), QPointF(16, 27.5)); p.drawLine(QPointF(20.5, 23), QPointF(16, 27.5));
+            p.drawLine(QPointF(6, 16), QPointF(10, 16)); p.drawLine(QPointF(22, 16), QPointF(26, 16));
             break;
         }
         p.end();
