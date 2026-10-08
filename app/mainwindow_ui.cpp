@@ -301,7 +301,7 @@ QWidget* MainWindow::buildRibbon() {
 QWidget* MainWindow::buildCtxBar() {
     auto* w = new QWidget; w->setObjectName("ctxBar"); w->setAttribute(Qt::WA_StyledBackground); w->setFixedHeight(40);
     auto* h = new QHBoxLayout(w); h->setContentsMargins(10, 0, 10, 0); h->setSpacing(8);
-    auto* tool = new QLabel(QStringLiteral("╱  단면선 그리기")); tool->setObjectName("ctxTool");
+    auto* tool = new QLabel(QStringLiteral("단면선 긋기")); tool->setObjectName("ctxTool");   // v4: 동작 이름과 같게
     h->addWidget(tool);
     ctxHint_ = new QLabel; ctxHint_->setTextFormat(Qt::RichText);
     h->addWidget(ctxHint_);
@@ -312,7 +312,7 @@ QWidget* MainWindow::buildCtxBar() {
     h->addStretch();
     ctxValue_ = new QLabel; ctxValue_->setObjectName("ctxValue"); ctxValue_->setTextFormat(Qt::RichText);
     h->addWidget(ctxValue_);
-    auto* close = new QPushButton(QStringLiteral("닫기")); close->setFocusPolicy(Qt::NoFocus);
+    auto* close = new QPushButton(theme::icon(theme::Ico::Close, 16), QStringLiteral("취소")); close->setFocusPolicy(Qt::NoFocus);   // = Esc
     close->setStyleSheet("QPushButton{padding:3px 12px;}");
     QObject::connect(close, &QPushButton::clicked, this, [this] { plan_->setDrawMode(false); });
     h->addWidget(close);
@@ -322,8 +322,9 @@ QWidget* MainWindow::buildCtxBar() {
 
 void MainWindow::updateCtx(int stage, const SectionLine& l) {
     if (!ctxHint_) return;
-    ctxHint_->setText(stage == 0 ? QStringLiteral("평면에서 <b>시작점 A</b>와 <b>끝점 A′</b>를 클릭합니다.")
-                                 : QStringLiteral("평면에서 <b>끝점 A′</b>를 클릭합니다. (A 찍음)"));
+    // v4: 그리는 동안 안내는 이 줄 한 곳(상태줄 「다음:」은 숨김)
+    ctxHint_->setText(stage == 0 ? QStringLiteral("<span style='color:#5E5D59'>› A 찾는 중</span> &nbsp; 평면에서 <b>시작점 A</b>를 클릭하세요")
+                                 : QStringLiteral("<span style='color:#5E5D59'>› A′ 찾는 중</span> &nbsp; <b>끝점 A′</b>를 클릭하세요"));
     double L = SectionFrame(l).L;
     if (stage == 1 && L > 1e-6)
         ctxValue_->setText(QStringLiteral("<span style='color:#5E5D59'>길이</span> %1 m &nbsp; <span style='color:#5E5D59'>방위</span> %2")
@@ -1547,7 +1548,7 @@ MainWindow::MainWindow() {
         action("draw")->setChecked(on);
         ctxBar_->setVisible(on);
         action("coord")->setEnabled(on); action("esc")->setEnabled(on);
-        if (on) { setActiveView(0); showStatus(QStringLiteral("평면에서 시작점 A 를 클릭하세요 — Shift 동서·남북 고정 · Enter 좌표 입력 · Esc 취소")); }
+        if (on) { setActiveView(0); showStatus(QString()); }   // v4 단계 8: 안내는 도구 줄 한 곳, 상태줄은 좌표만
         else {
             drawEnded_ = plan_->hasLine();
             QTimer::singleShot(0, this, [this] { drawEnded_ = false; });
@@ -1556,7 +1557,6 @@ MainWindow::MainWindow() {
     };
     plan_->onDrawProgress = [this](int stage, const SectionLine& l) {
         updateCtx(stage, l);
-        if (stage == 1) showStatus(QStringLiteral("끝점 A′ 를 클릭하세요 — Shift 를 누르면 동서·남북으로 고정"));
     };
     QObject::connect(action("coord"), &QAction::triggered, this, [this] { if (plan_->drawMode()) dlgCoordEntry(); });
     QObject::connect(action("esc"), &QAction::triggered, this, [this] { if (plan_->drawMode()) plan_->setDrawMode(false); });
