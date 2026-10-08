@@ -4,6 +4,11 @@
 > 지시서: [`docs/design-v4/FINAL_PLAN.md`](design-v4/FINAL_PLAN.md) · 화판 원본: [`docs/design-v4/boards/`](design-v4/boards/) (단추 계약 = `Buttons1` · `Buttons2`, 아이콘 = `Icons`, 표시 = `Display`)
 > 온라인 캔버스(소유자만 열림): https://claude.ai/artifact/VNPpTTVmqxoFG8eeZDWupE
 
+> ## ⏸ 2026-10-09 디자인 보완 대기 — Strata와 같은 디자인 언어로
+> 사용자 요청: 「UI는 직관적이어야 한다. 내가 만든 GIS 앱 **Strata**와 공통적인 디자인으로 일관성을 줘라.」 디자인은 **다른 Claude Code 계정(Max)** 에서 한다.
+> **먼저 [`docs/design-v4/STRATA_CONSISTENCY.md`](design-v4/STRATA_CONSISTENCY.md)를 읽는다** — Strata 화면 분석, 지금 v4와 부딪치는 결정 C1–C7(한 줄 리본 D5 포함, 이미 구현됨), 디자인 세션이 할 일.
+> 디자인 결정(C1–C7)이 닫히기 전에는 **⏸ 표시된 UI 단계를 진행하지 않는다.** 그동안 개발은 디자인과 무관한 core 일만(§5).
+
 ## 0. 이어받는 법 (처음 온 AI는 이 순서로)
 1. 이 파일 전체를 읽는다 → 「다음 할 일」을 확인한다.
 2. `docs/design-v4/FINAL_PLAN.md`에서 그 단계 절만 읽는다(§4 절대 규칙은 매번 지킨다).
@@ -14,13 +19,14 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-09 · Claude Code (Opus) |
+| 마지막 갱신 | 2026-10-09 · Claude Code (Opus) — **이 계정의 작업은 여기서 마무리.** 디자인 보완은 다른 계정(Max)으로 |
+| 디자인 상태 | ⏸ 보완 대기 — Strata 일관성(C1–C7 미결정). 위 안내 · `docs/design-v4/STRATA_CONSISTENCY.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
 | 바뀐 파일(내용) | 모두 커밋됨 — `git log --oneline 4422b4e..HEAD` · CI: `.github/workflows/ci.yml` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
-| 시험 | `asec_tests` 108 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 |
-| 최근 캡처 | `C:\dev\tmp\kerf-shots\work-v4b.png` (이 PC에만) |
+| 시험 | `asec_tests` 114 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 · `--ui-audit` RESULT ok · GitHub Actions(Linux · Windows) 통과 |
+| 최근 캡처 | `C:\dev\tmp\kerf-shots\work-v4d.png` · `draw-v4.png` · `C:\dev\tmp\ui\` (이 PC에만) |
 
 ## 2. 이 PC에서 빌드 · 실행 (검증된 명령)
 - **한글 경로 함정:** 저장소가 `C:\Users\권을\…`에 있으면 CMake가 부르는 `rc.exe` · `llvm-rc`가 멈춘다(실측 2회). 그래서 **정션 `C:\dev\desca` → 저장소**를 만들어 그 경로로 빌드한다(이미 있음: `New-Item -ItemType Junction -Path C:\dev\desca -Target <저장소>`).
@@ -36,7 +42,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 - 다른 PC라면 FINAL_PLAN §3의 도구 설치 상태부터 확인한다.
 
 ## 3. 단계 표 (FINAL_PLAN §5 · §9)
-상태: ⬜ 안 함 · 🟨 일부 · ✅ 끝(캡처 · 시험 근거 있음)
+상태: ⬜ 안 함 · 🟨 일부 · ✅ 끝(캡처 · 시험 근거 있음) · ⏸ = 디자인 보완(Strata 일관성) 결정 전에는 하지 않음(core 부분은 예외)
 
 | 단계 | 내용 | 상태 | 메모 |
 | --- | --- | --- | --- |
@@ -45,26 +51,26 @@ C:\dev\kerf-v4c\asec_tests.exe
 | 0 | 잘린 선 빈 구간 원인 조사 | ⬜ | |
 | 1 | `--ui-audit` | 🟨 | 탭 · 리본 · 겹침 · 축척 칸 · 높이 배지 · 그리는 동안 문장 · 아이콘 · 툴팁 검사 — 지금 RESULT ok. **남음:** lists-match(단계 10) · sheet 항목(단계 11) · same-name-different-action |
 | 2 | 탭 넷 | ✅ | 파일 · 홈 · 보기 · 자료. 측정 탭 없앰 |
-| 3 | 한 줄 리본 + 홈 3묶음 | 🟨 | 44 px · 아이콘 옆 글자 · 홈=단면/뒤 깊이/도면 · 목록 머리 「＋ 새 단면」 없앰. **남음:** 1280 px 좁은 창 글자 숨기기 |
-| 3a | 아이콘 81개 | 🟨 | 리본은 18 px 기존 Ico. **남음:** Icons 화판 모양으로 theme.hpp `icon()` 다시 그리기, `--icon-sheet` |
+| 3 | 한 줄 리본 + 홈 3묶음 | 🟨 ⏸ | 44 px · 아이콘 옆 글자 · 홈=단면/뒤 깊이/도면 · 목록 머리 「＋ 새 단면」 없앰. **남음:** 1280 px 좁은 창 글자 숨기기 |
+| 3a | 아이콘 81개 | 🟨 ⏸ | 리본은 18 px 기존 Ico. **남음:** Icons 화판 모양으로 theme.hpp `icon()` 다시 그리기, `--icon-sheet` |
 | 4 | 단면 머리 켜기·끄기 · 축척 · 확대 | ✅ | 토글 4 · 「세로 ×1」 · 축척 칸(상태줄에서 옮김)이 단면 머리에, 평면 머리 「위에서」. 캡처 `work-v4d.png` |
-| 5 | 정보 줄 · 상태줄 · 커서 | 🟨 | 정보 줄에서 길이 · 앞뒤 · 화면 축척 숨김. **남음:** 빈 구간 core 함수 + 「잘린 선 n줄 · 빈 구간」, 상태줄 축척 칸 빼기 |
-| 6 | 오른쪽 판 읽기 전용 | 🟨 | 「이 단면으로 도면」 없앰 → 「좌표 입력 · 복사」. **남음:** 탭 없애기 확인, 연필 |
+| 5 | 정보 줄 · 상태줄 · 커서 | 🟨 | 정보 줄에서 길이 · 앞뒤 · 화면 축척 숨김, 상태줄 축척 칸 뺌(단계 4), **빈 구간 core `profileGaps()` + 시험 6개 끝**. **남음:** 정보 줄 글 「잘린 선 n줄 · 빈 구간 m곳 x m」 + 「평면에서 보기」(⏸ 안내 자리 C4 결정 뒤) |
+| 6 | 오른쪽 판 읽기 전용 | 🟨 ⏸ | 「이 단면으로 도면」 없앰 → 「좌표 입력 · 복사」. **남음:** 탭 없애기 확인, 연필 |
 | 7 | 높이 배지 하나 | ✅ | 단면 머리 배지 숨김, 상태줄 배지만 |
 | 8 | 그리는 동안 안내 한 곳 | ✅ | 도구 줄 「단면선 긋기 › A/A′ 찾는 중」, 그동안 상태줄은 좌표만. 캡처 `draw-v4.png`. `--ui-audit` 항목은 단계 1에서 |
-| 9 | 홈 화면 | ⬜ | |
-| 10 | 목록 하나 | 🟨 | 조판 목록 머리 「단면 목록」으로. **남음:** 줄 모양 · 도면 상태 줄 · 고르기 칸 |
-| 11 | 조판: 고르는 곳 하나 · 모드 칩 · 리본 접기 | 🟨 | 「작업으로」 단추 숨김, 문서 탭 줄 새 모양(조판 열릴 때만 보임). **남음:** 「도면 종류」 제거 · 모드 칩 · 리본 접기 |
-| 12 | 도면 점검 | ⬜ | |
-| 13 | 형식 · DXF 공간 | ⬜ | |
-| 14 | 여러 장 저장 | ⬜ | |
-| 15 | 빈 구간 표시 · E 키 | ⬜ | |
-| 16 | 빈 상태 | ⬜ | |
-| 16a | 새 키 · 문장 · 토큰 | ⬜ | |
+| 9 | 홈 화면 | ⬜ ⏸ | |
+| 10 | 목록 하나 | 🟨 ⏸ | 조판 목록 머리 「단면 목록」으로. **남음:** 줄 모양 · 도면 상태 줄 · 고르기 칸 |
+| 11 | 조판: 고르는 곳 하나 · 모드 칩 · 리본 접기 | 🟨 ⏸ | 「작업으로」 단추 숨김, 문서 탭 줄 새 모양(조판 열릴 때만 보임). **남음:** 「도면 종류」 제거 · 모드 칩 · 리본 접기 |
+| 12 | 도면 점검 | ⬜ ⏸ | |
+| 13 | 형식 · DXF 공간 | ⬜ ⏸ | |
+| 14 | 여러 장 저장 | ⬜ ⏸ | |
+| 15 | 빈 구간 표시 · E 키 | ⬜ ⏸ | |
+| 16 | 빈 상태 | ⬜ ⏸ | |
+| 16a | 새 키 · 문장 · 토큰 | ⬜ ⏸ | |
 | 17 | 문서 · 마무리 | ⬜ | |
-| A1 | 단면 빗금(잘린 돌) | ⬜ | 확정: 사선 45° · 종이 위 1.0 mm |
-| A2 | 단면 빗금 후보 | ⬜ | |
-| A3 | 평면 윤곽 | ⬜ | 확정: SVG · DXF 층만 |
+| A1 | 단면 빗금(잘린 돌) | ⬜ ⏸ | 확정: 사선 45° · 종이 위 1.0 mm |
+| A2 | 단면 빗금 후보 | ⬜ ⏸ | |
+| A3 | 평면 윤곽 | ⬜ ⏸ | 확정: SVG · DXF 층만 |
 
 ## 4. 단계별 기록 (새 기록은 맨 아래에 덧붙인다)
 ### 2026-10-09 · Claude Code — 단계 −1, 2, 3(일부), 4(일부), 5(일부), 6(일부), 7, 10(일부), 11(일부)
@@ -103,11 +109,28 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 빌드 exit 0(새 경고 없음). `SectionViewer.exe Synthetic.3mx --line … --ui-audit C:\dev\tmp\ui --quit` → exit 0, `ui-audit RESULT ok`(tabs=4 · ribbon height=44 home-groups=3 primary=1 · dup 0 · scale 1 · badge 1 · next-hint 0 · icons 0 · tooltip 0). 고치기 전에는 `icons-missing=2 … RESULT fail` → exit 9(시험이 실제로 잡는 것 확인).
 - **판정:** 조판 쪽 항목은 지금 「not-checked」로 적고 결과에서 뺌 — 조판을 아직 안 고쳐서 — 잘못이면: 단계 10 · 11 전까지 그 겹침은 잠기지 않음. CI에는 아직 넣지 않음 — 앱이 OpenGL 창을 쓰므로 GitHub Windows 러너에서 화면 없이 도는지 확인 전 — 잘못이면: 겹침 회귀를 로컬에서만 잡음.
 
+### 2026-10-09 · Claude Code — 단계 5(core) · 디자인 보완 요청 · 이 계정 마무리
+- **무엇을:** `core/include/asec/section.hpp` · `core/src/section.cpp`에 `struct SGap` · `profileGaps(profile, length, minGap = 0.02)` — 잘린 선들이 덮는 s 범위(점 순서 무관, [0, length]로 자름)를 합쳐 사이 틈 중 minGap 넘는 것만. `tests/test_section.cpp`에 `[gaps]` 시험 6개(잘린 선 없음 · 0–2/10–12 → 2–10 · 겹침 합치기 · 끝 빈 구간 + 거꾸로 순서 · minGap · 단면선 밖 점).
+- **확인:** 시험 먼저 — 빈 함수로 `asec_tests "[gaps]"` → 6개 중 5개 실패(RED). 구현 뒤 → `All tests passed (17 assertions in 6 test cases)`(GREEN). 전체 `asec_tests` → 114 통과 · 1 실패(알려진 CoalescingWorker) · 1 건너뜀. 빌드 경고 없음.
+- **디자인 보완 요청(사용자, 2026-10-09):** 「UI는 직관적이어야 하고, 사용자가 만든 GIS 앱 Strata와 공통 디자인으로 일관성을 줘라.」 Strata 캡처 3장(홈 · 지도 · 도면)을 받아 분석해 `docs/design-v4/STRATA_CONSISTENCY.md`로 남김. 디자인은 다른 Claude Code 계정(Max)에서 하기로 함 — 이 계정은 여기까지 기록하고 마무리.
+  - **판정:** Strata 캡처는 저장소에 올리지 않음 — 저장소가 **공개**이고 캡처에 조사구역 도형 · 실좌표가 보임 — 이 PC의 `C:\Users\권을\Documents\desc\design-v4\strata-ref\`에만 둠 — 잘못이면: 다른 PC의 디자인 세션이 캡처를 못 봄(사용자에게 받아야 함).
+  - **판정:** 정보 줄 글 · 「평면에서 보기」 단추는 만들지 않고 멈춤 — 안내 자리(C4)가 Strata 방식으로 바뀔 수 있음 — 잘못이면: 단계 5 UI가 조금 늦어짐.
+
 ## 5. 다음 할 일 (위에서부터)
-1. 단계 5 — 빈 구간 core 함수(시험 먼저) + 정보 줄 「잘린 선 n줄 · 빈 구간 m곳」 + 「평면에서 보기」.
-2. 단계 0 — 합성 모델에서 잘린 선이 0–2 m · 10–12 m에만 있는 원인 조사(지금 앱에서도 「잘린 선 2줄」로 재현됨).
-3. 단계 6 남은 것(연필), 단계 3 남은 것(좁은 창), 단계 9 홈 화면.
-4. 이후 FINAL_PLAN 순서대로(10 목록 → 11 조판 → 12 점검 …). 단계 10 · 11을 하면 `--ui-audit`의 not-checked 항목을 채운다.
+**A. 디자인 세션(다른 계정, Max) — 먼저**
+1. `docs/design-v4/STRATA_CONSISTENCY.md`를 읽고 Strata 캡처(이 PC `C:\Users\권을\Documents\desc\design-v4\strata-ref\`)와 Strata 코드에서 공통 디자인 언어(토큰 · 리본 · 탭 · 판 치수)를 정리한다.
+2. 부딪치는 결정 C1–C7을 사용자에게 추천과 함께 묻고 닫는다. **C1(리본 모양)이 뒤집히면** 커밋 `ae6e1ce`의 `buildRibbon()` · `tile()` · `theme.hpp ribbonTile` 변경을 다시 짜고, `--ui-audit`의 기대값(`ribbon rows=1 height=44`)도 고친다.
+3. 캔버스 화판과 `docs/design-v4/boards/` · `FINAL_PLAN.md` 결정표를 고치고, 이 파일의 ⏸를 풀 단계를 적는다.
+
+**B. 개발 — 디자인과 무관해서 지금 해도 되는 것(core, 시험 먼저)**
+1. 단계 0 — 합성 모델에서 잘린 선이 0–2 m · 10–12 m에만 있는 원인 조사(앱에서도 「잘린 선 2줄」로 재현됨). 이제 `profileGaps()`로 빈 구간을 숫자로 잴 수 있다.
+2. A1 core — `hatchPolygon(다각형, 각도, 간격)` · `closeCutRegion(…)` (FINAL_PLAN §9).
+3. 단계 14 core — 도면 파일 이름 함수(금지 글자 · 겹침 `_2`).
+4. 단계 12 core — 3D 기울어진 평면에서 「위에서 본 범위」 계산.
+5. A3 core — `localRelief` · `contoursAbove`.
+6. `--ui-audit`를 GitHub Actions에 넣을 수 있는지(화면 없는 Windows 러너에서 OpenGL 창이 뜨는지) 확인.
+
+**C. 디자인 결정 뒤** — ⏸ 단계들을 FINAL_PLAN 순서대로(5 UI → 6 → 3 · 3a → 9 → 10 → 11 → 12 …). 단계 10 · 11을 하면 `--ui-audit`의 not-checked 항목을 채운다.
 
 ## 6. 기록 규칙
 - 단계를 마치면: §1 표(마지막 갱신 · 바뀐 파일 · 빌드 · 시험), §3 상태, §4에 새 기록(무엇을 · 확인 명령과 결과 · 판정 · 남은 문제), §5 다음 할 일.
