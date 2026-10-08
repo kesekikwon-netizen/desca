@@ -1152,7 +1152,7 @@ void MainWindow::showSheetTab(QWidget* page) {
     sheetHost_ = page;
     if (body_->indexOf(page) < 0) body_->addWidget(page);
     if (viewTabs_) {
-        if (viewTabs_->count() < 2) viewTabs_->addTab(QStringLiteral("조판"));
+        if (viewTabs_->count() < 2) viewTabs_->addTab(theme::icon(theme::Ico::Sheet, 15), QStringLiteral("조판"));
         QSignalBlocker b(viewTabs_);
         viewTabs_->setCurrentIndex(1);
         viewTabs_->setVisible(true);
@@ -1167,8 +1167,7 @@ void MainWindow::showSheetTab(QDialog* d, std::function<void()> save) {
     for (auto* b : d->findChildren<QPushButton*>()) {
         if (b->text() == QStringLiteral("전체화면") || b->text() == QStringLiteral("원래 크기")) {
             b->disconnect();
-            b->setText(QStringLiteral("작업으로"));
-            QObject::connect(b, &QPushButton::clicked, this, [this] { showWorkTab(); });
+            b->hide();   // v4: 「작업으로」 단추는 없앰 — 문서 탭 「작업」 · Esc 와 같은 일
         }
     }
     for (auto* sc : d->findChildren<QShortcut*>()) sc->deleteLater();
@@ -1185,7 +1184,7 @@ QWidget* MainWindow::buildSheetSide() {
     auto* w = new QWidget; w->setObjectName("sidePanel"); w->setAttribute(Qt::WA_StyledBackground);
     w->setFixedWidth(240);
     auto* v = new QVBoxLayout(w); v->setContentsMargins(10, 8, 10, 8); v->setSpacing(6);
-    v->addWidget(lbl(QStringLiteral("도면 목록"), "sectionHead"));
+    v->addWidget(lbl(QStringLiteral("단면 목록"), "sectionHead"));   // v4 D9: 작업 탭과 같은 이름 · 같은 자리
     auto* list = new QListWidget; list->setObjectName("sectionList"); list->setFocusPolicy(Qt::NoFocus); list->setSpacing(2);
     QObject::connect(list, &QListWidget::itemClicked, this, [this, list](QListWidgetItem* it) {
         const int row = list->row(it);

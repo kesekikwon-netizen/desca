@@ -96,13 +96,25 @@ QLabel#brand { color: #73726C; font-size: 11px; padding-right: 12px; }
 QLabel#groupLabel { color: #3D3D3A; font-size: 11px; font-weight: 700; }
 QFrame#groupSep { background: #DEDCD1; max-width: 1px; min-width: 1px; }
 
-QToolButton#ribbonTile { min-width: 58px; padding: 1px 2px 2px 2px; border: none; border-radius: 8px; background: transparent; color: #141413; font-size: 12px; }
-QToolButton#ribbonTile:hover { background: #F5F4ED; }
-QToolButton#ribbonTile:pressed { background: #F0EEE6; }
-QToolButton#ribbonTile:checked { background: transparent; }
-QToolButton#ribbonTile:checked:hover { background: #F5F4ED; }
+QToolButton#ribbonTile { padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #141413; font-size: 13px; }
+QToolButton#ribbonTile:hover { background: #F5F4ED; border-color: #C2C0B6; }
+QToolButton#ribbonTile:pressed { background: #E8E6DC; }
+QToolButton#ribbonTile:checked { background: #E3DACC; border-color: #B0AEA5; }
+QToolButton#ribbonTile:checked:hover { background: #E3DACC; }
 QToolButton#ribbonTile[tool="true"]:checked { font-weight: 700; }
-QToolButton#ribbonTile[primary="true"] { font-weight: 700; }
+QToolButton#ribbonTile[primary="true"] { font-weight: 700; color: #FFFFFF; background: #B5573A; border-color: #B5573A; padding: 0 16px; }
+QToolButton#ribbonTile[primary="true"]:hover { background: #A44D32; border-color: #A44D32; }
+QToolButton#ribbonTile[primary="true"]:pressed { background: #8F4229; }
+QToolButton#ribbonTile[primary="true"]:disabled { color: #73726C; background: #F0EEE6; border-color: #DEDCD1; }
+QTabBar#docTabs { background: #F0EEE6; border-bottom: 1px solid #DEDCD1; }
+QTabBar#docTabs::tab { background: transparent; color: #3D3D3A; border: 1px solid transparent; border-bottom: none; padding: 5px 14px; margin: 3px 2px 0 0; font-size: 13px; }
+QTabBar#docTabs::tab:selected { background: #FAF9F5; color: #141413; font-weight: 700; border-color: #DEDCD1; }
+QTabBar#docTabs::tab:hover:!selected { background: #F5F4ED; }
+QWidget#viewToggles { border: 1px solid #DEDCD1; border-radius: 6px; background: #FFFFFF; }
+QToolButton#viewToggle { border: 1px solid transparent; border-radius: 4px; padding: 0; background: transparent; }
+QToolButton#viewToggle:checked { background: #FFFFFF; border-color: #B0AEA5; }
+QToolButton#viewToggle:!checked { background: #F5F4ED; }
+QToolButton#viewToggle:hover { border-color: #C2C0B6; }
 QToolButton#ribbonTile::menu-indicator { image: none; width: 0px; }
 QToolButton#ribbonTile:disabled { color: #9C9A92; }
 

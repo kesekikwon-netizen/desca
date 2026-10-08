@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>평면도 조판 · 조판편집</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Noto+Sans+KR:wght@400;500;700&amp;family=Noto+Serif+KR:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#B5573A}a:hover{color:#8F4229}
+</style>
+</helmet>
+<div style="width: 1920px; height: 1040px; position: relative; overflow: hidden; background: #FAF9F5; color: #141413; font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; font-size: 13px">
+
+  <!-- 창 머리 -->
+  <div style="position: absolute; left: 0; top: 0; right: 0; height: 32px; display: flex; align-items: center; gap: 10px; padding: 0 0 0 12px; background: #FFFFFF; border-bottom: 1px solid #DEDCD1; font-size: 12px">
+    <img src="/_blob/a4ccd6c27ecc02cae77f5812794c19fd" alt="" style="width: 16px; height: 16px; border-radius: 3px">
+    <span>Production_2 — Kerf</span>
+    <span style="flex: 1"></span>
+    <span style="display: flex; height: 32px">
+      <span style="width: 46px; display: flex; align-items: center; justify-content: center"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5h10" stroke="#3D3D3A"></path></svg></span>
+      <span style="width: 46px; display: flex; align-items: center; justify-content: center"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="#3D3D3A"></rect></svg></span>
+      <span style="width: 46px; display: flex; align-items: center; justify-content: center"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0l10 10M10 0L0 10" stroke="#3D3D3A"></path></svg></span>
+    </span>
+  </div>
+
+  <!-- 탭 줄 (리본 접힘) -->
+  <div style="position: absolute; left: 0; top: 32px; right: 0; height: 36px; display: flex; align-items: stretch; padding: 0 12px; background: #FFFFFF; border-bottom: 1px solid #DEDCD1">
+    <button type="button" style="border: 0; background: transparent; padding: 0 16px; font: 13px 'Noto Sans KR', sans-serif; color: #3D3D3A">파일</button>
+    <a href="Work.dc.html" style="padding: 0 16px; display: flex; align-items: center; font: 13px 'Noto Sans KR', sans-serif; color: #3D3D3A; text-decoration: none">홈</a>
+    <button type="button" style="border: 0; background: transparent; padding: 0 16px; font: 13px 'Noto Sans KR', sans-serif; color: #3D3D3A">보기</button>
+    <button type="button" style="border: 0; background: transparent; padding: 0 16px; font: 13px 'Noto Sans KR', sans-serif; color: #3D3D3A">자료</button>
+    <span style="flex: 1"></span>
+    <span style="display: flex; align-items: center; gap: 14px; font-size: 12px; color: #73726C"><span style="color: #3D3D3A">① 열기</span><span style="color: #3D3D3A">② 단면</span><span style="color: #141413; font-weight: 700">③ 도면</span></span>
+  </div>
+
+  <!-- 문서 탭 -->
+  <div style="position: absolute; left: 0; top: 68px; right: 0; height: 32px; display: flex; align-items: flex-end; gap: 2px; padding: 0 12px; background: #F0EEE6; border-bottom: 1px solid #DEDCD1">
+    <a href="Work.dc.html" style="height: 28px; box-sizing: border-box; display: flex; align-items: center; padding: 0 14px; font: 13px 'Noto Sans KR', sans-serif; color: #3D3D3A; text-decoration: none; gap: 6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1"></rect><path d="M11 4v16"></path></svg>작업</a>
+    <span style="height: 29px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 14px; border: 1px solid #DEDCD1; border-bottom: 0; background: #FAF9F5; font-weight: 700; margin-bottom: -1px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="1"></rect><path d="M7 7h10v7H7zM7 17h6"></path></svg>조판 <button type="button" aria-label="조판 닫기" style="width: 20px; height: 20px; border: 0; background: transparent; color: #5E5D59; font-size: 14px; line-height: 20px">×</button></span>
+  </div>
+
+  <div style="position: absolute; left: 0; top: 100px; right: 0; bottom: 28px">
+
+    <!-- 목록 -->
+    <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 240px; background: #FAF9F5; border-right: 1px solid #DEDCD1">
+      <div style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-bottom: 1px solid #DEDCD1; font-weight: 700">단면 목록 <span style="font: 400 12px 'IBM Plex Mono', monospace; color: #73726C">3 + 평면도</span><span style="flex: 1"></span><button type="button" onClick="{{toggleAll}}" style="height: 22px; padding: 0 6px; display: flex; align-items: center; gap: 4px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font: 12px 'Noto Sans KR', sans-serif; color: #141413"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="2"></rect><path d="M8 12l3 3 5-6"></path></svg>{{allLabel}}</button></div>
+      <div style="display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-bottom: 1px solid #DEDCD1; background: #E3DACC">
+        <input type="checkbox" id="p-plan" checked="{{c.plan}}" onChange="{{togglePlan}}" style="width: 16px; height: 16px; margin: 2px 0 0; accent-color: #141413">
+        <div style="width: 56px; height: 44px; flex: none; border: 1px solid #C2C0B6; background: #FFFFFF url(/_blob/2bf1984eb1fefbc7136a6eb3a85a30ce) -20px -30px / 110px auto no-repeat"></div>
+        <label for="p-plan" style="display: flex; flex-direction: column; gap: 1px; min-width: 0">
+          <span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 15px; line-height: 20px">평면도</span>
+          <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A">맞춤 1:110 · A4 가로</span>
+          <span style="font: 11px 'IBM Plex Mono', monospace; color: #5E5D59">저장 안 됨</span>
+        </label>
+      </div>
+      <div style="padding: 8px 12px 4px; font-size: 11px; letter-spacing: 0.06em; color: #5E5D59; border-bottom: 1px solid #DEDCD1">단면도</div>
+      <div style="display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-bottom: 1px solid #DEDCD1">
+        <input type="checkbox" id="p-a" checked="{{c.a}}" onChange="{{toggleA}}" style="width: 16px; height: 16px; margin: 2px 0 0; accent-color: #141413">
+        <a href="Sheet.dc.html" aria-label="A–A′ 단면도 미리 보기" style="display: block; width: 56px; height: 44px; flex: none; box-sizing: border-box; border: 1px solid #C2C0B6; background: #FFFFFF url(/_blob/3f7cd9777b536c3cb3beb46ceaadcb90) -40px -30px / 160px auto no-repeat"></a>
+        <label for="p-a" style="display: flex; flex-direction: column; gap: 1px; min-width: 0">
+          <span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 15px; line-height: 20px">A–A′</span>
+          <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A">1:20 직접 · A4 가로</span>
+          <span style="font: 11px 'IBM Plex Mono', monospace; color: #7A5A00">▲ 빈 구간 1곳</span>
+        </label>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-bottom: 1px solid #DEDCD1">
+        <input type="checkbox" id="p-b" checked="{{c.b}}" onChange="{{toggleB}}" style="width: 16px; height: 16px; margin: 2px 0 0; accent-color: #141413">
+        <div style="width: 56px; height: 44px; flex: none; border: 1px solid #C2C0B6; background: #FFFFFF url(/_blob/f38f67f504570b396ad559e64a85c9a0) -150px -56px / 380px auto no-repeat"></div>
+        <label for="p-b" style="display: flex; flex-direction: column; gap: 1px; min-width: 0">
+          <span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 15px; line-height: 20px">B–B′</span>
+          <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A">맞춤 1:10 · A4 가로</span>
+          <span style="font: 11px 'IBM Plex Mono', monospace; color: #5E5D59">저장 10/07 17:10</span>
+        </label>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-bottom: 1px solid #DEDCD1">
+        <input type="checkbox" id="p-c" checked="{{c.c}}" onChange="{{toggleC}}" style="width: 16px; height: 16px; margin: 2px 0 0; accent-color: #141413">
+        <div style="width: 56px; height: 44px; flex: none; border: 1px solid #C2C0B6; background: #FFFFFF url(/_blob/f38f67f504570b396ad559e64a85c9a0) -10px -30px / 280px auto no-repeat"></div>
+        <label for="p-c" style="display: flex; flex-direction: column; gap: 1px; min-width: 0">
+          <span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 15px; line-height: 20px">C–C′</span>
+          <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A">맞춤 1:40 · A3 가로</span>
+          <span style="font: 11px 'IBM Plex Mono', monospace; color: #5E5D59">저장 안 됨</span>
+        </label>
+      </div>
+      <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 12px; border-top: 1px solid #DEDCD1; font-size: 11.5px; line-height: 18px; color: #5E5D59">줄을 누르면 그 도면을 미리 봄 · 칸 = 저장할 것<br>들어올 때는 고른 도면 하나만 칸이 켜짐</div>
+    </div>
+
+    <!-- 종이 -->
+    <div style="position: absolute; left: 240px; top: 0; right: 360px; bottom: 0; background: #F0EEE6">
+      <div style="height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid #DEDCD1; background: #F5F4ED; font-size: 12.5px; white-space: nowrap">
+        <span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border: 1px solid {{chipBorder}}; border-radius: 12px; background: {{chipBg}}; color: {{chipInk}}; font-size: 12px">{{chipLabel}} <span style="font-family: 'IBM Plex Mono', monospace; opacity: 0.85">{{chipKeys}}</span></span>
+        <span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">Production_2 평면도</span>
+        <span style="font-family: 'IBM Plex Mono', monospace; color: #5E5D59">A4 가로 · 1:110 · 1 / 1쪽</span>
+        <span style="flex: 1"></span>
+        <span style="color: #5E5D59">왼쪽 끌기 = 종이 옮기기</span>
+      </div>
+
+      <!-- 평면도 종이 (A4 가로) -->
+      <div style="position: absolute; left: 160px; top: 84px; width: 1000px; height: 707px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(20,20,19,0.12), 0 8px 24px rgba(20,20,19,0.10)">
+        <div style="position: absolute; left: 24px; top: 24px; width: 952px; height: 659px; box-sizing: border-box; border: 1.5px solid #141413"></div>
+        <img src="/_blob/2bf1984eb1fefbc7136a6eb3a85a30ce" alt="평면도 그림 칸: 정사영상" style="position: absolute; left: 84px; top: 64px; width: 620px; height: 520px; object-fit: cover; display: block">
+        <div style="position: absolute; left: 84px; top: 64px; width: 620px; height: 520px; box-sizing: border-box; border: 1px solid #141413"></div>
+        <div style="position: absolute; left: 84px; top: 44px; width: 620px; display: flex; justify-content: space-between; font: 9px 'IBM Plex Mono', monospace; color: #141413"><span>148,076</span><span>148,081</span><span>148,086</span><span>148,091</span><span>148,096</span></div>
+        <div style="position: absolute; left: 30px; top: 64px; height: 520px; width: 50px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; font: 9px 'IBM Plex Mono', monospace; color: #141413"><span>98,128</span><span>98,123</span><span>98,118</span><span>98,113</span><span>98,108</span></div>
+        <div style="position: absolute; left: 84px; top: 590px; font: 9px 'IBM Plex Mono', monospace; color: #3D3D3A">바깥 좌표 5 m · EPSG:5186</div>
+
+        <div style="position: absolute; left: 736px; top: 64px; width: 216px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+          <svg width="34" height="44" viewBox="0 0 34 44" aria-hidden="true"><path d="M17 2L28 38L17 30L6 38Z" fill="#141413"></path><path d="M17 2L17 30L6 38Z" fill="#FFFFFF" stroke="#141413" stroke-width="1"></path></svg>
+          <span style="font: 600 11px 'Noto Serif KR', serif">진북</span>
+        </div>
+        <div style="position: absolute; left: 736px; top: 140px; width: 216px; box-sizing: border-box; padding: 8px 10px; border: 1px solid #141413; display: flex; flex-direction: column; gap: 5px; font-size: 9.5px; line-height: 13px">
+          <b style="font-size: 10px">범례</b>
+          <span style="display: flex; gap: 6px; align-items: center"><i style="width: 18px; height: 10px; display: inline-block; background: #CFC6B4"></i>정사영상(실사 메시 위에서 본 모습)</span>
+          <span>좌표계 EPSG:5186 · 중부원점</span>
+          <span>높이 타원체고(파일 표기)</span>
+        </div>
+        <div style="position: absolute; left: 736px; top: 268px; width: 216px; display: flex; flex-direction: column; gap: 4px">
+          <svg width="182" height="12" viewBox="0 0 182 12" aria-hidden="true"><rect x="0.5" y="3" width="45" height="6" fill="#141413"></rect><rect x="45.5" y="3" width="45" height="6" fill="#FFFFFF" stroke="#141413"></rect><rect x="90.5" y="3" width="45" height="6" fill="#141413"></rect><rect x="135.5" y="3" width="45" height="6" fill="#FFFFFF" stroke="#141413"></rect></svg>
+          <span style="display: flex; justify-content: space-between; width: 182px; font: 9px 'IBM Plex Mono', monospace"><span>0</span><span>1</span><span>2</span><span>3</span><span>4 m</span></span>
+          <span style="font: 10px 'IBM Plex Mono', monospace">1 : 110</span>
+        </div>
+        <div style="position: absolute; left: 736px; top: 474px; width: 216px; height: 185px; box-sizing: border-box; border: 1px solid #141413; display: grid; grid-template-columns: 56px minmax(0, 1fr); font-size: 9.5px; line-height: 13px">
+          <span style="padding: 5px 6px; border-bottom: 1px solid #141413; border-right: 1px solid #141413">유적</span><span style="padding: 5px 6px; border-bottom: 1px solid #141413">[유적 이름]</span>
+          <span style="padding: 5px 6px; border-bottom: 1px solid #141413; border-right: 1px solid #141413">도면명</span><span style="padding: 5px 6px; border-bottom: 1px solid #141413; font-family: 'Noto Serif KR', serif">Production_2 평면도</span>
+          <span style="padding: 5px 6px; border-bottom: 1px solid #141413; border-right: 1px solid #141413">축척</span><span style="padding: 5px 6px; border-bottom: 1px solid #141413; font-family: 'IBM Plex Mono', monospace">1:110 (A4)</span>
+          <span style="padding: 5px 6px; border-bottom: 1px solid #141413; border-right: 1px solid #141413">높이</span><span style="padding: 5px 6px; border-bottom: 1px solid #141413">타원체고(표기)</span>
+          <span style="padding: 5px 6px; border-bottom: 1px solid #141413; border-right: 1px solid #141413">작성일</span><span style="padding: 5px 6px; border-bottom: 1px solid #141413; font-family: 'IBM Plex Mono', monospace">2026-10-08</span>
+          <span style="padding: 5px 6px; border-right: 1px solid #141413">작성</span><span style="padding: 5px 6px">[작성자]</span>
+        </div>
+
+        <sc-if value="{{editing}}" hint-placeholder-val="{{ true }}">
+          <div style="position: absolute; left: 80px; top: 60px; width: 628px; height: 528px; box-sizing: border-box; border: 2px dashed #141413"></div>
+          <div style="position: absolute; left: 92px; top: 72px; padding: 3px 8px; background: #30302E; color: #FAF9F5; border-radius: 4px; font-size: 11px">그림 칸 · 가운데 끌기 = 그림 이동 · 휠 = 축척(10단위)</div>
+        </sc-if>
+      </div>
+
+      <div style="position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 4px; background: #FFFFFF; border: 1px solid #C2C0B6; border-radius: 8px; white-space: nowrap">
+        <button type="button" style="height: 32px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 6px; background: transparent; font: 12.5px 'Noto Sans KR', sans-serif; color: #141413"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path><rect x="9" y="9" width="6" height="6"></rect></svg>맞춤 <span style="font: 11px 'IBM Plex Mono', monospace; color: #5E5D59">F</span></button>
+        <button type="button" aria-label="축소 −" style="height: 32px; width: 32px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: #141413"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.3-4.3M8.5 11h5"></path></svg></button>
+        <span style="font: 13px 'IBM Plex Mono', monospace; padding: 0 6px">100 %</span>
+        <button type="button" aria-label="확대 +" style="height: 32px; width: 32px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: #141413"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.3-4.3M8.5 11h5M11 8.5v5"></path></svg></button>
+        <span style="width: 1px; height: 20px; background: #DEDCD1; margin: 0 4px"></span>
+        <button type="button" onClick="{{toggleEdit}}" aria-pressed="{{editing}}" style="height: 32px; padding: 0 12px; border: 1px solid {{editBorder}}; border-radius: 6px; background: {{editBg}}; font: 12.5px 'Noto Sans KR', sans-serif; color: #141413; display: flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="1"></rect><path d="M12 7.5v9M7.5 12h9M10 9.5l2-2 2 2M10 14.5l2 2 2-2M9.5 10l-2 2 2 2M14.5 10l2 2-2 2"></path></svg>{{editLabel}}</button>
+        <span style="width: 1px; height: 20px; background: #DEDCD1; margin: 0 4px"></span>
+        <button type="button" disabled aria-label="이전 쪽" style="height: 32px; width: 32px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #9C9A92"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+        <span style="font: 12px 'IBM Plex Mono', monospace; color: #5E5D59">1 / 1</span>
+        <button type="button" disabled aria-label="다음 쪽" style="height: 32px; width: 32px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #9C9A92"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"></path></svg></button>
+      </div>
+    </div>
+
+    <!-- 설정 -->
+    <div style="position: absolute; top: 0; right: 0; bottom: 0; width: 360px; display: flex; flex-direction: column; background: #FAF9F5; border-left: 1px solid #DEDCD1">
+      <div style="padding: 14px 20px 0; display: flex; flex-direction: column; gap: 12px">
+        <div><div style="font-size: 11.5px; color: #5E5D59">고른 도면</div><div style="font-family: 'Noto Serif KR', Batang, serif; font-size: 22px; line-height: 30px">평면도</div></div>
+        <div style="display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px 12px; align-items: center">
+          <label for="pp-name" style="color: #3D3D3A">도면명</label>
+          <input id="pp-name" type="text" value="Production_2 평면도" style="height: 30px; box-sizing: border-box; padding: 0 8px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font: 13px 'Noto Sans KR', sans-serif; color: #141413">
+          <span style="color: #3D3D3A">용지</span>
+          <span style="display: flex; gap: 8px">
+            <span style="display: flex"><button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #141413; background: #E3DACC; font: 12.5px 'Noto Sans KR', sans-serif; color: #141413">A4</button><button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #C2C0B6; border-left: 0; background: #FFFFFF; font: 12.5px 'Noto Sans KR', sans-serif; color: #141413">A3</button></span>
+            <span style="display: flex"><button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #141413; background: #E3DACC; font: 12.5px 'Noto Sans KR', sans-serif; color: #141413">가로</button><button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #C2C0B6; border-left: 0; background: #FFFFFF; font: 12.5px 'Noto Sans KR', sans-serif; color: #141413">세로</button></span>
+          </span>
+          <label for="pp-scale" style="color: #3D3D3A">축척</label>
+          <span style="display: flex; align-items: center; gap: 10px">
+            <span style="display: flex; align-items: center; height: 30px; padding: 0 4px 0 8px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font-family: 'IBM Plex Mono', monospace"><span style="color: #5E5D59">1 :</span><input id="pp-scale" type="text" value="110" style="width: 44px; border: 0; background: transparent; font: 13px 'IBM Plex Mono', monospace; text-align: right; color: #141413"><span style="display: flex; flex-direction: column; font-size: 8px; line-height: 9px; color: #5E5D59; padding-left: 4px">▲<br>▼</span></span>
+            <span style="font-size: 12px; color: #5E5D59; line-height: 16px">맞춤 · 10씩<br>조판편집에서는 휠로도</span>
+          </span>
+          <span style="color: #3D3D3A">범위</span>
+          <span style="display: flex"><button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #141413; background: #E3DACC; font: 12.5px 'Noto Sans KR', sans-serif; color: #141413">지금 왼쪽 화면</button><button type="button" style="height: 28px; padding: 0 10px; border: 1px solid #C2C0B6; border-left: 0; background: #FFFFFF; font: 12.5px 'Noto Sans KR', sans-serif; color: #141413">모델 전체</button></span>
+        </div>
+        <div style="height: 1px; background: #DEDCD1"></div>
+        <div style="font-size: 11.5px; color: #5E5D59">바깥 도곽 · 평면도와 단면도 같음</div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; font-size: 12.5px">
+          <label style="display: flex; gap: 6px; align-items: center; color: #3D3D3A"><input type="checkbox" checked disabled style="accent-color: #141413">진북 나침반 <span style="color: #73726C">필수</span></label>
+          <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" checked style="accent-color: #141413">범례</label>
+          <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" checked style="accent-color: #141413">표제란 · 축척 막대</label>
+          <label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" checked style="accent-color: #141413">바깥 좌표 5 m</label>
+        </div>
+        <div style="height: 1px; background: #DEDCD1"></div>
+        <div style="display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px 12px; align-items: center">
+          <span style="color: #3D3D3A">형식</span>
+          <span style="display: flex"><button type="button" style="height: 28px; padding: 0 9px; border: 1px solid #C2C0B6; background: #FFFFFF; font: 12px 'IBM Plex Mono', monospace; color: #141413">PDF</button><button type="button" style="height: 28px; padding: 0 9px; border: 1px solid #141413; background: #E3DACC; font: 12px 'IBM Plex Mono', monospace; color: #141413">SVG</button><button type="button" style="height: 28px; padding: 0 9px; border: 1px solid #C2C0B6; border-left: 0; background: #FFFFFF; font: 12px 'IBM Plex Mono', monospace; color: #141413">DXF</button><button type="button" style="height: 28px; padding: 0 9px; border: 1px solid #C2C0B6; border-left: 0; background: #FFFFFF; font: 12px 'IBM Plex Mono', monospace; color: #141413">PNG</button><button type="button" style="height: 28px; padding: 0 9px; border: 1px solid #C2C0B6; border-left: 0; background: #FFFFFF; font: 12px 'IBM Plex Mono', monospace; color: #141413">TIFF</button></span>
+          <span style="color: #3D3D3A">층</span>
+          <label style="display: flex; gap: 6px; align-items: center; font-size: 12.5px"><input type="checkbox" checked style="accent-color: #141413">그리기용 빈 층 2 · 밑그림 잠금</label>
+        </div>
+      </div>
+
+      <section aria-label="도면 점검" style="margin: 14px 12px 0; padding: 12px 14px; background: #FFFFFF; border: 1px solid #C2C0B6; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-weight: 700">도면 점검</span><span style="font-size: 12px; color: #5E5D59">고른 {{count}}장 · 저장을 막지 않음</span></div>
+        <div style="display: flex; flex-direction: column; gap: 7px; font-size: 12px; line-height: 17px">
+          <div style="display: flex; gap: 8px"><span style="width: 14px; flex: none; padding-top: 1px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A5A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="확인 필요"><path d="M12 4l9 16H3z"></path><path d="M12 10v4.5M12 17.2v.3"></path></svg></span><span><b>높이 기준</b> 타원체고 표기 — 표제란 · 범례에 이 이름이 들어갑니다. <a href="Dialogs.dc.html">지정…</a></span></div>
+          <sc-if value="{{c.plan}}" hint-placeholder-val="{{ true }}"><div style="display: flex; gap: 8px"><span style="width: 14px; flex: none; padding-top: 1px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3F6B31" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="됨"><circle cx="12" cy="12" r="8.5"></circle><path d="M8 12.5l2.8 2.8L16 10"></path></svg></span><span><b>평면도 범위</b> 위에서 본 범위 26.9 × 16.1 m (3D 기울기 42°는 쓰지 않음)</span></div></sc-if>
+          <sc-if value="{{c.a}}" hint-placeholder-val="{{ false }}"><div style="display: flex; gap: 8px"><span style="width: 14px; flex: none; padding-top: 1px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A5A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="확인 필요"><path d="M12 4l9 16H3z"></path><path d="M12 10v4.5M12 17.2v.3"></path></svg></span><span><b>빈 구간</b> A–A′ 1곳 0.45 m — 그 구간은 입면 영상만 그려집니다. <a href="Work.dc.html">작업에서 보기</a></span></div></sc-if>
+          <sc-if value="{{someChecked}}" hint-placeholder-val="{{ true }}"><div style="display: flex; gap: 8px"><span style="width: 14px; flex: none; padding-top: 1px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3F6B31" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="됨"><circle cx="12" cy="12" r="8.5"></circle><path d="M8 12.5l2.8 2.8L16 10"></path></svg></span><span><b>축척</b> {{scaleSummary}}</span></div></sc-if>
+        </div>
+      </section>
+
+      <div style="margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 12px 20px 14px; border-top: 1px solid #DEDCD1">
+        <button type="button" style="height: 36px; padding: 0 12px; display: flex; align-items: center; gap: 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #3D3D3A"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8L3.5 9.7l5.9-.8z"></path></svg>이 설정을 기본으로</button>
+        <span style="flex: 1"></span>
+        <button type="button" disabled="{{saveDisabled}}" style="height: 36px; padding: 0 18px; border: 1px solid {{saveBorder}}; border-radius: 6px; background: {{saveBg}}; font: 700 13px 'Noto Sans KR', sans-serif; color: {{saveInk}}; display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"></path><path d="M4 15v5h16v-5"></path></svg>{{saveLabel}}</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 상태줄 -->
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 28px; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: #FFFFFF; border-top: 1px solid #DEDCD1; font-size: 12px; color: #3D3D3A; white-space: nowrap">
+    <span>{{statusText}}</span>
+    <span style="flex: 1"></span>
+    <span>수평 <span style="font-family: 'IBM Plex Mono', monospace">EPSG:5186</span> · 중부원점</span>
+    <a href="Dialogs.dc.html" style="height: 22px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; gap: 4px; border: 1px solid #E5D7A8; border-radius: 4px; background: #FBF6E6; font: 12px 'Noto Sans KR', sans-serif; color: #7A5A00; text-decoration: none"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h10M7 20.5h10M12 3.5v17"></path><path d="M12 8h3M12 12h4.5M12 16h3"></path></svg>높이 타원체고 · 확인 ▲</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1920,"height":1040}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { editing: true, plan: true, a: false, b: false, c: false };
+  }
+  flip(key) {
+    const next = Object.assign({}, this.state);
+    next[key] = !next[key];
+    this.setState(next);
+  }
+  renderVals() {
+    const s = this.state;
+    const count = (s.plan ? 1 : 0) + (s.a ? 1 : 0) + (s.b ? 1 : 0) + (s.c ? 1 : 0);
+    const all = count === 4;
+    const none = count === 0;
+    let saveLabel = count + '장 SVG 저장';
+    if (count === 1) saveLabel = 'SVG 저장';
+    if (none) saveLabel = '고른 도면 없음';
+    const parts = [];
+    if (s.plan) parts.push('평면도 맞춤 1:110');
+    if (s.a) parts.push('A–A′ 직접 1:20');
+    if (s.b) parts.push('B–B′ 맞춤 1:10');
+    if (s.c) parts.push('C–C′ 맞춤 1:40');
+    let status = none ? '조판 — 저장할 도면을 목록에서 고르세요' : '조판 — 고른 ' + count + '장 · 다 되면 「' + saveLabel + '」 · 돌아가기는 「작업」 탭 또는 Esc';
+    if (s.editing) status = '조판편집 — 휠 = 축척(10단위로 맞춤) · 가운데 끌기 = 그림 · 끝내려면 「편집 끝」 또는 Esc';
+    return {
+      editing: s.editing,
+      chipLabel: s.editing ? '조판편집' : '보기',
+      chipKeys: s.editing ? '휠 = 축척 · 가운데 끌기 = 그림' : '휠 = 종이 확대',
+      chipBg: s.editing ? '#30302E' : '#FFFFFF',
+      chipInk: s.editing ? '#FAF9F5' : '#141413',
+      chipBorder: s.editing ? '#30302E' : '#B0AEA5',
+      editLabel: s.editing ? '편집 끝' : '조판편집',
+      editBg: s.editing ? '#E3DACC' : 'transparent',
+      editBorder: s.editing ? '#B0AEA5' : 'transparent',
+      toggleEdit: () => this.setState({ editing: !s.editing }),
+      c: { plan: s.plan, a: s.a, b: s.b, c: s.c },
+      count: count,
+      someChecked: !none,
+      scaleSummary: parts.join(' · '),
+      allLabel: all ? '모두 풀기' : '모두',
+      saveLabel: saveLabel,
+      saveDisabled: none,
+      saveBg: none ? '#F0EEE6' : '#B5573A',
+      saveBorder: none ? '#DEDCD1' : '#B5573A',
+      saveInk: none ? '#73726C' : '#FFFFFF',
+      statusText: status,
+      togglePlan: () => this.flip('plan'),
+      toggleA: () => this.flip('a'),
+      toggleB: () => this.flip('b'),
+      toggleC: () => this.flip('c'),
+      toggleAll: () => { const v = !all; this.setState({ plan: v, a: v, b: v, c: v }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

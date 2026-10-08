@@ -2,6 +2,7 @@
 #include "mainwindow.hpp"
 
 #include <QApplication>
+#include <QClipboard>
 #include <QBuffer>
 #include <QCheckBox>
 #include <QComboBox>
@@ -55,31 +56,6 @@ namespace {
 QFrame* groupSep() { auto* f = new QFrame; f->setObjectName("groupSep"); f->setFrameShape(QFrame::NoFrame); return f; }
 
 enum TileKind { TileNormal, TilePrimary, TileTool, TileToggle };
-// 타일 아이콘: 44 px 둥근 면(평소 desk, 켜짐 oat, 손에 든 도구 hand, 주 단추 흙색) + 가운데 24 px 선 그림
-QIcon tileIcon(theme::Ico k, TileKind kind) {
-    QIcon out;
-    auto add = [&](QColor bg, QColor ink, QColor edge, QIcon::State st) {
-        for (int sc : {1, 2}) {
-            int S = 44 * sc;
-            QPixmap pm(S, S); pm.fill(Qt::transparent);
-            QPainter p(&pm); p.setRenderHint(QPainter::Antialiasing);
-            p.setPen(edge.isValid() ? QPen(edge, sc) : QPen(Qt::NoPen)); p.setBrush(bg);
-            p.drawRoundedRect(QRectF(0.5 * sc, 0.5 * sc, S - sc, S - sc), 8 * sc, 8 * sc);
-            QPixmap g = theme::icon(k, 24, ink).pixmap(24 * sc, 24 * sc);
-            p.drawPixmap(QRectF((S - 24 * sc) / 2.0, (S - 24 * sc) / 2.0, 24 * sc, 24 * sc), g, QRectF(0, 0, g.width(), g.height()));
-            p.end();
-            out.addPixmap(pm, QIcon::Normal, st);
-        }
-    };
-    switch (kind) {
-    case TilePrimary: add(theme::Action, Qt::white, QColor(), QIcon::Off); break;
-    case TileTool: add(theme::Desk, theme::Ink, QColor(), QIcon::Off); add(theme::Hand, theme::Ground, QColor(), QIcon::On); break;
-    case TileToggle: add(theme::Desk, theme::Ink, QColor(), QIcon::Off); add(theme::Oat, theme::Ink, theme::Ring, QIcon::On); break;
-    default: add(theme::Desk, theme::Ink, QColor(), QIcon::Off); break;
-    }
-    return out;
-}
-
 // 단추 ↔ 동작 묶기(setDefaultAction 은 동작이 바뀔 때마다 글자·아이콘을 동작 것으로 덮으므로 직접 동기화)
 void bindButton(QToolButton* b, QAction* a) {
     b->setCheckable(a->isCheckable());
@@ -98,13 +74,15 @@ void bindButton(QToolButton* b, QAction* a) {
     });
 }
 
+// v4 한 줄 리본: 아이콘(18 px) 옆 글자, 높이 32. 주 단추는 흰 아이콘(바탕은 스타일시트의 흙색)
 QToolButton* tile(QAction* a, theme::Ico k, TileKind kind = TileNormal, const QString& text = {}) {
     auto* b = new QToolButton;
     b->setObjectName("ribbonTile");
-    b->setIcon(tileIcon(k, kind));
+    b->setIcon(theme::icon(k, 18, kind == TilePrimary ? QColor(Qt::white) : theme::Ink));
     b->setText(text.isEmpty() ? a->iconText() : text);
-    b->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
-    b->setIconSize(QSize(44, 44));
+    b->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    b->setIconSize(QSize(18, 18));
+    b->setFixedHeight(32);
     b->setFocusPolicy(Qt::NoFocus);
     if (kind == TilePrimary) b->setProperty("primary", true);
     if (kind == TileTool) b->setProperty("tool", true);
@@ -198,57 +176,61 @@ QWidget* MainWindow::buildRibbon() {
     auto* th = new QHBoxLayout(top); th->setContentsMargins(8, 2, 8, 2); th->setSpacing(6);
     tabs_ = new QTabBar; tabs_->setObjectName("ribbonTabs"); tabs_->setDrawBase(false); tabs_->setExpanding(false); tabs_->setFocusPolicy(Qt::NoFocus);
     struct T { const char* ko; const char* en; };
-    const T tabNames[] = {{"파일", "File"}, {"홈", "Home"}, {"보기", "View"}, {"측정", "Measure"}, {"내보내기", "Export"}};
+    // v4: 탭 넷. 옛 「측정」은 없애고(평활 → 보기, 지우기 → 목록), 옛 「내보내기」는 숫자 자료만 남아 「자료」(그림은 홈 › 도면의 조판)
+    const T tabNames[] = {{"파일", "File"}, {"홈", "Home"}, {"보기", "View"}, {"자료", "Data"}};
     for (auto& t : tabNames) { int i = tabs_->addTab(QString()); labels_.push_back({tabs_, QString::fromUtf8(t.ko), QString::fromUtf8(t.en), 100 + i}); }
     th->addWidget(tabs_);
     th->addStretch();
     th->addWidget(buildSteps());
-    for (const char* k : {"undo", "redo"}) {
-        auto* b = new QToolButton; b->setObjectName("undoBtn"); b->setDefaultAction(action(k)); b->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    {   // 되돌리기 단추 하나(다시 = Ctrl+Y 는 키만)
+        auto* b = new QToolButton; b->setObjectName("undoBtn"); b->setDefaultAction(action("undo")); b->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         b->setIconSize(QSize(16, 16)); b->setFocusPolicy(Qt::NoFocus);
         th->addWidget(b);
     }
     v->addWidget(top);
     refreshSteps();
-    pages_ = new QStackedWidget; pages_->setFixedHeight(96);
+    pages_ = new QStackedWidget; pages_->setFixedHeight(44);   // v4 한 줄 리본
     v->addWidget(pages_);
 
     using G = std::pair<std::pair<QString, QString>, QWidget*>;
-    auto addPage = [&](std::vector<G> groups) {
-        auto* page = new QWidget; auto* h = new QHBoxLayout(page); h->setContentsMargins(10, 4, 10, 4); h->setSpacing(10);
+    // 한 줄: 묶음 이름(앞) + 단추들, 묶음 사이 세로 구분선. tail = 오른쪽 끝(주 단추 · 안내 글)
+    auto addPage = [&](std::vector<G> groups, QWidget* tail) {
+        auto* page = new QWidget; auto* h = new QHBoxLayout(page); h->setContentsMargins(10, 0, 10, 0); h->setSpacing(4);
         for (size_t i = 0; i < groups.size(); ++i) {
-            auto* g = new QWidget; auto* gl = new QVBoxLayout(g); gl->setContentsMargins(0, 0, 0, 0); gl->setSpacing(2);
-            auto* lb = new QLabel; lb->setObjectName("groupLabel"); lb->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-            labels_.push_back({lb, groups[i].first.first, groups[i].first.second, 1});
-            gl->addWidget(lb);
-            gl->addWidget(groups[i].second, 1);
-            h->addWidget(g);
-            if (i + 1 < groups.size()) h->addWidget(groupSep());
+            if (!groups[i].first.first.isEmpty()) {
+                auto* lb = new QLabel; lb->setObjectName("groupLabel");
+                labels_.push_back({lb, groups[i].first.first, groups[i].first.second, 1});
+                h->addWidget(lb);
+                h->addSpacing(4);
+            }
+            h->addWidget(groups[i].second);
+            if (i + 1 < groups.size()) { h->addSpacing(8); h->addWidget(groupSep()); h->addSpacing(8); }
         }
         h->addStretch();
+        if (tail) h->addWidget(tail);
         pages_->addWidget(page);
     };
     auto rowOf = [](std::initializer_list<QWidget*> ws) {
-        auto* w = new QWidget; auto* l = new QHBoxLayout(w); l->setContentsMargins(0, 0, 0, 0); l->setSpacing(4);
-        for (auto* x : ws) l->addWidget(x, 0, Qt::AlignTop);
+        auto* w = new QWidget; auto* l = new QHBoxLayout(w); l->setContentsMargins(0, 0, 0, 0); l->setSpacing(2);
+        for (auto* x : ws) l->addWidget(x, 0, Qt::AlignVCenter);
         return w;
     };
     auto K = [](const char* s) { return QString::fromUtf8(s); };
 
     recentMenu_ = new QMenu(this);
     auto recentTile = [&]() {
-        auto* b = tile(action("recent"), I::Recent, TileNormal, QStringLiteral("최근"));
+        auto* b = tile(action("recent"), I::Recent, TileNormal, QStringLiteral("최근 ▾"));
         b->setMenu(recentMenu_); b->setPopupMode(QToolButton::InstantPopup);
         return b;
     };
-    // ---- 파일
-    addPage({{{K("파일"), "File"}, rowOf({tile(action("open"), I::Open), recentTile(), tile(action("close"), I::Close)})},
-             {{K("단면 목록"), "Sections"}, rowOf({tile(action("secjson"), I::Csv), tile(action("secimport"), I::Open)})},
-             {{K("도움말"), "Help"}, rowOf({tile(action("keys"), I::Keys), tile(action("about"), I::Info)})},
-             {{K("끝내기"), "Exit"}, rowOf({tile(action("quit"), I::Close)})}});
-    // ---- 홈
+    // ---- 파일: 모델 단위 일
+    addPage({{{K("모델"), "Model"}, rowOf({tile(action("open"), I::Open), recentTile(), tile(action("close"), I::Close)})},
+             {{K("도움말"), "Help"}, rowOf({tile(action("keys"), I::Keys), tile(action("about"), I::Info, TileNormal, QStringLiteral("Kerf 정보"))})},
+             {{QString(), QString()}, rowOf({tile(action("quit"), I::Close)})}},
+            nullptr);
+    // ---- 홈: 단면 · 뒤 깊이 · 도면(주 단추 하나)
     front_ = new QDoubleSpinBox; back_ = new QDoubleSpinBox;
-    for (auto* sp : {front_, back_}) { sp->setRange(0, kMaxBandDepth); sp->setDecimals(2); sp->setSingleStep(0.05); sp->setSuffix(" m"); sp->setFixedWidth(80); sp->setAlignment(Qt::AlignRight); }
+    for (auto* sp : {front_, back_}) { sp->setRange(0, kMaxBandDepth); sp->setDecimals(2); sp->setSingleStep(0.05); sp->setSuffix(" m"); sp->setFixedWidth(76); sp->setAlignment(Qt::AlignRight); }
     front_->setToolTip(QStringLiteral("단면선 앞쪽(보는 사람 쪽) 두께, 0–5 m"));
     back_->setToolTip(QStringLiteral("단면선 뒤쪽(보는 방향) 깊이 — 입면 영상(배경)에 보이는 깊이, 0–5 m, 기본 3 m(입면도용). 숫자키 1–5 = 0.5 / 1 / 2 / 3 / 5 m"));
     auto* chips = new QWidget; { auto* h = new QHBoxLayout(chips); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(0);
@@ -256,39 +238,32 @@ QWidget* MainWindow::buildRibbon() {
         const double vals[5] = {0.5, 1, 2, 3, 5};
         for (int i = 0; i < 5; ++i) {
             auto* c = new QToolButton; c->setObjectName("chip"); c->setCheckable(true); c->setFocusPolicy(Qt::NoFocus);
-            c->setText(i == 4 ? QStringLiteral("5 m") : QString::number(vals[i], 'g', 2));
+            c->setText(QString::number(vals[i], 'g', 2));
             c->setToolTip(QStringLiteral("뒤 깊이 %1 m (숫자키 %2)%3").arg(vals[i], 0, 'g', 2).arg(i + 1).arg(i == 3 ? QStringLiteral(" — 기본, 입면도용") : QString()));
             if (i == 0) c->setProperty("pos", "first");
             if (i == 4) c->setProperty("pos", "last");
             double v2 = vals[i];
             QObject::connect(c, &QToolButton::clicked, this, [this, v2] { setBackDepth(v2); });
             depthChip_[i] = c; h->addWidget(c);
-        }
-        h->addStretch(); }
-    auto* thick = new QWidget; { auto* g = new QGridLayout(thick); g->setContentsMargins(0, 0, 0, 0); g->setHorizontalSpacing(4); g->setVerticalSpacing(5);
-        g->addWidget(lab(QStringLiteral("앞"), "hint"), 0, 0); g->addWidget(front_, 0, 1); g->addWidget(lab(QStringLiteral("뒤"), "hint"), 0, 2); g->addWidget(back_, 0, 3);
-        g->addWidget(chips, 1, 0, 1, 4); }
+        } }
+    auto* depth = new QWidget; { auto* h = new QHBoxLayout(depth); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(6);
+        h->addWidget(chips);
+        h->addSpacing(6); h->addWidget(lab(QStringLiteral("뒤"), "hint")); h->addWidget(back_);
+        h->addSpacing(4); h->addWidget(lab(QStringLiteral("앞"), "hint")); h->addWidget(front_);
+        h->addSpacing(4); h->addWidget(lab(QStringLiteral("입면 배경 · 숫자키 1–5"), "faint")); }
+    // 레벨선 간격 글(옛 가짜 입력칸)은 리본에서 뺐다 — 갱신 코드가 쓰므로 위젯만 숨겨 둔다(범례는 정보 줄)
     lvLine_ = lab(QStringLiteral("0.10 m"), "mono"); lvLabel_ = lab(QStringLiteral("0.50 m"), "mono");
-    for (auto* l : {lvLine_, lvLabel_}) { l->setStyleSheet("QLabel{background:#FFFFFF;border:1px solid #C2C0B6;border-radius:4px;padding:1px 6px;}"); l->setMinimumWidth(62); l->setAlignment(Qt::AlignRight | Qt::AlignVCenter); }
-    lvLine_->setToolTip(QStringLiteral("레벨선 간격(지금 화면). 작업·인쇄 축척에서 10 cm, 너무 촘촘하면 자동으로 성기게"));
-    lvLabel_->setToolTip(QStringLiteral("표고 숫자 간격(지금 화면). 작업·인쇄 축척에서 50 cm"));
-    auto* lvBox = new QWidget; { auto* g = new QGridLayout(lvBox); g->setContentsMargins(0, 0, 0, 0); g->setHorizontalSpacing(4); g->setVerticalSpacing(4);
-        g->addWidget(lab(QStringLiteral("선"), "hint"), 0, 0); g->addWidget(lvLine_, 0, 1);
-        g->addWidget(lab(QStringLiteral("숫자"), "hint"), 1, 0); g->addWidget(lvLabel_, 1, 1); }
-    auto* fadeBtn = smallRow(action("fade"), QStringLiteral("깊이 음영"), QString());
-    addPage({{{K("파일"), "File"}, rowOf({tile(action("open"), I::Open), recentTile()})},
-             {{K("단면"), "Section"}, rowOf({tile(action("draw"), I::Draw, TileTool, QStringLiteral("단면선")),
-                                              vbox({smallRow(action("flip"), QStringLiteral("방향 반전"), "R"), smallRow(action("move"), QStringLiteral("평행 이동"), "[ ]"),
-                                                    smallRow(action("addsec"), QStringLiteral("단면 추가"), "N")}, 2)})},
-             {{K("두께 · 입면 깊이"), "Depth"}, thick},
-             {{K("단면 표시"), "Display"}, rowOf({tile(action("image"), I::Image, TileToggle), tile(action("line"), I::Line, TileToggle, QStringLiteral("단면선")),
-                                                  tile(action("levels"), I::Levels, TileToggle), vbox({lvBox, fadeBtn}, 4)})},
-             {{K("측정"), "Measure"}, rowOf({tile(action("info"), I::Info, TileNormal, QStringLiteral("단면 정보")), tile(action("height"), I::Height, TileNormal, QStringLiteral("높이 기준"))})},
-             {{K("내보내기"), "Export"}, rowOf({tile(action("sheet"), I::Sheet, TilePrimary, QStringLiteral("도면")), tile(action("dxf"), I::Dxf, TileNormal, QStringLiteral("DXF")),
-                                                tile(action("secimg"), I::Picture, TileNormal, QStringLiteral("영상"))})}});
-    // ---- 보기
+    for (auto* l : {lvLine_, lvLabel_}) { l->setParent(rib); l->hide(); }
+    auto* sheetBtn = tile(action("sheet"), I::Sheet, TilePrimary, QStringLiteral("도면  Ctrl+P"));
+    addPage({{{K("단면"), "Section"}, rowOf({tile(action("draw"), I::Draw, TileTool, QStringLiteral("단면선 긋기")),
+                                              tile(action("addsec"), I::Add, TileNormal, QStringLiteral("새 단면")),
+                                              tile(action("flip"), I::Flip),
+                                              tile(action("move"), I::Move, TileNormal, QStringLiteral("평행 이동 ▾"))})},
+             {{K("뒤 깊이"), "Depth"}, depth}},
+            sheetBtn);
+    // ---- 보기: 화면 배치 · 단면 그리기 · 읽기 쉽게 (탐색 · 전체화면은 화면 머리와 F11)
     opacity_ = new QSlider(Qt::Horizontal); opacity_->setRange(10, 100); opacity_->setValue(100); opacity_->setFixedWidth(110);
-    auto* opw = vbox({lab(QStringLiteral("영상 불투명도"), "hint"), opacity_}, 6);
+    auto* opw = rowOf({lab(QStringLiteral("영상 불투명도"), "hint"), opacity_});
     auto* lw = new QWidget; { auto* h = new QHBoxLayout(lw); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(0);
         const double ws[3] = {1.5, 2.0, 3.0};
         double cur = QSettings().value("view/sectionLineWidth", 2.0).toDouble();
@@ -306,22 +281,18 @@ QWidget* MainWindow::buildRibbon() {
                 for (int j = 0; j < 3; ++j) bs[size_t(j)]->setChecked(j == i);
                 QSettings().setValue("view/sectionLineWidth", wv); section_->setStyle(secStyle());
             });
-        }
-        h->addStretch(); }
-    auto* lwBox = vbox({lab(QStringLiteral("단면선 굵기 (인쇄 0.35 mm)"), "hint"), lw}, 6);
-    addPage({{{K("창"), "Windows"}, rowOf({tile(action("listpanel"), I::Csv, TileToggle), tile(action("view1"), I::Plan, TileToggle), tile(action("view2"), I::Line, TileToggle), tile(action("full"), I::Max, TileNormal, QStringLiteral("전체화면"))})},
-             {{K("탐색"), "Navigate"}, rowOf({tile(action("fit"), I::Fit), tile(action("top"), I::Plan), tile(action("zoomin"), I::ZoomIn), tile(action("zoomout"), I::ZoomOut)})},
-             {{K("단면 표시"), "Display"}, rowOf({opw, lwBox})},
-             {{K("화면"), "Screen"}, rowOf({tile(action("contrast"), I::Band, TileToggle), tile(action("lang"), I::Lang, TileToggle, QStringLiteral("English"))})}});
-    // ---- 측정(옛 「분석」)
-    addPage({{{K("단면 정리"), "Cleanup"}, rowOf({tile(action("smooth"), I::Smooth, TileToggle)})},
-             {{K("정보"), "Info"}, rowOf({tile(action("info"), I::Info, TileNormal, QStringLiteral("단면 정보")), tile(action("height"), I::Height, TileNormal, QStringLiteral("높이 기준"))})},
-             {{K("단면"), "Section"}, rowOf({tile(action("flip"), I::Flip), tile(action("clear"), I::Clear, TileNormal, QStringLiteral("지우기"))})}});
-    // ---- 내보내기(옛 「추출」 포함)
-    addPage({{{K("도면"), "Sheet"}, rowOf({tile(action("plansheet"), I::Plan, TilePrimary, QStringLiteral("평면도")), tile(action("sectionsheet"), I::Sheet, TileNormal, QStringLiteral("단면도"))})},
-             {{K("단면"), "Section"}, rowOf({tile(action("dxf"), I::Dxf, TileNormal, QStringLiteral("DXF")), tile(action("secimg"), I::Picture, TileNormal, QStringLiteral("영상")), tile(action("csv"), I::Csv, TileNormal, QStringLiteral("CSV"))})},
-             {{K("평면"), "Plan"}, rowOf({tile(action("plan"), I::Geo, TileNormal, QStringLiteral("GeoTIFF"))})},
-             {{K("점군"), "Point Cloud"}, rowOf({tile(action("xyz"), I::Xyz, TileNormal, QStringLiteral("XYZ")), tile(action("las"), I::Las, TileNormal, QStringLiteral("LAS"))})}});
+        } }
+    auto* lwBox = rowOf({lab(QStringLiteral("단면선 굵기"), "hint"), lw});
+    addPage({{{K("화면 배치"), "Layout"}, rowOf({tile(action("listpanel"), I::Csv, TileToggle), tile(action("view1"), I::Plan, TileToggle), tile(action("view2"), I::Line, TileToggle)})},
+             {{K("단면 그리기"), "Drawing"}, rowOf({opw, lab(QStringLiteral(" "), "hint"), lwBox, tile(action("smooth"), I::Smooth, TileToggle)})},
+             {{K("읽기 쉽게"), "Readability"}, rowOf({tile(action("contrast"), I::Band, TileToggle), tile(action("lang"), I::Lang, TileToggle, QStringLiteral("영어 병기"))})}},
+            nullptr);
+    // ---- 자료: 숫자 · 좌표 자료만
+    addPage({{{K("단면 자료"), "Section"}, rowOf({tile(action("csv"), I::Csv, TileNormal, QStringLiteral("단면선 CSV"))})},
+             {{K("평면 자료"), "Plan"}, rowOf({tile(action("plan"), I::Geo, TileNormal, QStringLiteral("평면 GeoTIFF"))})},
+             {{K("점군"), "Point Cloud"}, rowOf({tile(action("xyz"), I::Xyz, TileNormal, QStringLiteral("XYZ")), tile(action("las"), I::Las, TileNormal, QStringLiteral("LAS"))})},
+             {{K("단면 목록"), "Sections"}, rowOf({tile(action("secjson"), I::Csv, TileNormal, QStringLiteral("내보내기")), tile(action("secimport"), I::Open, TileNormal, QStringLiteral("가져오기"))})}},
+            lab(QStringLiteral("그림(평면도 · 단면도)은 홈 › 도면 Ctrl+P 의 조판에서"), "hint"));
     QObject::connect(tabs_, &QTabBar::currentChanged, pages_, &QStackedWidget::setCurrentIndex);
     return rib;
 }
@@ -398,6 +369,7 @@ QWidget* MainWindow::buildPlanFrame() {
         QObject::connect(a, &QAction::triggered, this, fn);
         h->addWidget(iconBtn(a));
     };
+    h->addWidget(iconBtn(action("top")));   // v4: 위에서(T) — 제자리
     mk(theme::Ico::Fit, QStringLiteral("맞춤 (F)"), [this] { plan_->fitAll(); });
     mk(theme::Ico::ZoomIn, QStringLiteral("확대"), [this] { plan_->zoomBy(1 / 1.4); });
     mk(theme::Ico::ZoomOut, QStringLiteral("축소"), [this] { plan_->zoomBy(1.4); });
@@ -416,9 +388,36 @@ QWidget* MainWindow::buildSectionFrame() {
     h->addSpacing(8);
     secFacing_ = lab(QString(), "facing"); h->addWidget(secFacing_);
     h->addStretch();
+    // v4: 그릴 것 켜기·끄기 넷은 영향을 받는 이 머리에만(리본에서 뺐다). 같은 동작이라 키(I · L · V)와 상태를 같이 씀
+    {
+        auto* box = new QWidget; box->setObjectName("viewToggles"); box->setAttribute(Qt::WA_StyledBackground);
+        auto* bl = new QHBoxLayout(box); bl->setContentsMargins(2, 2, 2, 2); bl->setSpacing(2);
+        const std::pair<const char*, theme::Ico> tg[] = {{"image", theme::Ico::Image}, {"line", theme::Ico::Line}, {"levels", theme::Ico::Levels}, {"fade", theme::Ico::Band}};
+        for (const auto& [key, ico] : tg) {
+            auto* b = new QToolButton; b->setObjectName("viewToggle"); b->setIcon(theme::icon(ico, 16)); b->setIconSize(QSize(16, 16));
+            b->setFocusPolicy(Qt::NoFocus); b->setFixedSize(28, 24);
+            bindButton(b, action(key));
+            b->setAccessibleName(action(key)->text());
+            bl->addWidget(b);
+        }
+        h->addWidget(box); h->addSpacing(6);
+    }
+    // 세로:가로 — 누르면 화면 세로 과장(×1·×2·×5·×10, X 키로 돌아가며). 기복이 작으면 추천을 함께 보여 줌
+    vexBtn_ = new QToolButton; vexBtn_->setObjectName("vexBtn"); vexBtn_->setFocusPolicy(Qt::NoFocus);
+    vexBtn_->setAutoRaise(true); vexBtn_->setPopupMode(QToolButton::InstantPopup);
+    {
+        auto* m = new QMenu(vexBtn_);
+        for (int k : {1, 2, 5, 10}) {
+            QAction* a = m->addAction(k == 1 ? QStringLiteral("세로:가로 1:1 (실제 비율)") : QStringLiteral("세로 ×%1 과장 (화면만)").arg(k));
+            QObject::connect(a, &QAction::triggered, this, [this, k] { setVex(k); });
+        }
+        vexBtn_->setMenu(m);
+    }
+    h->addWidget(vexBtn_); h->addSpacing(4);
     heightBadge_ = new QToolButton; heightBadge_->setObjectName("heightBadge"); heightBadge_->setFocusPolicy(Qt::NoFocus);
     QObject::connect(heightBadge_, &QToolButton::clicked, this, [this] { dlgHeightDatum(); });
-    h->addWidget(heightBadge_); h->addSpacing(6);
+    heightBadge_->setParent(secTitleBar_); heightBadge_->hide();   // v4: 높이 배지는 상태줄 하나만(감사 2 · 17). 갱신 코드는 그대로 둠
+    h->addSpacing(6);
     auto mk = [&](theme::Ico ic, const QString& tip, std::function<void()> fn) {
         auto* a = new QAction(theme::icon(ic, 16), tip, this);
         QObject::connect(a, &QAction::triggered, this, fn);
@@ -432,20 +431,8 @@ QWidget* MainWindow::buildSectionFrame() {
     auto* strip = new QWidget; strip->setObjectName("infoStrip"); strip->setAttribute(Qt::WA_StyledBackground); strip->setFixedHeight(26);
     auto* sh = new QHBoxLayout(strip); sh->setContentsMargins(10, 0, 10, 0); sh->setSpacing(14);
     stripLen_ = new QLabel; stripDepth_ = new QLabel; stripScale_ = new QLabel; stripState_ = new QLabel; stripLevels_ = new QLabel;
-    for (auto* l : {stripLen_, stripDepth_}) { l->setTextFormat(Qt::RichText); sh->addWidget(l); }
-    // 세로:가로 — 누르면 화면 세로 과장(×1·×2·×5·×10, X 키로 돌아가며). 기복이 작으면 추천을 함께 보여 줌
-    vexBtn_ = new QToolButton; vexBtn_->setObjectName("vexBtn"); vexBtn_->setFocusPolicy(Qt::NoFocus);
-    vexBtn_->setAutoRaise(true); vexBtn_->setPopupMode(QToolButton::InstantPopup);
-    {
-        auto* m = new QMenu(vexBtn_);
-        for (int k : {1, 2, 5, 10}) {
-            QAction* a = m->addAction(k == 1 ? QStringLiteral("세로:가로 1:1 (실제 비율)") : QStringLiteral("세로 ×%1 과장 (화면만)").arg(k));
-            QObject::connect(a, &QAction::triggered, this, [this, k] { setVex(k); });
-        }
-        vexBtn_->setMenu(m);
-    }
-    sh->addWidget(vexBtn_);
-    stripScale_->setTextFormat(Qt::RichText); sh->addWidget(stripScale_);
+    // v4: 정보 줄 = 계산 상태 + 범례만. 길이 · 앞뒤는 오른쪽 판, 화면 축척은 단면 머리 — 글 위젯은 갱신 코드가 쓰므로 숨겨 둠
+    for (auto* l : {stripLen_, stripDepth_, stripScale_}) { l->setTextFormat(Qt::RichText); l->setParent(strip); l->hide(); }
     stripState_->setTextFormat(Qt::RichText); sh->addWidget(stripState_);
     sh->addStretch();
     stripCut_ = new QLabel(QStringLiteral("잘린 면"));
@@ -454,7 +441,8 @@ QWidget* MainWindow::buildSectionFrame() {
     stripBand_->setObjectName("hint");
     sh->addWidget(stripCut_);
     sh->addWidget(stripBand_);
-    stripLevels_->setText(QStringLiteral("그리는 순서: 레벨선 → 영상 → 단면선"));
+    stripLevels_->setText(QStringLiteral("레벨선 10 cm · 숫자 50 cm"));
+    stripLevels_->setObjectName("hint");
     sh->addWidget(stripLevels_);
     v->addWidget(strip);
     v->addWidget(section_, 1);
@@ -654,10 +642,7 @@ QWidget* MainWindow::buildSidePanel() {
     auto* head = new QHBoxLayout; head->setSpacing(6);
     head->addWidget(lab(QStringLiteral("단면 목록"), "sectionHead"));
     secCount_ = lab(QStringLiteral("0"), "monoFaint"); head->addWidget(secCount_);
-    head->addStretch();
-    auto* add = new QToolButton; add->setText(QStringLiteral("＋ 새 단면")); add->setFocusPolicy(Qt::NoFocus); add->setToolTip(QStringLiteral("새 단면 추가 (N) — 다음 글자 이름으로 그리기 시작"));
-    QObject::connect(add, &QToolButton::clicked, this, [this] { addSection(); });
-    head->addWidget(add);
+    head->addStretch();   // v4: 「＋ 새 단면」은 리본 · N 키와 같아 목록 머리에서 뺐다
     v->addLayout(head);
     secList_ = new QListWidget; secList_->setObjectName("sectionList"); secList_->setFocusPolicy(Qt::NoFocus);
     secList_->setContextMenuPolicy(Qt::CustomContextMenu); secList_->setSpacing(2);
@@ -667,10 +652,12 @@ QWidget* MainWindow::buildSidePanel() {
         auto* it = secList_->itemAt(pt); if (!it) return;
         int i = secList_->row(it);
         QMenu m(this);
-        m.addAction(QStringLiteral("이 단면 보기"), this, [this, i] { selectSection(i); });
-        m.addAction(QStringLiteral("이름 바꾸기 / 메모…"), this, [this, i] { renameSection(i); });
+        // v4 메뉴: 아이콘 + 글자. 「이 단면의 도면」은 판에서 옮겨 온 것
+        m.addAction(theme::icon(theme::Ico::Sheet, 16), QStringLiteral("이 단면의 도면\tCtrl+P"), this, [this, i] { selectSection(i); dlgSheet(); });
+        m.addAction(theme::icon(theme::Ico::Flip, 16), QStringLiteral("방향 반전\tR"), this, [this, i] { selectSection(i); action("flip")->trigger(); });
+        m.addAction(theme::icon(theme::Ico::Draw, 16), QStringLiteral("이름 · 메모…\tF2"), this, [this, i] { renameSection(i); });
         m.addSeparator();
-        m.addAction(QStringLiteral("목록에서 지우기"), this, [this, i] { deleteSection(i); });
+        m.addAction(theme::icon(theme::Ico::Clear, 16, theme::Block), QStringLiteral("지우기…\tDel"), this, [this, i] { deleteSection(i); });
         m.exec(secList_->viewport()->mapToGlobal(pt));
     });
     v->addWidget(secList_, 1);
@@ -704,9 +691,19 @@ QWidget* MainWindow::buildInspector() {
     inspBody_ = new QLabel; inspBody_->setObjectName("mono"); inspBody_->setWordWrap(true); inspBody_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     v->addWidget(inspBody_);
     v->addStretch();
-    auto* go = new QPushButton(QStringLiteral("이 단면으로 도면  Ctrl+P"));   // 보조 단추: 흙색은 리본 「도면」 하나
-    QObject::connect(go, &QPushButton::clicked, this, [this] { dlgSheet(); });
-    v->addWidget(go);
+    // v4: 「이 단면으로 도면」은 리본 「도면」과 같아 목록 오른쪽 클릭으로만. 판 아래는 좌표 입력 · 복사(읽기 전용 판)
+    auto* row = new QHBoxLayout; row->setSpacing(6);
+    auto* coordBtn = new QPushButton(theme::icon(theme::Ico::Draw, 16), QStringLiteral("좌표 입력…  Enter"));
+    QObject::connect(coordBtn, &QPushButton::clicked, this, [this] { if (src_) dlgCoordEntry(); });
+    auto* copyBtn = new QPushButton(theme::icon(theme::Ico::Csv, 16), QStringLiteral("복사"));
+    copyBtn->setToolTip(QStringLiteral("끝점 좌표 · 길이 · 방위를 글로 복사"));
+    QObject::connect(copyBtn, &QPushButton::clicked, this, [this] {
+        QGuiApplication::clipboard()->setText(inspBody_->text());
+        showStatus(QStringLiteral("단면 수치를 복사했습니다"));
+    });
+    row->addWidget(coordBtn, 1); row->addWidget(copyBtn);
+    v->addLayout(row);
+    v->addWidget(lab(QStringLiteral("이 판은 읽기만 합니다. 값을 바꾸는 곳은 리본과 평면입니다."), "faint"));
     return w;
 }
 
@@ -1406,17 +1403,17 @@ MainWindow::MainWindow() {
     makeAction("about", QStringLiteral("프로그램 정보"), "About", I::Info);
     makeAction("keys", QStringLiteral("단축키"), "Shortcuts", I::Keys, "F1");
     makeAction("quit", QStringLiteral("끝내기"), "Exit", I::Close, "Ctrl+Q");
-    makeAction("draw", QStringLiteral("단면선 그리기"), "Draw Section", I::Draw, "S", true);
+    makeAction("draw", QStringLiteral("단면선 긋기"), "Draw Section", I::Draw, "S", true);
     makeAction("flip", QStringLiteral("방향 반전"), "Flip Direction", I::Flip, "R");
     makeAction("move", QStringLiteral("평행 이동"), "Offset", I::Move);
-    makeAction("addsec", QStringLiteral("단면 추가"), "Add Section", I::Add, "N");
+    makeAction("addsec", QStringLiteral("새 단면"), "New Section", I::Add, "N");
     makeAction("clear", QStringLiteral("단면선 지우기"), "Clear Line", I::Clear);
     makeAction("fit", QStringLiteral("맞춤"), "Fit View", I::Fit, "F");
     makeAction("top", QStringLiteral("위에서"), "Top", I::Plan, "T");
     makeAction("zoomin", QStringLiteral("확대"), "Zoom In", I::ZoomIn, "+");
     makeAction("zoomout", QStringLiteral("축소"), "Zoom Out", I::ZoomOut, "-");
     makeAction("image", QStringLiteral("입면 영상"), "Image", I::Image, "I", true)->setChecked(true);
-    makeAction("line", QStringLiteral("단면선"), "Profile Line", I::Line, "L", true)->setChecked(true);
+    makeAction("line", QStringLiteral("잘린 선"), "Cut Line", I::Line, "L", true)->setChecked(true);
     makeAction("levels", QStringLiteral("레벨선"), "Level Lines", I::Levels, "V", true)->setChecked(true);
     makeAction("smooth", QStringLiteral("평활"), "Smooth", I::Smooth, QString(), true);
     makeAction("fade", QStringLiteral("깊이 음영"), "Depth Shading", I::Band, QString(), true);
@@ -1463,7 +1460,9 @@ MainWindow::MainWindow() {
     ctxBar_ = buildCtxBar();
     v->addWidget(ctxBar_);
     viewTabs_ = new QTabBar; viewTabs_->setDocumentMode(true); viewTabs_->setExpanding(false); viewTabs_->setDrawBase(false);
-    viewTabs_->addTab(QStringLiteral("작업"));
+    viewTabs_->setObjectName("docTabs");
+    viewTabs_->addTab(theme::icon(theme::Ico::View2, 15), QStringLiteral("작업"));
+    viewTabs_->setVisible(false);   // v4: 문서 탭 줄은 조판 탭이 열렸을 때만(작업 하나뿐이면 숨김)
     v->addWidget(viewTabs_);
     body_ = new QStackedWidget;
     startPage_ = buildStartPage();

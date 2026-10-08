@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>대화 창과 메뉴</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Noto+Sans+KR:wght@400;500;700&amp;family=Noto+Serif+KR:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#B5573A}a:hover{color:#8F4229}
+</style>
+</helmet>
+<div style="width: 1920px; height: 1140px; position: relative; overflow: hidden; background: #E8E6DC; color: #141413; font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; font-size: 13px">
+
+  <div style="position: absolute; left: 48px; top: 28px; right: 48px; display: flex; align-items: baseline; gap: 20px">
+    <h1 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 30px">대화 창 · 오른쪽 클릭 메뉴</h1>
+    <p style="margin: 0; font-size: 14px; color: #3D3D3A">대화 창마다 흙색 주 단추는 하나. 지우기처럼 되돌리기 어려운 일은 흙색이 아니라 붉은 「지우기」. Enter = 주 단추, Esc = 취소.</p>
+  </div>
+
+  <!-- 높이 기준 지정 -->
+  <div style="position: absolute; left: 48px; top: 76px; font-size: 12px; color: #3D3D3A"><b style="color: #141413">높이 기준 지정</b> — 상태줄 배지 · 도면 점검 「지정…」에서 엶</div>
+  <div role="dialog" aria-label="높이 기준 지정" style="position: absolute; left: 48px; top: 100px; width: 560px; background: #FAF9F5; border: 1px solid #B0AEA5; box-shadow: 0 12px 32px rgba(20,20,19,0.18)">
+    <div style="height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 14px; background: #FFFFFF; border-bottom: 1px solid #DEDCD1; font-size: 12px"><span>높이 기준 지정</span><button type="button" aria-label="닫기" style="width: 46px; height: 32px; border: 0; background: transparent; font-size: 14px; color: #3D3D3A">×</button></div>
+    <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 10px">
+      <div style="font-family: 'Noto Serif KR', Batang, serif; font-size: 20px; line-height: 28px">이 모델의 높이는 어느 기준입니까?</div>
+      <div style="font-size: 12px; line-height: 18px; color: #5E5D59">Z 값은 바꾸지 않고 이름표만 바꿉니다. 이 이름이 도면 범례·표제란과 상태줄에 들어갑니다.</div>
+      <label style="display: flex; gap: 8px; align-items: center; margin-top: 4px"><input type="radio" name="vd" checked style="accent-color: #141413">파일 표기 그대로 — 타원체고</label>
+      <div style="font-size: 11px; color: #73726C; padding-left: 22px; margin-top: -6px">iTwin이 EPSG:5186을 3D로 올리며 붙인 이름</div>
+      <label style="display: flex; gap: 8px; align-items: center"><input type="radio" name="vd" style="accent-color: #141413">EGM96 지오이드 기준 높이 <span style="font-family: 'IBM Plex Mono', monospace; color: #5E5D59">EPSG:5773</span><span style="margin-left: 8px; font-size: 11px; color: #3F6B31">추천</span></label>
+      <div style="font-size: 11px; color: #73726C; padding-left: 22px; margin-top: -6px">측량 높이를 그대로 넣은 경우</div>
+      <label style="display: flex; gap: 8px; align-items: center"><input type="radio" name="vd" style="accent-color: #141413">EGM2008 지오이드 기준 높이 <span style="font-family: 'IBM Plex Mono', monospace; color: #5E5D59">EPSG:3855</span></label>
+      <label style="display: flex; gap: 8px; align-items: center"><input type="radio" name="vd" style="accent-color: #141413">KVD1964 정표고(인천만 평균해수면) <span style="font-family: 'IBM Plex Mono', monospace; color: #5E5D59">EPSG:5193</span></label>
+      <label style="display: flex; gap: 8px; align-items: center"><input type="radio" name="vd" style="accent-color: #141413">KNGeoid 지오이드 기준 정표고</label>
+      <label style="display: flex; gap: 8px; align-items: center"><input type="radio" name="vd" style="accent-color: #141413">타원체고</label>
+      <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px">
+        <button type="button" style="height: 34px; padding: 0 14px; border: 1px solid #C2C0B6; border-radius: 6px; background: #FFFFFF; font: 13px 'Noto Sans KR', sans-serif; color: #141413">취소</button>
+        <button type="button" style="height: 34px; padding: 0 18px; border: 1px solid #B5573A; border-radius: 6px; background: #B5573A; font: 700 13px 'Noto Sans KR', sans-serif; color: #FFFFFF; display: inline-flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h10M7 20.5h10M12 3.5v17"></path><path d="M12 8h3M12 12h4.5M12 16h3"></path></svg>지정</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 단면 지우기 -->
+  <div style="position: absolute; left: 48px; top: 636px; font-size: 12px; color: #3D3D3A"><b style="color: #141413">단면 지우기</b> — 목록 Del · 오른쪽 클릭 「지우기」</div>
+  <div role="dialog" aria-label="단면 지우기" style="position: absolute; left: 48px; top: 660px; width: 440px; background: #FAF9F5; border: 1px solid #B0AEA5; box-shadow: 0 12px 32px rgba(20,20,19,0.18)">
+    <div style="height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 14px; background: #FFFFFF; border-bottom: 1px solid #DEDCD1; font-size: 12px"><span>단면 지우기</span><button type="button" aria-label="닫기" style="width: 46px; height: 32px; border: 0; background: transparent; font-size: 14px; color: #3D3D3A">×</button></div>
+    <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 10px">
+      <div style="font-family: 'Noto Serif KR', Batang, serif; font-size: 20px; line-height: 28px">A–A′를 지울까요?</div>
+      <div style="font-size: 12.5px; line-height: 19px; color: #3D3D3A">되돌리기(Ctrl+Z)로 살릴 수 있습니다. 저장해 둔 도면 파일은 지우지 않습니다.</div>
+      <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px">
+        <button type="button" style="height: 34px; padding: 0 14px; border: 1px solid #C2C0B6; border-radius: 6px; background: #FFFFFF; font: 13px 'Noto Sans KR', sans-serif; color: #141413">취소</button>
+        <button type="button" style="height: 34px; padding: 0 18px; border: 1px solid #A33B3B; border-radius: 6px; background: #A33B3B; font: 700 13px 'Noto Sans KR', sans-serif; color: #FFFFFF; display: inline-flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"></path><path d="M10 11v5M14 11v5"></path></svg>지우기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 좌표 입력 -->
+  <div style="position: absolute; left: 680px; top: 76px; font-size: 12px; color: #3D3D3A"><b style="color: #141413">좌표 입력</b> — 긋는 중 Enter · 오른쪽 판 「좌표 입력…」</div>
+  <div role="dialog" aria-label="좌표 입력" style="position: absolute; left: 680px; top: 100px; width: 560px; background: #FAF9F5; border: 1px solid #B0AEA5; box-shadow: 0 12px 32px rgba(20,20,19,0.18)">
+    <div style="height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 14px; background: #FFFFFF; border-bottom: 1px solid #DEDCD1; font-size: 12px"><span>좌표 입력</span><button type="button" aria-label="닫기" style="width: 46px; height: 32px; border: 0; background: transparent; font-size: 14px; color: #3D3D3A">×</button></div>
+    <div style="padding: 20px 24px; display: flex; flex-direction: column; gap: 12px">
+      <div style="font-family: 'Noto Serif KR', Batang, serif; font-size: 20px; line-height: 28px">A와 A′는 어디입니까?</div>
+      <div style="font-size: 12px; line-height: 18px; color: #5E5D59">실좌표(m)입니다. 메시 로컬에 SRSOrigin을 더한 값이고, 높이는 바꾸지 않습니다.</div>
+      <div style="display: grid; grid-template-columns: 40px repeat(2, minmax(0, 1fr)); gap: 8px 12px; align-items: center">
+        <span></span><span style="font-size: 12px; color: #5E5D59">X (동)</span><span style="font-size: 12px; color: #5E5D59">Y (북)</span>
+        <span style="font: 700 17px 'Noto Serif KR', serif">A</span>
+        <input type="text" value="148083.065" aria-label="A X" style="height: 30px; box-sizing: border-box; padding: 0 8px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font: 13px 'IBM Plex Mono', monospace; text-align: right">
+        <input type="text" value="98121.100" aria-label="A Y" style="height: 30px; box-sizing: border-box; padding: 0 8px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font: 13px 'IBM Plex Mono', monospace; text-align: right">
+        <span style="font: 700 17px 'Noto Serif KR', serif">A′</span>
+        <input type="text" value="148084.595" aria-label="A′ X" style="height: 30px; box-sizing: border-box; padding: 0 8px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font: 13px 'IBM Plex Mono', monospace; text-align: right">
+        <input type="text" value="98118.520" aria-label="A′ Y" style="height: 30px; box-sizing: border-box; padding: 0 8px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font: 13px 'IBM Plex Mono', monospace; text-align: right">
+      </div>
+      <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px">
+        <button type="button" style="height: 34px; padding: 0 14px; border: 1px solid #C2C0B6; border-radius: 6px; background: #FFFFFF; font: 13px 'Noto Sans KR', sans-serif; color: #141413">취소</button>
+        <button type="button" style="height: 34px; padding: 0 18px; border: 1px solid #B5573A; border-radius: 6px; background: #B5573A; font: 700 13px 'Noto Sans KR', sans-serif; color: #FFFFFF; display: inline-flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19L19 5"></path><circle cx="5" cy="19" r="2.4"></circle><circle cx="19" cy="5" r="2.4"></circle></svg>단면선 적용</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 이름 · 메모 -->
+  <div style="position: absolute; left: 680px; top: 452px; font-size: 12px; color: #3D3D3A"><b style="color: #141413">이름 · 메모</b> — 목록 두 번 누름 · 오른쪽 판 연필</div>
+  <div role="dialog" aria-label="이름 · 메모" style="position: absolute; left: 680px; top: 476px; width: 560px; background: #FAF9F5; border: 1px solid #B0AEA5; box-shadow: 0 12px 32px rgba(20,20,19,0.18)">
+    <div style="height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 14px; background: #FFFFFF; border-bottom: 1px solid #DEDCD1; font-size: 12px"><span>이름 · 메모</span><button type="button" aria-label="닫기" style="width: 46px; height: 32px; border: 0; background: transparent; font-size: 14px; color: #3D3D3A">×</button></div>
+    <div style="padding: 20px 24px; display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px 12px; align-items: start">
+      <label for="dn-name" style="padding-top: 6px; color: #3D3D3A">이름</label>
+      <input id="dn-name" type="text" value="A–A′" style="height: 32px; box-sizing: border-box; padding: 0 8px; border: 1px solid #141413; border-radius: 4px; background: #FFFFFF; font: 16px 'Noto Serif KR', serif">
+      <label for="dn-memo" style="padding-top: 6px; color: #3D3D3A">메모</label>
+      <textarea id="dn-memo" rows="3" style="box-sizing: border-box; padding: 6px 8px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font: 13px/19px 'Noto Sans KR', sans-serif; resize: none">1호 구덩이 장축</textarea>
+      <span></span>
+      <span style="font-size: 11.5px; color: #5E5D59">이름은 도면명 · 파일 이름에 들어갑니다(예: Production_2_A-A′_1-20.svg).</span>
+      <span></span>
+      <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px">
+        <button type="button" style="height: 34px; padding: 0 14px; border: 1px solid #C2C0B6; border-radius: 6px; background: #FFFFFF; font: 13px 'Noto Sans KR', sans-serif; color: #141413">취소</button>
+        <button type="button" style="height: 34px; padding: 0 18px; border: 1px solid #B5573A; border-radius: 6px; background: #B5573A; font: 700 13px 'Noto Sans KR', sans-serif; color: #FFFFFF; display: inline-flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5"></path><path d="M4 15v5h16v-5"></path></svg>저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 단축키 F1 -->
+  <div style="position: absolute; left: 1312px; top: 76px; font-size: 12px; color: #3D3D3A"><b style="color: #141413">단축키</b> — F1 · 파일 › 단축키 · 홈 화면 「모든 키」</div>
+  <div role="dialog" aria-label="단축키" style="position: absolute; left: 1312px; top: 100px; width: 560px; background: #FAF9F5; border: 1px solid #B0AEA5; box-shadow: 0 12px 32px rgba(20,20,19,0.18)">
+    <div style="height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 0 0 14px; background: #FFFFFF; border-bottom: 1px solid #DEDCD1; font-size: 12px"><span>단축키</span><button type="button" aria-label="닫기" style="width: 46px; height: 32px; border: 0; background: transparent; font-size: 14px; color: #3D3D3A">×</button></div>
+    <div style="padding: 14px 20px 16px">
+      <table style="width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 18px">
+        <thead><tr style="text-align: left; color: #5E5D59; font-size: 11.5px"><th style="padding: 4px 8px 6px 0; border-bottom: 1px solid #141413; font-weight: 500; width: 150px">키</th><th style="padding: 4px 0 6px; border-bottom: 1px solid #141413; font-weight: 500">하는 일</th></tr></thead>
+        <tbody style="font-size: 12.5px">
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">Ctrl+O</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">모델 열기</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">Ctrl+Shift+O</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">이어서 열기(마지막 단면선 · 화면 그대로)</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">S</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">단면선 긋기 — A 클릭, A′ 클릭</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">Shift · Enter</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">(긋는 중) 동서 · 남북 고정 · 좌표 입력</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">Esc</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">긋기 취소 → 조판편집 끝 → 조판에서 작업 탭으로</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">1 2 3 4 5</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">뒤 깊이 0.5 / 1 / 2 / 3 / 5 m (입면 배경)</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">[ ] · { }</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">평행 이동 −/+0.1 m · −/+1 m (보는 쪽 +)</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">R · N</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">방향 반전(A↔A′) · 새 단면</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">I · L · V</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">입면 영상 · 잘린 선 · 레벨선 켜기/끄기</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">E (누르는 동안)</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">입면 배경을 30 %로 잠깐 흐리게</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">X</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">세로 과장 ×1 → ×2 → ×5 → ×10 (화면만 · 도면은 1:1)</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">F · T · + · −</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">맞춤 · 위에서 · 확대 · 축소</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">Ctrl+1 · Ctrl+2</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">평면 · 단면 보기 켜기/끄기</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">Ctrl+P</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">도면 — 조판 탭(고른 단면도, 없으면 평면도)</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">Ctrl+D · Ctrl+E</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">조판을 열고 형식 DXF(모델 1:1) · PNG로</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">Ctrl+Z · Ctrl+Y</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">되돌리기 · 다시 (200단계)</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">Del</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">(목록) 고른 단면 지우기 — 확인 창</td></tr>
+          <tr><td style="padding: 4px 8px 4px 0; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace">F11 · F1 · Ctrl+Q</td><td style="padding: 4px 0; border-bottom: 1px solid #DEDCD1">전체화면 · 이 표 · 끝내기</td></tr>
+        </tbody>
+      </table>
+      <div style="display: flex; justify-content: flex-end; margin-top: 12px"><button type="button" style="height: 34px; padding: 0 14px; border: 1px solid #C2C0B6; border-radius: 6px; background: #FFFFFF; font: 13px 'Noto Sans KR', sans-serif; color: #141413; display: inline-flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="1"></rect><path d="M9 9l6 6M15 9l-6 6"></path></svg>닫기</button></div>
+    </div>
+  </div>
+
+  <!-- 메뉴들 -->
+  <div style="position: absolute; left: 680px; top: 860px; font-size: 12px; color: #3D3D3A"><b style="color: #141413">단면 목록 · 오른쪽 클릭</b></div>
+  <div role="menu" aria-label="단면 목록 메뉴" style="position: absolute; left: 680px; top: 884px; width: 250px; padding: 4px 0; background: #FFFFFF; border: 1px solid #C2C0B6; box-shadow: 0 8px 20px rgba(20,20,19,0.14); font-size: 13px">
+    <div role="menuitem" style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px"><span style="display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="1"></rect><path d="M7 7h10v7H7zM7 17h6"></path></svg>이 단면의 도면</span><span style="font: 11.5px 'IBM Plex Mono', monospace; color: #5E5D59">Ctrl+P</span></div>
+    <div role="menuitem" style="height: 30px; display: flex; align-items: center; padding: 0 12px; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="1"></rect><path d="M16 8V4H4v12h4"></path><path d="M14 11v6M11 14h6"></path></svg>복제</div>
+    <div role="menuitem" style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px"><span style="display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h14M17 12l4 4-4 4M21 16H7"></path></svg>방향 반전</span><span style="font: 11.5px 'IBM Plex Mono', monospace; color: #5E5D59">R</span></div>
+    <div role="menuitem" style="height: 30px; display: flex; align-items: center; padding: 0 12px; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13 7l4 4"></path></svg>이름 · 메모…</div>
+    <div style="height: 1px; background: #DEDCD1; margin: 4px 0"></div>
+    <div role="menuitem" style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; color: #A33B3B"><span style="display: flex; align-items: center; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"></path><path d="M10 11v5M14 11v5"></path></svg>지우기…</span><span style="font: 11.5px 'IBM Plex Mono', monospace">Del</span></div>
+  </div>
+
+  <div style="position: absolute; left: 960px; top: 860px; font-size: 12px; color: #3D3D3A"><b style="color: #141413">최근 모델 · 오른쪽 클릭</b></div>
+  <div role="menu" aria-label="최근 모델 메뉴" style="position: absolute; left: 960px; top: 884px; width: 260px; padding: 4px 0; background: #FFFFFF; border: 1px solid #C2C0B6; box-shadow: 0 8px 20px rgba(20,20,19,0.14); font-size: 13px">
+    <div role="menuitem" style="height: 30px; display: flex; align-items: center; padding: 0 12px; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5h6l2 2h10V19H3z"></path></svg>열기</div>
+    <div role="menuitem" style="height: 30px; display: flex; align-items: center; padding: 0 12px; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5h6l2 2h10V19H3z"></path><path d="M12 17v-5M9.5 14.5L12 12l2.5 2.5"></path></svg>폴더 열기</div>
+    <div style="height: 1px; background: #DEDCD1; margin: 4px 0"></div>
+    <div role="menuitem" style="height: 30px; display: flex; align-items: center; padding: 0 12px; gap: 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="1"></rect><path d="M9 9l6 6M15 9l-6 6"></path></svg>목록에서 지우기 <span style="font-size: 11.5px; color: #73726C; margin-left: 6px">모델 파일은 그대로</span></div>
+  </div>
+
+  <div style="position: absolute; left: 1250px; top: 860px; font-size: 12px; color: #3D3D3A"><b style="color: #141413">세로 ×1 ▾</b></div>
+  <div role="menu" aria-label="세로 과장 메뉴" style="position: absolute; left: 1250px; top: 884px; width: 220px; padding: 4px 0; background: #FFFFFF; border: 1px solid #C2C0B6; box-shadow: 0 8px 20px rgba(20,20,19,0.14); font-size: 13px">
+    <div role="menuitemradio" aria-checked="true" style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px"><span style="width: 12px">✓</span>×1 실제 비율</div>
+    <div role="menuitemradio" style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px"><span style="width: 12px"></span>×2</div>
+    <div role="menuitemradio" style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px"><span style="width: 12px"></span>×5 <span style="font-size: 11.5px; color: #3F6B31">권장</span></div>
+    <div role="menuitemradio" style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px"><span style="width: 12px"></span>×10</div>
+    <div style="padding: 6px 12px 4px; border-top: 1px solid #DEDCD1; font-size: 11px; line-height: 16px; color: #5E5D59">화면만 · 도면은 늘 1:1 · X로 돌아감</div>
+  </div>
+
+  <div style="position: absolute; left: 1500px; top: 860px; font-size: 12px; color: #3D3D3A"><b style="color: #141413">단면 축척 ▾</b></div>
+  <div role="menu" aria-label="단면 축척 메뉴" style="position: absolute; left: 1500px; top: 884px; width: 180px; padding: 4px 0; background: #FFFFFF; border: 1px solid #C2C0B6; box-shadow: 0 8px 20px rgba(20,20,19,0.14); font: 13px 'IBM Plex Mono', monospace">
+    <div role="menuitemradio" style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px"><span style="width: 12px"></span>1:10</div>
+    <div role="menuitemradio" style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px"><span style="width: 12px"></span>1:20</div>
+    <div role="menuitemradio" style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px"><span style="width: 12px"></span>1:40</div>
+    <div role="menuitemradio" style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px"><span style="width: 12px"></span>1:100</div>
+    <div role="menuitemradio" aria-checked="true" style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-family: 'Noto Sans KR', sans-serif"><span style="width: 12px">✓</span>맞춤 <span style="font: 11.5px 'IBM Plex Mono', monospace; color: #5E5D59">1:13.6</span></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1920,"height":1140}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

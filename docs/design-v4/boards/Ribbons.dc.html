@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>리본 네 탭</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Noto+Sans+KR:wght@400;500;700&amp;family=Noto+Serif+KR:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#B5573A}a:hover{color:#8F4229}
+</style>
+</helmet>
+<div style="width: 1920px; height: 1240px; position: relative; overflow: hidden; background: #F0EEE6; color: #141413; font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; font-size: 13px">
+
+  <div style="position: absolute; left: 40px; top: 28px; right: 40px; display: flex; align-items: baseline; gap: 20px">
+    <h1 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 30px">리본 네 탭 · 화면 머리 · 그리는 동안</h1>
+    <p style="margin: 0; font-size: 14px; color: #3D3D3A">모든 탭이 한 줄(44 px). 흙색 주 단추는 홈 「도면」 하나. 그림 켜기·끄기와 축척은 화면 머리에, 숫자 자료는 자료 탭에.</p>
+  </div>
+
+  <!-- 홈 -->
+  <div style="position: absolute; left: 40px; top: 96px; font-size: 13px; color: #3D3D3A"><b style="color: #141413; font-size: 14px">홈</b> — 단면 · 뒤 깊이 · 도면. 단면 일만.</div>
+  <div style="position: absolute; left: 40px; top: 122px; width: 1840px; border: 1px solid #DEDCD1; background: #FFFFFF">
+    <div style="height: 36px; display: flex; align-items: stretch; padding: 0 12px; border-bottom: 1px solid #DEDCD1">
+      <span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A; border-bottom: 2px solid transparent">파일</span><span style="padding: 0 16px; display: flex; align-items: center; font-weight: 700; border-bottom: 2px solid #141413">홈</span><span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A; border-bottom: 2px solid transparent">보기</span><span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A; border-bottom: 2px solid transparent">자료</span>
+    </div>
+    <div style="height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 12px">
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">단면</span>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true"><path d="M5 19L19 5" stroke="#FF0000" stroke-linecap="round"></path><circle cx="5" cy="19" r="2.4" fill="#FFFFFF" stroke="#141413" stroke-width="1.4"></circle><circle cx="19" cy="5" r="2.4" fill="#FFFFFF" stroke="#141413" stroke-width="1.4"></circle></svg>단면선 긋기 <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px">S</span></button>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>새 단면 <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px">N</span></button>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4"></path><path d="M3 8h14"></path><path d="M17 12l4 4-4 4"></path><path d="M21 16H7"></path></svg>방향 반전 <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px">R</span></button>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 16L16 4"></path><path d="M8 20L20 8" stroke-dasharray="2 2.5"></path></svg>평행 이동 <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px">[ ]</span></button>
+      <span style="width: 1px; height: 24px; background: #DEDCD1; margin: 0 10px"></span>
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">뒤 깊이</span>
+      <span style="display: flex"><span style="height: 24px; min-width: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #141413; background: #E3DACC; font: 12px 'IBM Plex Mono', monospace">0.5</span><span style="height: 24px; min-width: 30px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #C2C0B6; border-left: 0; font: 12px 'IBM Plex Mono', monospace">1</span><span style="height: 24px; min-width: 30px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #C2C0B6; border-left: 0; font: 12px 'IBM Plex Mono', monospace">2</span><span style="height: 24px; min-width: 30px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #C2C0B6; border-left: 0; font: 12px 'IBM Plex Mono', monospace">3</span><span style="height: 24px; min-width: 30px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #C2C0B6; border-left: 0; font: 12px 'IBM Plex Mono', monospace">5</span></span>
+      <span style="padding-left: 8px; font-size: 12px; color: #3D3D3A">뒤 <span style="display: inline-block; width: 48px; height: 24px; box-sizing: border-box; vertical-align: middle; padding: 0 6px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font: 12px/22px 'IBM Plex Mono', monospace; text-align: right">0.50</span> <span style="font-family: 'IBM Plex Mono', monospace; color: #5E5D59">m</span></span>
+      <span style="padding-left: 8px; font-size: 12px; color: #3D3D3A">앞 <span style="display: inline-block; width: 48px; height: 24px; box-sizing: border-box; vertical-align: middle; padding: 0 6px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; font: 12px/22px 'IBM Plex Mono', monospace; text-align: right">0.00</span> <span style="font-family: 'IBM Plex Mono', monospace; color: #5E5D59">m</span></span>
+      <span style="font-size: 12px; color: #73726C; padding-left: 8px">입면 배경 · 숫자키 1–5</span>
+      <span style="flex: 1"></span>
+      <span style="height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border: 1px solid #B5573A; border-radius: 6px; background: #B5573A; font: 700 13px 'Noto Sans KR', sans-serif; color: #FFFFFF"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18"></rect><path d="M7 17h10M7 7h10v7H7z"></path></svg>도면 <span style="font: 400 11px 'IBM Plex Mono', monospace">Ctrl+P</span></span>
+    </div>
+  </div>
+
+  <!-- 보기 -->
+  <div style="position: absolute; left: 40px; top: 226px; font-size: 13px; color: #3D3D3A"><b style="color: #141413; font-size: 14px">보기</b> — 화면 배치 · 단면 그리기 · 읽기 쉽게. 어떻게 그릴지. 「탐색」 · 「전체화면」은 화면 머리와 F11로.</div>
+  <div style="position: absolute; left: 40px; top: 252px; width: 1840px; border: 1px solid #DEDCD1; background: #FFFFFF">
+    <div style="height: 36px; display: flex; align-items: stretch; padding: 0 12px; border-bottom: 1px solid #DEDCD1">
+      <span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A">파일</span><span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A">홈</span><span style="padding: 0 16px; display: flex; align-items: center; font-weight: 700; border-bottom: 2px solid #141413">보기</span><span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A">자료</span>
+    </div>
+    <div style="height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 12px">
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">화면 배치</span>
+      <button type="button" aria-pressed="true" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid #B0AEA5; border-radius: 6px; background: #E3DACC; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"></path><circle cx="5" cy="6" r="1"></circle><circle cx="5" cy="12" r="1"></circle><circle cx="5" cy="18" r="1"></circle></svg>단면 목록</button>
+      <button type="button" aria-pressed="true" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid #B0AEA5; border-radius: 6px; background: #E3DACC; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="4" width="16" height="16"></rect><path d="M4 12h16M12 4v16"></path></svg>평면 <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: #FFFFFF">Ctrl+1</span></button>
+      <button type="button" aria-pressed="true" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid #B0AEA5; border-radius: 6px; background: #E3DACC; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h5l3 9h4l3-9h5"></path></svg>단면 <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: #FFFFFF">Ctrl+2</span></button>
+      <span style="width: 1px; height: 24px; background: #DEDCD1; margin: 0 10px"></span>
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">단면 그리기</span>
+      <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #3D3D3A; padding: 0 6px">영상 불투명도 <input type="range" min="0" max="100" value="80" style="width: 110px; accent-color: #141413"> <span style="font-family: 'IBM Plex Mono', monospace; color: #141413">80 %</span></label>
+      <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #3D3D3A; padding: 0 6px">단면선 굵기 <span style="display: flex"><span style="height: 24px; padding: 0 7px; box-sizing: border-box; display: flex; align-items: center; border: 1px solid #C2C0B6; font: 12px 'IBM Plex Mono', monospace">1.5</span><span style="height: 24px; padding: 0 7px; box-sizing: border-box; display: flex; align-items: center; border: 1px solid #141413; background: #E3DACC; font: 12px 'IBM Plex Mono', monospace">2</span><span style="height: 24px; padding: 0 7px; box-sizing: border-box; display: flex; align-items: center; border: 1px solid #C2C0B6; border-left: 0; font: 12px 'IBM Plex Mono', monospace">3 px</span></span></span>
+      <button type="button" aria-pressed="false" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M3 12c3-4 6 4 9 0s6-4 9 0"></path></svg>평활</button>
+      <span style="width: 1px; height: 24px; background: #DEDCD1; margin: 0 10px"></span>
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">읽기 쉽게</span>
+      <button type="button" aria-pressed="false" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="#141413" stroke-width="1.7"></circle><path d="M12 4a8 8 0 010 16z" fill="#141413"></path></svg>고대비</button>
+      <button type="button" aria-pressed="false" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><span style="font: 700 12px 'IBM Plex Mono', monospace">A가</span>영어 병기</button>
+      <span style="font-size: 12px; color: #73726C; padding-left: 8px">큰 글씨는 기능이 생기면 이 묶음에</span>
+    </div>
+  </div>
+
+  <!-- 자료 -->
+  <div style="position: absolute; left: 40px; top: 356px; font-size: 13px; color: #3D3D3A"><b style="color: #141413; font-size: 14px">자료</b> — 옛 「내보내기」. 숫자 · 좌표 자료만. 그림은 모두 조판에서.</div>
+  <div style="position: absolute; left: 40px; top: 382px; width: 1840px; border: 1px solid #DEDCD1; background: #FFFFFF">
+    <div style="height: 36px; display: flex; align-items: stretch; padding: 0 12px; border-bottom: 1px solid #DEDCD1">
+      <span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A">파일</span><span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A">홈</span><span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A">보기</span><span style="padding: 0 16px; display: flex; align-items: center; font-weight: 700; border-bottom: 2px solid #141413">자료</span>
+    </div>
+    <div style="height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 12px">
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">단면 자료</span>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="4" width="16" height="16"></rect><path d="M4 9h16M4 14h16M10 4v16"></path></svg>단면선 CSV</button>
+      <span style="width: 1px; height: 24px; background: #DEDCD1; margin: 0 10px"></span>
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">평면 자료</span>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"></path><path d="M9 4v14M15 6v14"></path></svg>평면 GeoTIFF</button>
+      <span style="width: 1px; height: 24px; background: #DEDCD1; margin: 0 10px"></span>
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">점군</span>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="#141413" aria-hidden="true"><circle cx="6" cy="8" r="1.4"></circle><circle cx="12" cy="6" r="1.4"></circle><circle cx="17" cy="10" r="1.4"></circle><circle cx="8" cy="15" r="1.4"></circle><circle cx="15" cy="17" r="1.4"></circle></svg>XYZ</button>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="#141413" aria-hidden="true"><circle cx="6" cy="8" r="1.4"></circle><circle cx="12" cy="6" r="1.4"></circle><circle cx="17" cy="10" r="1.4"></circle><circle cx="8" cy="15" r="1.4"></circle><circle cx="15" cy="17" r="1.4"></circle></svg>LAS</button>
+      <span style="width: 1px; height: 24px; background: #DEDCD1; margin: 0 10px"></span>
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">단면 목록</span>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5"></path><path d="M4 15v5h16v-5"></path></svg>내보내기</button>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5"></path><path d="M4 15v5h16v-5"></path></svg>가져오기</button>
+      <span style="flex: 1"></span>
+      <span style="font-size: 12px; color: #5E5D59">그림(평면도 · 단면도, PDF · SVG · DXF · PNG · TIFF)은 <b style="color: #141413">홈 › 도면 Ctrl+P</b>의 조판에서</span>
+    </div>
+  </div>
+
+  <!-- 파일 -->
+  <div style="position: absolute; left: 40px; top: 486px; font-size: 13px; color: #3D3D3A"><b style="color: #141413; font-size: 14px">파일</b> — 모델 단위 일. 열기 · 최근 · 닫기 · 도움말 · 끝내기.</div>
+  <div style="position: absolute; left: 40px; top: 512px; width: 1840px; border: 1px solid #DEDCD1; background: #FFFFFF">
+    <div style="height: 36px; display: flex; align-items: stretch; padding: 0 12px; border-bottom: 1px solid #DEDCD1">
+      <span style="padding: 0 16px; display: flex; align-items: center; font-weight: 700; border-bottom: 2px solid #141413">파일</span><span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A">홈</span><span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A">보기</span><span style="padding: 0 16px; display: flex; align-items: center; color: #3D3D3A">자료</span>
+    </div>
+    <div style="height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 12px">
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">모델</span>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h6l2 2h10v11H3z"></path></svg>열기 <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px">Ctrl+O</span></button>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>최근 ▾ <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px">Ctrl+Shift+O</span></button>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16"></rect><path d="M9 9l6 6M15 9l-6 6"></path></svg>닫기</button>
+      <span style="width: 1px; height: 24px; background: #DEDCD1; margin: 0 10px"></span>
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">도움말</span>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><rect x="3" y="7" width="18" height="10" rx="1"></rect><path d="M7 11h1M11 11h1M15 11h1M8 14h8"></path></svg>단축키 <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px">F1</span></button>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 11v5M12 8v.5"></path></svg>Kerf 정보</button>
+      <span style="width: 1px; height: 24px; background: #DEDCD1; margin: 0 10px"></span>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 3v9"></path><path d="M6.3 7.5a8 8 0 1011.4 0"></path></svg>끝내기 <span style="font: 11px 'IBM Plex Mono', monospace; color: #3D3D3A; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px">Ctrl+Q</span></button>
+    </div>
+  </div>
+
+  <!-- 홈 · 좁은 창 -->
+  <div style="position: absolute; left: 40px; top: 616px; font-size: 13px; color: #3D3D3A"><b style="color: #141413; font-size: 14px">홈 · 좁은 창 1280 px</b> — 한 줄을 지킨다. 주 단추가 아닌 단추부터 글자를 숨기고 아이콘 + 툴팁(이름 · 키)만. 두 줄로 늘리지 않는다.</div>
+  <div style="position: absolute; left: 40px; top: 642px; width: 1280px; border: 1px solid #DEDCD1; background: #FFFFFF">
+    <div style="height: 44px; display: flex; align-items: center; gap: 2px; padding: 0 12px">
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">단면</span>
+      <button type="button" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: 13px 'Noto Sans KR', sans-serif; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true"><path d="M5 19L19 5" stroke="#FF0000" stroke-linecap="round"></path><circle cx="5" cy="19" r="2.4" fill="#FFFFFF" stroke="#141413" stroke-width="1.4"></circle><circle cx="19" cy="5" r="2.4" fill="#FFFFFF" stroke="#141413" stroke-width="1.4"></circle></svg>단면선 긋기</button>
+      <button type="button" aria-label="새 단면 N" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></button>
+      <button type="button" aria-label="방향 반전 R" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4"></path><path d="M3 8h14"></path><path d="M17 12l4 4-4 4"></path><path d="M21 16H7"></path></svg></button>
+      <button type="button" aria-label="평행 이동" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 6px; background: transparent; color: #141413"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 16L16 4"></path><path d="M8 20L20 8" stroke-dasharray="2 2.5"></path></svg></button>
+      <span style="width: 1px; height: 24px; background: #DEDCD1; margin: 0 8px"></span>
+      <span style="font-size: 11px; font-weight: 700; color: #3D3D3A; padding: 0 6px 0 2px">뒤 깊이</span>
+      <span style="display: flex"><span style="height: 24px; min-width: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #141413; background: #E3DACC; font: 12px 'IBM Plex Mono', monospace">0.5</span><span style="height: 24px; min-width: 30px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #C2C0B6; border-left: 0; font: 12px 'IBM Plex Mono', monospace">1</span><span style="height: 24px; min-width: 30px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #C2C0B6; border-left: 0; font: 12px 'IBM Plex Mono', monospace">2</span><span style="height: 24px; min-width: 30px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #C2C0B6; border-left: 0; font: 12px 'IBM Plex Mono', monospace">3</span><span style="height: 24px; min-width: 30px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #C2C0B6; border-left: 0; font: 12px 'IBM Plex Mono', monospace">5</span></span>
+      <span style="padding-left: 8px; font-size: 12px; color: #3D3D3A">뒤 <span style="display: inline-block; width: 48px; height: 24px; box-sizing: border-box; vertical-align: middle; padding: 0 6px; border: 1px solid #C2C0B6; border-radius: 4px; font: 12px/22px 'IBM Plex Mono', monospace; text-align: right">0.50</span></span>
+      <span style="padding-left: 8px; font-size: 12px; color: #3D3D3A">앞 <span style="display: inline-block; width: 48px; height: 24px; box-sizing: border-box; vertical-align: middle; padding: 0 6px; border: 1px solid #C2C0B6; border-radius: 4px; font: 12px/22px 'IBM Plex Mono', monospace; text-align: right">0.00</span></span>
+      <span style="flex: 1"></span>
+      <span style="height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 16px; border: 1px solid #B5573A; border-radius: 6px; background: #B5573A; font: 700 13px 'Noto Sans KR', sans-serif; color: #FFFFFF">도면 <span style="font: 400 11px 'IBM Plex Mono', monospace">Ctrl+P</span></span>
+    </div>
+  </div>
+  <div style="position: absolute; left: 1352px; top: 642px; width: 528px; font-size: 12.5px; line-height: 19px; color: #3D3D3A">숨기는 차례: 평행 이동 → 방향 반전 → 새 단면 → 「입면 배경 · 숫자키」 글. 「단면선 긋기」와 「도면」은 글자를 끝까지 둡니다.</div>
+
+  <!-- 화면 머리 -->
+  <div style="position: absolute; left: 40px; top: 722px; font-size: 13px; color: #3D3D3A"><b style="color: #141413; font-size: 14px">화면 머리 · 정보 줄</b> (실제 크기) — 그 화면을 어떻게 볼지. 켜기·끄기 넷은 리본에 없고 여기에만. 축척 칸은 단면 머리 하나.</div>
+  <div style="position: absolute; left: 40px; top: 748px; width: 652px; border: 1px solid #DEDCD1; background: #FFFFFF">
+    <div style="height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px">
+      <span style="font-weight: 700">평면</span><span style="color: #73726C; font-size: 12px">위에서 · 기울기 90°</span><span style="flex: 1"></span>
+      <button type="button" aria-label="위에서 T" style="width: 28px; height: 26px; border: 1px solid transparent; border-radius: 4px; background: transparent; display: flex; align-items: center; justify-content: center; color: #141413"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v8M9 8l3 3 3-3"></path><path d="M3.5 16l8.5-4.5 8.5 4.5-8.5 4.5z"></path></svg></button>
+      <button type="button" aria-label="맞춤 F" style="width: 28px; height: 26px; border: 1px solid transparent; border-radius: 4px; background: transparent; display: flex; align-items: center; justify-content: center; color: #141413"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path><rect x="9" y="9" width="6" height="6"></rect></svg></button>
+      <button type="button" aria-label="확대 +" style="width: 28px; height: 26px; border: 1px solid transparent; border-radius: 4px; background: transparent; display: flex; align-items: center; justify-content: center; color: #141413"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5M8.5 11h5M11 8.5v5"></path></svg></button>
+      <button type="button" aria-label="축소 −" style="width: 28px; height: 26px; border: 1px solid transparent; border-radius: 4px; background: transparent; display: flex; align-items: center; justify-content: center; color: #141413"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5M8.5 11h5"></path></svg></button>
+      <button type="button" aria-label="이 화면만 크게" style="width: 28px; height: 26px; border: 1px solid transparent; border-radius: 4px; background: transparent; display: flex; align-items: center; justify-content: center; color: #141413"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"></path></svg></button>
+    </div>
+  </div>
+  <div style="position: absolute; left: 732px; top: 748px; width: 728px; border: 1px solid #DEDCD1; background: #FFFFFF">
+    <div style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 12px; border-bottom: 2px solid #141413">
+      <span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 17px">A–A′ 단면</span><span style="color: #73726C; font-size: 12px; margin-left: 4px">북동쪽을 봄</span>
+      <span style="flex: 1"></span>
+      <span style="display: flex; gap: 2px; padding: 2px; border: 1px solid #DEDCD1; border-radius: 6px">
+        <span style="width: 26px; height: 24px; box-sizing: border-box; border: 1px solid #B0AEA5; border-radius: 4px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#141413" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="14"></rect><path d="M3 16l5-5 4 4 3-3 6 6"></path></svg></span>
+        <span style="width: 26px; height: 24px; box-sizing: border-box; border: 1px solid #B0AEA5; border-radius: 4px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#FF0000" stroke-width="2.2" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h5l3 9h4l3-9h5"></path></svg></span>
+        <span style="width: 26px; height: 24px; box-sizing: border-box; border: 1px solid #B0AEA5; border-radius: 4px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5E5D59" stroke-width="1.5" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg></span>
+        <span style="width: 26px; height: 24px; box-sizing: border-box; border: 1px solid #B0AEA5; border-radius: 4px; display: flex; align-items: center; justify-content: center"><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="6" height="12" fill="#141413"></rect><rect x="9" y="6" width="6" height="12" fill="#9C9A92"></rect><rect x="15" y="6" width="6" height="12" fill="#DEDCD1"></rect></svg></span>
+      </span>
+      <span style="height: 26px; box-sizing: border-box; display: flex; align-items: center; padding: 0 8px; border: 1px solid #C2C0B6; border-radius: 4px; font-size: 12px">세로 ×1 ▾</span>
+      <span style="height: 26px; width: 86px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; border: 1px solid #C2C0B6; border-radius: 4px; font: 12px 'IBM Plex Mono', monospace">1:13.6 <span style="color: #5E5D59">▾</span></span>
+      <span style="width: 28px; height: 26px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#141413" stroke-width="1.7" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path><rect x="9" y="9" width="6" height="6"></rect></svg></span>
+      <span style="width: 28px; height: 26px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#141413" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5M8.5 11h5M11 8.5v5"></path></svg></span>
+      <span style="width: 28px; height: 26px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#141413" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="M20 20l-4.5-4.5M8.5 11h5"></path></svg></span>
+      <span style="width: 28px; height: 26px; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#141413" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"></path></svg></span>
+    </div>
+    <div style="height: 30px; display: flex; align-items: center; gap: 14px; padding: 0 12px; background: #FAF9F5; font-size: 12px; white-space: nowrap">
+      <span style="color: #3F6B31">✓ 최종(잎) · 0.4 s</span><span>잘린 선 <b>2줄</b> · <span style="color: #7A5A00">빈 구간 <b>1곳 0.45 m</b></span></span>
+      <span style="height: 22px; box-sizing: border-box; display: flex; align-items: center; padding: 0 8px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF; gap: 4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-5.5-5-5.5-9.5a5.5 5.5 0 0111 0C17.5 15 12 20 12 20z"></path><circle cx="12" cy="10.5" r="2"></circle></svg>평면에서 보기</span>
+      <span style="flex: 1"></span>
+      <span style="display: flex; align-items: center; gap: 5px; color: #3D3D3A"><i style="width: 14px; height: 0; border-top: 2.5px solid #FF0000; display: inline-block"></i>잘린 면</span>
+      <span style="display: flex; align-items: center; gap: 5px; color: #3D3D3A"><i style="width: 12px; height: 10px; background: #D9D1C0; display: inline-block"></i>입면 뒤 0–0.5 m</span>
+    </div>
+  </div>
+  <div style="position: absolute; left: 1500px; top: 748px; width: 380px; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 5px 10px; font-size: 12px; line-height: 17px; color: #3D3D3A">
+    <b style="color: #141413">켜기·끄기 4</b><span>입면 영상 I · 잘린 선 L · 레벨선 V · 깊이 음영. 켜짐 = 흰 칸 + 회색 테</span>
+    <b style="color: #141413">세로 ×1 ▾</b><span>×1 · ×2 · ×5 · ×10, X로 돌아감. ×1이 아니면 귀리색</span>
+    <b style="color: #141413">축척 ▾</b><span>1:10 · 1:20 · 1:40 · 1:100 · 맞춤</span>
+    <b style="color: #141413">맞춤 · 확대 · 축소 · 크게</b><span>F · + · − · 이 화면만 크게(다시 누르면 원래대로)</span>
+  </div>
+
+  <!-- 그리는 동안 -->
+  <div style="position: absolute; left: 40px; top: 862px; font-size: 13px; color: #3D3D3A"><b style="color: #141413; font-size: 14px">그리는 동안</b> — 안내는 도구 줄 한 곳. 상태줄은 「다음:」을 숨기고 좌표만.</div>
+  <div style="position: absolute; left: 40px; top: 888px; width: 1840px; height: 36px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: #F5F4ED; border: 1px solid #DEDCD1; font-size: 12px; white-space: nowrap">
+    <span style="background: #30302E; color: #FAF9F5; border-radius: 6px; padding: 3px 10px; font-weight: 700">단면선 긋기 <span style="font-weight: 400; color: #DEDCD1">› A′ 찾는 중</span></span>
+    <span>끝점 A′를 클릭하세요</span>
+    <span style="width: 1px; height: 16px; background: #DEDCD1"></span>
+    <span style="font: 11px 'IBM Plex Mono', monospace; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: #FFFFFF">Shift</span><span style="color: #5E5D59">동서 · 남북 고정</span>
+    <span style="font: 11px 'IBM Plex Mono', monospace; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: #FFFFFF">Enter</span><span style="color: #5E5D59">좌표 입력</span>
+    <span style="font: 11px 'IBM Plex Mono', monospace; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: #FFFFFF">Esc</span><span style="color: #5E5D59">취소</span>
+    <span style="flex: 1"></span>
+    <span style="font-family: 'IBM Plex Mono', monospace">2.34 m · S 30.7° E</span>
+  </div>
+  <div style="position: absolute; left: 40px; top: 936px; width: 652px; height: 236px; overflow: hidden; border: 1px solid #DEDCD1; background: #E8E6DC">
+    <img src="/_blob/f88c61c01347a4f7d9c211b22be06866" alt="평면: A를 찍고 A′를 찾는 중" style="width: 652px; height: 709px; object-fit: cover; display: block; margin-top: -280px">
+    <svg style="position: absolute; left: 0; top: 0" width="652" height="236" viewBox="0 0 652 236" aria-hidden="true">
+      <path d="M214 80L392 202" stroke="#FF0000" stroke-width="2" stroke-dasharray="6 4"></path>
+      <circle cx="214" cy="80" r="5" fill="#FFFFFF" stroke="#141413" stroke-width="1.5"></circle>
+      <path d="M392 186V218M376 202H408" stroke="#141413" stroke-width="1.2"></path>
+      <text x="192" y="72" font-family="Noto Serif KR, serif" font-size="16" fill="#141413" stroke="#FFFFFF" stroke-width="3" paint-order="stroke">A</text>
+    </svg>
+    <div style="position: absolute; left: 404px; top: 168px; padding: 3px 7px; background: #FFFFFF; border: 1px solid #141413; font: 11px/16px 'IBM Plex Mono', monospace">2.34 m</div>
+  </div>
+  <div style="position: absolute; left: 732px; top: 936px; width: 1148px; display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; line-height: 19px; color: #3D3D3A">
+    <div><b style="color: #141413">들기:</b> S 또는 「단면선 긋기」. 리본 단추가 눌린 모습(귀리색)이 되고 도구 줄이 나타납니다.</div>
+    <div><b style="color: #141413">찍기:</b> 평면에서 A 클릭 → 고무줄 선(빨강 점선)이 커서를 따라감 → A′ 클릭이면 계산 시작, 도구를 내려놓음.</div>
+    <div><b style="color: #141413">도구 줄 글:</b> 「› A 찾는 중 / 시작점 A를 클릭하세요」 → 「› A′ 찾는 중 / 끝점 A′를 클릭하세요」. 오른쪽은 지금 길이 · 방위.</div>
+    <div><b style="color: #141413">끝:</b> A′ 클릭, Esc(취소 — 이전 선으로), Enter(좌표 입력 창). 그리는 동안 다른 리본 단추는 그대로 눌림.</div>
+  </div>
+  <div style="position: absolute; left: 40px; top: 1184px; width: 1840px; height: 28px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: #FFFFFF; border: 1px solid #DEDCD1; font-size: 12px; color: #3D3D3A">
+    <span style="color: #73726C">상태줄 — 그리는 동안 「다음:」 없음</span>
+    <span style="flex: 1"></span>
+    <span style="color: #5E5D59">X</span><span style="font-family: 'IBM Plex Mono', monospace">148,083.412</span><span style="color: #5E5D59">Y</span><span style="font-family: 'IBM Plex Mono', monospace">98,120.604</span>
+    <span style="width: 1px; height: 16px; background: #DEDCD1"></span>
+    <span>수평 <span style="font-family: 'IBM Plex Mono', monospace">EPSG:5186</span> · 중부원점</span>
+    <span style="height: 22px; box-sizing: border-box; display: flex; align-items: center; padding: 0 8px; border: 1px solid #E5D7A8; border-radius: 4px; background: #FBF6E6; color: #7A5A00; gap: 4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h10M7 20.5h10M12 3.5v17"></path><path d="M12 8h3M12 12h4.5M12 16h3"></path></svg>높이 타원체고 · 확인 ▲</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1920,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

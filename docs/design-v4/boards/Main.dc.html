@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Kerf 디자인 v4 개요</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Noto+Sans+KR:wght@400;500;700&amp;family=Noto+Serif+KR:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#B5573A}a:hover{color:#8F4229}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1360px; box-sizing: border-box; padding: 56px 64px; background: #FAF9F5; color: #141413; font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; display: flex; flex-direction: column; gap: 32px">
+
+  <header style="display: flex; flex-direction: column; gap: 10px; border-bottom: 2px solid #141413; padding-bottom: 24px">
+    <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; letter-spacing: 0.08em; color: #5E5D59">
+      <img src="/_blob/a4ccd6c27ecc02cae77f5812794c19fd" alt="" style="width: 28px; height: 28px; border-radius: 6px">
+      <span>KERF · 발굴 평·단면 — 디자인 개선안 v4 · 최종</span>
+      <span style="flex: 1"></span>
+      <span style="font-family: 'IBM Plex Mono', Consolas, monospace; letter-spacing: 0">기준: kerf-portable-3sm 4422b4e · 2차 design-v2</span>
+    </div>
+    <h1 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 44px; line-height: 58px">최종 v4 — 결정은 모두 닫혔습니다</h1>
+    <p style="margin: 0; max-width: 1080px; font-size: 16px; line-height: 27px; color: #3D3D3A">2차는 같은 일을 하는 26곳을 한 자리로 모았습니다. 그런데 빈 구간 · 세로 과장 · 3D 기울기 · 축척 맞춤 · 높이 기준을 알리려고 <b>안내 다섯 줄을 다섯 자리에 새로</b> 놓았습니다. 3차는 그 안내를 조판의 「도면 점검」 한 덩어리로 묶고, 두 개였던 목록을 하나로 합치고, 보고서 분량의 단면을 한 번에 저장하게 했습니다. v4는 1·2·3차를 합쳐 남은 결정을 모두 닫은 최종본입니다. 계산 · 도곽 · 확정 규칙은 그대로이고, 개발 지시서는 <span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px">design-v4\FINAL_PLAN.md</span>입니다.</p>
+  </header>
+
+  <div style="display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 48px; flex: 1; min-height: 0">
+
+    <section style="display: flex; flex-direction: column; gap: 14px; min-width: 0">
+      <h2 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 22px">3차에서 바꾼 것 여섯</h2>
+      <table style="width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 21px">
+        <thead>
+          <tr style="text-align: left; color: #5E5D59; font-size: 12px">
+            <th style="padding: 8px 10px 8px 0; border-bottom: 1px solid #141413; width: 36px; font-weight: 500">번호</th>
+            <th style="padding: 8px 10px; border-bottom: 1px solid #141413; width: 260px; font-weight: 500">2차에 남은 문제</th>
+            <th style="padding: 8px 10px; border-bottom: 1px solid #141413; font-weight: 500">3차</th>
+            <th style="padding: 8px 0 8px 10px; border-bottom: 1px solid #141413; width: 96px; font-weight: 500">화판 표시</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="vertical-align: top">
+            <td style="padding: 12px 10px 12px 0; border-bottom: 1px solid #DEDCD1"><span style="display: inline-flex; width: 24px; height: 24px; border-radius: 12px; background: #B5573A; color: #FFFFFF; font: 700 12px/24px 'IBM Plex Mono', monospace; justify-content: center">1</span></td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1"><b>안내가 다섯 자리에.</b> 정보 줄 · 조판 머리 · 범위 아래 · 축척 옆 · 저장 위. 저장 직전에 한 번에 볼 곳이 없습니다.</td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1">조판 오른쪽 판 아래 <b>「도면 점검」 한 덩어리</b>. 항목마다 ✓ 또는 ▲와 고치는 곳 링크. 저장을 막지 않습니다. 작업 화면에서는 단면 정보 줄 한 칸만 남깁니다.</td>
+            <td style="padding: 12px 0 12px 10px; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px">조판 S3</td>
+          </tr>
+          <tr style="vertical-align: top">
+            <td style="padding: 12px 10px 12px 0; border-bottom: 1px solid #DEDCD1"><span style="display: inline-flex; width: 24px; height: 24px; border-radius: 12px; background: #B5573A; color: #FFFFFF; font: 700 12px/24px 'IBM Plex Mono', monospace; justify-content: center">2</span></td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1"><b>목록이 둘.</b> 작업 탭 「단면 목록」과 조판 「도면 목록」이 같은 선택을 두 위젯으로 보여 줍니다.</td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1"><b>한 목록</b>을 두 탭의 같은 자리(왼쪽 240 px)에. 조판에서는 맨 위에 「평면도」 줄과 고르기 칸이 붙습니다. 줄마다 도면 상태(축척 · 용지 · 저장 시각).</td>
+            <td style="padding: 12px 0 12px 10px; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px">작업 W1<br>조판 S1</td>
+          </tr>
+          <tr style="vertical-align: top">
+            <td style="padding: 12px 10px 12px 0; border-bottom: 1px solid #DEDCD1"><span style="display: inline-flex; width: 24px; height: 24px; border-radius: 12px; background: #B5573A; color: #FFFFFF; font: 700 12px/24px 'IBM Plex Mono', monospace; justify-content: center">3</span></td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1"><b>한 장씩만 저장.</b> 단면이 수십 장이면 열고 · 고르고 · 저장을 수십 번 합니다.</td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1">목록에서 여러 장 고르고 <b>「4장 SVG 저장」</b>. 축척 · 용지는 장마다 자기 값. 파일 이름은 <span style="font-family: 'IBM Plex Mono', monospace">모델_도면_축척.svg</span>. 주 단추는 여전히 하나.</td>
+            <td style="padding: 12px 0 12px 10px; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px">조판 S2<br>끝 상태</td>
+          </tr>
+          <tr style="vertical-align: top">
+            <td style="padding: 12px 10px 12px 0; border-bottom: 1px solid #DEDCD1"><span style="display: inline-flex; width: 24px; height: 24px; border-radius: 12px; background: #B5573A; color: #FFFFFF; font: 700 12px/24px 'IBM Plex Mono', monospace; justify-content: center">4</span></td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1"><b>빈 구간이 단면에만.</b> 빗금 띠가 단면 아래에만 있어, 평면의 어디가 비었는지 다시 찾아야 합니다.</td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1">평면의 단면선에서 빈 구간을 <b>점선</b>으로(작업 화면만, 도면에는 없음). 띠나 정보 줄의 「평면에서 보기」를 누르면 평면이 그 구간으로 이동합니다.</td>
+            <td style="padding: 12px 0 12px 10px; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px">작업 W3<br>작업 W4</td>
+          </tr>
+          <tr style="vertical-align: top">
+            <td style="padding: 12px 10px 12px 0; border-bottom: 1px solid #DEDCD1"><span style="display: inline-flex; width: 24px; height: 24px; border-radius: 12px; background: #B5573A; color: #FFFFFF; font: 700 12px/24px 'IBM Plex Mono', monospace; justify-content: center">5</span></td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1"><b>리본이 일에 비해 큼.</b> 홈 리본 100 px에 단추 7개. 그만큼 단면 화면 세로가 좁습니다.</td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1"><b>한 줄 리본 44 px</b>(아이콘 옆 글자). 단면 화면이 세로로 56 px 커집니다. 탭 넷 · 키 · 묶음 순서는 그대로. <span style="color: #3F6B31">✓ 확정 10/08</span></td>
+            <td style="padding: 12px 0 12px 10px; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px">작업 W2</td>
+          </tr>
+          <tr style="vertical-align: top">
+            <td style="padding: 12px 10px 12px 0; border-bottom: 1px solid #DEDCD1"><span style="display: inline-flex; width: 24px; height: 24px; border-radius: 12px; background: #B5573A; color: #FFFFFF; font: 700 12px/24px 'IBM Plex Mono', monospace; justify-content: center">6</span></td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1"><b>끝 상태가 없음.</b> 저장 중 · 저장 끝 · 실패 · 단면 0개 · 빈 구간 설명 화면이 시안에 없습니다.</td>
+            <td style="padding: 12px 10px; border-bottom: 1px solid #DEDCD1">끝 상태 화판 6장. 결과는 상태줄이 아니라 <b>조판 판 아래 한 줄</b>에 남고, 「폴더 열기」로 끝납니다.</td>
+            <td style="padding: 12px 0 12px 10px; border-bottom: 1px solid #DEDCD1; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px">끝 상태</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 style="margin: 12px 0 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 22px">화판 목차 (13)</h2>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+        <a href="Flow.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">흐름</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">화면 흐름도 →</span></a>
+        <a href="Home.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">화면</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">홈 화면 →</span></a>
+        <a href="Work.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">화면</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">작업 화면 →</span></a>
+        <a href="Ribbons.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">화면</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">리본 네 탭 →</span></a>
+        <a href="Sheet.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">조판</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">단면도 조판 →</span></a>
+        <a href="SheetPlan.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">조판</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">평면도 · 조판편집 →</span></a>
+        <a href="States.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">조판</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">끝 상태 6가지 →</span></a>
+        <a href="Dialogs.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">대화 창</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">대화 창 · 메뉴 →</span></a>
+        <a href="Icons.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">설계도</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">아이콘 81개 →</span></a>
+        <a href="Buttons1.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">설계도</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">단추 1 · 작업 →</span></a>
+        <a href="Buttons2.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">설계도</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">단추 2 · 조판 →</span></a>
+        <a href="Display.dc.html" style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border: 1px solid #C2C0B6; background: #FFFFFF; text-decoration: none; color: #141413; min-height: 44px"><span style="font-size: 11.5px; color: #5E5D59">설계도</span><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 16px">화면 표시 · 토큰 →</span></a>
+      </div>
+    </section>
+
+    <aside style="display: flex; flex-direction: column; gap: 28px">
+      <section style="display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 20px; border-bottom: 1px solid #141413; padding-bottom: 8px">한 자리 원칙</h2>
+        <dl style="margin: 0; display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px 12px; font-size: 13.5px; line-height: 20px">
+          <dt style="font-weight: 700">리본</dt><dd style="margin: 0; color: #3D3D3A">손에 드는 도구와 값 바꾸기</dd>
+          <dt style="font-weight: 700">화면 머리</dt><dd style="margin: 0; color: #3D3D3A">그 화면을 어떻게 볼지</dd>
+          <dt style="font-weight: 700">왼쪽 목록</dt><dd style="margin: 0; color: #3D3D3A">무엇을 — 두 탭이 같은 목록</dd>
+          <dt style="font-weight: 700">오른쪽 판</dt><dd style="margin: 0; color: #3D3D3A">작업: 고른 단면의 수치(읽기)<br>조판: 고른 도면 설정 + 점검</dd>
+          <dt style="font-weight: 700">상태줄</dt><dd style="margin: 0; color: #3D3D3A">다음 할 일 · 커서 좌표 · 모델 전체 값</dd>
+          <dt style="font-weight: 700">알림</dt><dd style="margin: 0; color: #3D3D3A">작업은 정보 줄 한 칸, 도면은 「도면 점검」 한 덩어리. 그 밖에 띠 · 배너를 새로 만들지 않습니다.</dd>
+        </dl>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 20px; border-bottom: 1px solid #141413; padding-bottom: 8px">바꾸지 않는 것</h2>
+        <ul style="margin: 0; padding-left: 18px; font-size: 13px; line-height: 21px; color: #3D3D3A">
+          <li>왼쪽 평면(3D) · 오른쪽 단면 배치</li>
+          <li>조판은 메인 영역의 탭(별도 창 아님)</li>
+          <li>평면도 · 단면도 같은 바깥 도곽, 평면도에 단면선 없음, 진북만</li>
+          <li>축척 10단위 · 상한 없음 · 도면마다 저장</li>
+          <li>단면선 <span style="font-family: 'IBM Plex Mono', monospace">#FF0000</span>, 레벨선 10 cm · 숫자 50 cm</li>
+          <li>높이는 파일 값 그대로, 지오이드 재적용 없음</li>
+          <li>입면 배경(뒤 깊이, 기본 3 m) 유지</li>
+        </ul>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; background: #FFFFFF; border: 1px solid #C2C0B6">
+        <h2 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 20px">확정된 결정 (v4)</h2>
+        <div style="display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 5px 8px; font-size: 12.5px; line-height: 19px; color: #3D3D3A">
+          <span style="color: #3F6B31">✓</span><span>탭 넷: 파일 · 홈 · 보기 · 자료</span>
+          <span style="color: #3F6B31">✓</span><span>홈 리본에서 열기 · 최근 뺌</span>
+          <span style="color: #3F6B31">✓</span><span><b>한 줄 리본 44 px</b> <span style="color: #5E5D59">— 사용자 확정</span></span>
+          <span style="color: #3F6B31">✓</span><span>조판 기본 형식 SVG(층 이름 묶음)</span>
+          <span style="color: #3F6B31">✓</span><span>E 누르는 동안 입면 30 %</span>
+          <span style="color: #3F6B31">✓</span><span>여러 장 저장, 처음에는 SVG만</span>
+          <span style="color: #3F6B31">✓</span><span>파일 이름 <span style="font-family: 'IBM Plex Mono', monospace; font-size: 11.5px">Production_2_A-A′_1-20.svg</span>, 같은 이름은 기본 _2</span>
+          <span style="color: #3F6B31">✓</span><span>조판 들어올 때 고른 도면 하나만 체크</span>
+          <span style="color: #3F6B31">✓</span><span><b>아이콘 UI 전부</b> — 모든 단추에 아이콘 <span style="color: #5E5D59">— 사용자 확정</span></span>
+        </div>
+        <div style="font-size: 11.5px; line-height: 17px; color: #5E5D59">「사용자 확정」 외에는 추천값으로 닫았습니다. 뒤집으면 그 단계만 고칩니다.</div>
+      </section>
+
+      <section style="display: flex; flex-direction: column; gap: 8px">
+        <h2 style="margin: 0; font-size: 13px; font-weight: 700">구현 순서 (FINAL_PLAN.md · 22단계)</h2>
+        <p style="margin: 0; font-size: 12.5px; line-height: 20px; color: #5E5D59">저장소 정리 → 기준선 → 빈 구간 원인 → <b>--ui-audit</b> → 탭 넷 → 한 줄 리본 → <b>아이콘 81</b> → 단면 머리 → 정보 줄 → 오른쪽 판 → 높이 배지 → 그리는 동안 안내 → 홈 → 목록 하나 → 조판 → 도면 점검 → 형식 → 여러 장 저장 → 빈 구간 표시 → 빈 상태 → 새 키 · 문장 · 토큰 → 문서. 단추마다 「누르면 · 꺼짐 · 키」는 단추 설계도 1 · 2가 계약입니다.</p>
+      </section>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1360}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

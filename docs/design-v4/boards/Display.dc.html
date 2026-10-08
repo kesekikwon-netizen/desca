@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>화면 표시 설계도와 토큰</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Noto+Sans+KR:wght@400;500;700&amp;family=Noto+Serif+KR:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.bt{width:100%;border-collapse:collapse;font-size:13px;line-height:19px}
+.bt th{text-align:left;font-weight:500;font-size:12px;color:#5E5D59;padding:8px 10px;border-bottom:1.5px solid #141413}
+.bt td{padding:7px 10px;border-bottom:1px solid #DEDCD1;vertical-align:top}
+.bt td.m{font-family:'IBM Plex Mono',monospace;font-size:12px}
+.bt td.x{color:#5E5D59}
+</style>
+</helmet>
+<div style="width: 1920px; height: 3000px; box-sizing: border-box; padding: 40px 48px; background: #FAF9F5; color: #141413; font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif; font-size: 13px; display: flex; flex-direction: column; gap: 28px">
+  <header style="display: flex; flex-direction: column; gap: 8px; border-bottom: 2px solid #141413; padding-bottom: 16px">
+    <h1 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 34px">화면 표시 설계도 · 토큰</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 22px; color: #3D3D3A; max-width: 1500px">누르지 않고 「보는」 것들 — 상태 글, 배지, 칩, 겹쳐 그리는 선, 그리는 순서 — 와 그것을 이루는 색 · 글자 · 크기. 토큰 값은 <span style="font-family: 'IBM Plex Mono', monospace">app/theme.hpp</span>에 있는 그대로입니다.</p>
+  </header>
+
+  <!-- 상태 견본 -->
+  <section style="display: flex; flex-direction: column; gap: 14px">
+    <h2 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 22px">상태 견본</h2>
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px 40px">
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <b style="font-size: 14px">단면 정보 줄 — 네 가지</b>
+        <div style="height: 30px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border: 1px solid #DEDCD1; background: #FAF9F5; font-size: 12px; white-space: nowrap"><span style="display: flex; align-items: center; gap: 5px; color: #5E5D59"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 108.5 8.5"></path></svg>미리보기 · 계산 중 62 %</span><span style="color: #73726C">잘린 선 —</span><span style="flex: 1"></span><span style="color: #3D3D3A">범례</span></div>
+        <div style="height: 30px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border: 1px solid #DEDCD1; background: #FAF9F5; font-size: 12px; white-space: nowrap"><span style="display: flex; align-items: center; gap: 5px; color: #3F6B31"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M8 12.5l2.8 2.8L16 10"></path></svg>최종(잎) · 0.4 s</span><span>잘린 선 <b>4줄</b> · 빈 구간 <b>없음</b></span><span style="flex: 1"></span><span style="color: #3D3D3A">범례</span></div>
+        <div style="height: 30px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border: 1px solid #DEDCD1; background: #FAF9F5; font-size: 12px; white-space: nowrap"><span style="display: flex; align-items: center; gap: 5px; color: #3F6B31"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M8 12.5l2.8 2.8L16 10"></path></svg>최종(잎) · 0.4 s</span><span>잘린 선 <b>2줄</b> · <span style="color: #7A5A00">빈 구간 <b>1곳 0.45 m</b></span></span><span style="height: 22px; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 8px; border: 1px solid #C2C0B6; border-radius: 4px; background: #FFFFFF"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#141413" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-5.5-5-5.5-9.5a5.5 5.5 0 0111 0C17.5 15 12 20 12 20z"></path><circle cx="12" cy="10.5" r="2"></circle></svg>평면에서 보기</span><span style="flex: 1"></span><span style="color: #3D3D3A">범례</span></div>
+        <div style="height: 30px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border: 1px solid #DEDCD1; background: #F3DEDA; font-size: 12px; white-space: nowrap"><span style="display: flex; align-items: center; gap: 5px; color: #A33B3B"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M9 9l6 6M15 9l-6 6"></path></svg>계산 못 함</span><span>단면선이 모델 밖입니다 — 끝점을 모델 안으로 옮기세요</span></div>
+        <span style="font-size: 12px; color: #5E5D59">정보 줄 = 계산 상태 + 잘린 선 · 빈 구간 + (있을 때만) 「평면에서 보기」 + 범례. 길이 · 앞뒤 · 화면 축척은 쓰지 않음.</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <b style="font-size: 14px">높이 배지 — 상태줄 오른쪽 하나</b>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center">
+          <span style="height: 22px; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 8px; border: 1px solid #E5D7A8; border-radius: 4px; background: #FBF6E6; font-size: 12px; color: #7A5A00"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 3.5h10M7 20.5h10M12 3.5v17"></path><path d="M12 8h3M12 12h4.5M12 16h3"></path></svg>높이 기준 모름 ▲</span>
+          <span style="height: 22px; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 8px; border: 1px solid #E5D7A8; border-radius: 4px; background: #FBF6E6; font-size: 12px; color: #7A5A00"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 3.5h10M7 20.5h10M12 3.5v17"></path><path d="M12 8h3M12 12h4.5M12 16h3"></path></svg>높이 타원체고 · 확인 ▲</span>
+          <span style="height: 22px; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 8px; border: 1px solid #DEDCD1; border-radius: 4px; background: #FFFFFF; font-size: 12px; color: #3D3D3A"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 3.5h10M7 20.5h10M12 3.5v17"></path><path d="M12 8h3M12 12h4.5M12 16h3"></path></svg>높이 KVD1964 정표고</span>
+        </div>
+        <b style="font-size: 14px; margin-top: 8px">모드 칩 · 걸음</b>
+        <div style="display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 12px">
+          <span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border: 1px solid #B0AEA5; border-radius: 12px; background: #FFFFFF">보기 <span style="font-family: 'IBM Plex Mono', monospace; color: #5E5D59">휠 = 종이 확대</span></span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border: 1px solid #30302E; border-radius: 12px; background: #30302E; color: #FAF9F5">조판편집 <span style="font-family: 'IBM Plex Mono', monospace">휠 = 축척 · 가운데 끌기 = 그림</span></span>
+          <span style="display: flex; gap: 14px; color: #73726C"><span style="color: #3D3D3A">① 열기</span><span style="color: #141413; font-weight: 700">② 단면</span><span>③ 도면</span></span>
+        </div>
+        <b style="font-size: 14px; margin-top: 8px">도면 점검 줄</b>
+        <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid #C2C0B6; background: #FFFFFF; font-size: 12px; line-height: 17px; max-width: 520px">
+          <div style="display: flex; gap: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3F6B31" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 1px"><circle cx="12" cy="12" r="8.5"></circle><path d="M8 12.5l2.8 2.8L16 10"></path></svg><span><b>✓ 됨</b> — 그대로 저장해도 됨</span></div>
+          <div style="display: flex; gap: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7A5A00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 1px"><path d="M12 4l9 16H3z"></path><path d="M12 10v4.5M12 17.2v.3"></path></svg><span><b>▲ 확인</b> — 도면에 영향, 고치는 곳 링크(막지 않음)</span></div>
+          <div style="display: flex; gap: 8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5E5D59" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="flex: none; margin-top: 1px"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 11v5.5M12 7.8v.4"></path></svg><span><b>i 알림</b> — 알아 둘 것(세로 과장 ×n이었음, 도면은 1:1). ×1이면 줄 자체가 없음</span></div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <b style="font-size: 14px">목록 줄 — 세 가지</b>
+        <div style="display: flex; gap: 10px; padding: 10px 12px; width: 240px; box-sizing: border-box; background: #E3DACC; border: 1px solid #DEDCD1"><div style="width: 56px; height: 44px; flex: none; border: 1px solid #C2C0B6; background: #FFFFFF url(/_blob/3f7cd9777b536c3cb3beb46ceaadcb90) -40px -30px / 160px auto no-repeat"></div><div style="display: flex; flex-direction: column; gap: 1px"><span style="font-family: 'Noto Serif KR', serif; font-size: 15px">A–A′</span><span style="font: 11px 'IBM Plex Mono', monospace">3.00 m · 뒤 0.5 m</span><span style="font: 11px 'IBM Plex Mono', monospace; color: #7A5A00">▲ 빈 구간 1곳</span></div></div>
+        <div style="display: flex; gap: 10px; padding: 10px 12px; width: 240px; box-sizing: border-box; background: #FAF9F5; border: 1px solid #DEDCD1"><div style="width: 56px; height: 44px; flex: none; border: 1px solid #C2C0B6; background: #FFFFFF url(/_blob/f38f67f504570b396ad559e64a85c9a0) -150px -56px / 380px auto no-repeat"></div><div style="display: flex; flex-direction: column; gap: 1px"><span style="font-family: 'Noto Serif KR', serif; font-size: 15px">B–B′</span><span style="font: 11px 'IBM Plex Mono', monospace">1.07 m · 뒤 0.5 m</span><span style="font: 11px 'IBM Plex Mono', monospace; color: #5E5D59">도면 맞춤 · 저장 10/07 17:10</span></div></div>
+        <div style="display: flex; gap: 10px; padding: 10px 12px; width: 240px; box-sizing: border-box; background: #FAF9F5; border: 1px solid #DEDCD1"><div style="width: 56px; height: 44px; flex: none; border: 1px dashed #B0AEA5; background: #F5F4ED; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5E5D59" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 108.5 8.5"></path></svg></div><div style="display: flex; flex-direction: column; gap: 1px"><span style="font-family: 'Noto Serif KR', serif; font-size: 15px">D–D′</span><span style="font: 11px 'IBM Plex Mono', monospace">2.10 m · 뒤 3.0 m</span><span style="font: 11px 'IBM Plex Mono', monospace; color: #5E5D59">계산 중 · 썸네일 곧</span></div></div>
+        <span style="font-size: 12px; color: #5E5D59">고른 줄(귀리색) · 보통 · 계산 중(점선 썸네일). 줄 넷째 칸 = 도면 상태 또는 ▲.</span>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <b style="font-size: 14px">평면 위 겹침 · 단면 그림 순서</b>
+        <div style="display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start">
+          <svg width="260" height="170" viewBox="0 0 260 170" role="img" aria-label="평면 겹침 견본" style="background: #E8E6DC; border: 1px solid #DEDCD1">
+            <polygon points="30,40 210,130 228,104 48,14" fill="rgba(20,20,19,0.10)" stroke="#141413" stroke-width="1" stroke-dasharray="3 3"></polygon>
+            <path d="M30 40L104 77M134 92L210 130" stroke="#FF0000" stroke-width="2.6" stroke-linecap="round"></path>
+            <path d="M104 77L134 92" stroke="#FFFFFF" stroke-width="5"></path>
+            <path d="M104 77L134 92" stroke="#FF0000" stroke-width="2.6" stroke-dasharray="3 4"></path>
+            <circle cx="30" cy="40" r="4.5" fill="#FFFFFF" stroke="#141413" stroke-width="1.5"></circle>
+            <circle cx="210" cy="130" r="4.5" fill="#FFFFFF" stroke="#141413" stroke-width="1.5"></circle>
+            <text x="14" y="34" font-family="Noto Serif KR, serif" font-size="13" fill="#141413">A</text>
+            <text x="216" y="148" font-family="Noto Serif KR, serif" font-size="13" fill="#141413">A′</text>
+            <text x="112" y="112" font-family="IBM Plex Mono, monospace" font-size="10" fill="#141413">빈 구간 0.45 m</text>
+            <text x="120" y="56" font-family="IBM Plex Mono, monospace" font-size="10" fill="#141413">뒤 0.50 m</text>
+          </svg>
+          <ol style="margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 20px; color: #3D3D3A">
+            <li><b>평면:</b> 정사영상 → 뒤 깊이 띠(먹 10 %, 점선 테) → 단면선 빨강 2.6 px · 0.5 m 눈금 → 빈 구간(흰 바탕 + 빨강 점선) → 끝점 원 · A A′ → 이름표 · 진북 · 축척 막대.</li>
+            <li><b>단면:</b> 레벨선(10 cm 연회색 · 50 cm 회색 + 숫자) → 입면 영상(깊이 음영) → <b>잘린 선 #FF0000</b> → 빈 구간 빗금 띠(화면만) → 커서 십자 · 이름표 → 세로 과장 표시.</li>
+            <li><b>도면:</b> 레벨선 → 영상 → 단면선. 빈 구간 띠 · 커서 · 세로 과장은 그리지 않음. 평면도에는 단면선 없음.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 표시 요소 표 -->
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 22px">표시 요소 — 어디에 무엇이 언제</h2>
+    <table class="bt">
+      <thead><tr><th style="width: 190px">요소</th><th style="width: 170px">자리</th><th>보이는 것</th><th style="width: 420px">상태별 모습</th><th style="width: 260px">바뀌는 때</th></tr></thead>
+      <tbody>
+        <tr><td><b>걸음 ① ② ③</b></td><td>탭 줄 오른쪽</td><td>지금 어느 걸음인지</td><td class="x">지금 = 굵은 먹 · 지난 = 먹2 · 앞 = 흐림</td><td class="x">모델 열림 · 단면 최종 · 조판 열림</td></tr>
+        <tr><td><b>도구 줄</b></td><td>리본 아래(긋는 동안)</td><td>도구 칩 「단면선 긋기 › A′ 찾는 중」 · 할 일 · 키 · 지금 길이 · 방위</td><td class="x">든 동안만 보임, 내려놓으면 사라짐</td><td class="x">도구 들기 · A 찍기 · 끝</td></tr>
+        <tr><td><b>화면 머리 글</b></td><td>평면 · 단면 머리</td><td>「평면 · 위에서 · 기울기 90°」 / 「A–A′ 단면 · 북동쪽을 봄」</td><td class="x">고른 화면 머리 = 먹 2 px 밑줄</td><td class="x">기울기 · 단면 · 보는 쪽</td></tr>
+        <tr><td><b>정보 줄</b></td><td>단면 머리 아래</td><td>계산 상태 · 잘린 선 n줄 · 빈 구간 · 범례</td><td class="x">미리보기(회색 원호) · 최종 ✓ · 빈 구간 ▲ 황 · 실패 ● 붉은 바탕</td><td class="x">계산 단계마다</td></tr>
+        <tr><td><b>빈 구간 띠</b></td><td>단면 거리축 위</td><td>빗금(황) + 「잘린 면 없음 a – b m」</td><td class="x">누르면 설명 창. 화면만</td><td class="x">최종 계산 뒤</td></tr>
+        <tr><td><b>커서 이름표</b></td><td>단면 커서 옆</td><td>EL. 56.17 m · s 0.95 m · 잘린 면(뒤 0 m)</td><td class="x">X · Y는 쓰지 않음(상태줄에)</td><td class="x">커서 움직임</td></tr>
+        <tr><td><b>세로 과장 표시</b></td><td>단면 화면 왼쪽 위</td><td>「세로 ×5 · 화면만」</td><td class="x">×1이면 없음, 머리 단추도 귀리색</td><td class="x">X · 메뉴</td></tr>
+        <tr><td><b>오른쪽 판 수치</b></td><td>오른쪽 판</td><td>길이 · 깊이(모노 26) · 방위 · 보는 쪽 · 앞/뒤 · 지표 EL · 바닥 EL · 상단 너비 · 끝점</td><td class="x">읽기 전용 — 값을 바꾸는 칸 없음</td><td class="x">최종 계산 뒤</td></tr>
+        <tr><td><b>상태줄 「다음:」</b></td><td>상태줄 왼쪽</td><td>지금 할 일 한 문장(아래 표)</td><td class="x">도구를 든 동안은 숨김</td><td class="x">상황마다</td></tr>
+        <tr><td><b>좌표 · 좌표계</b></td><td>상태줄 오른쪽</td><td>X · Y(모노) · 출처(잎 표면) · 수평 EPSG · 이름</td><td class="x">모델 없으면 「수평 —」</td><td class="x">커서 · 모델</td></tr>
+        <tr><td><b>모드 칩</b></td><td>조판 종이 머리</td><td>휠의 뜻</td><td class="x">보기 = 흰 칩 · 조판편집 = 먹 칩</td><td class="x">조판편집 켜기 · 끄기</td></tr>
+        <tr><td><b>그림 칸 테</b></td><td>조판 종이</td><td>조판편집 중 그림 칸</td><td class="x">먹 2 px 점선 + 칩 「그림 칸 · 가운데 끌기 · 휠」</td><td class="x">조판편집 중에만</td></tr>
+        <tr><td><b>도면 점검</b></td><td>조판 판 아래</td><td>고른 장 수 · 항목 ✓ ▲ i + 링크</td><td class="x">고른 도면에 해당하는 항목만</td><td class="x">고르기 · 설정 · 높이 기준</td></tr>
+        <tr><td><b>진행 · 결과 · 실패 줄</b></td><td>조판 판 아래</td><td>n / m 막대 · ✓ n장 저장함 · ● n장 못 함</td><td class="x">결과 줄은 다른 도면을 고를 때까지</td><td class="x">저장 중 · 끝 · 실패</td></tr>
+        <tr><td><b>툴팁</b></td><td>모든 단추</td><td>이름 · 키, 꺼졌으면 이유</td><td class="x">먹 바탕 흰 글, 0.6 s 뒤</td><td class="x">마우스 올림 · 키보드 초점</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 다음: 문장 -->
+  <section style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 22px">상태줄 「다음:」 문장</h2>
+      <table class="bt">
+        <thead><tr><th style="width: 200px">상황</th><th>상태줄 왼쪽</th></tr></thead>
+        <tbody>
+          <tr><td>모델 없음</td><td>Production_2를 이어서 열거나, 모델 파일을 끌어다 놓으세요.</td></tr>
+          <tr><td>모델 열림 · 단면 없음</td><td>다음: <b>S</b> 「단면선 긋기」 — 평면에서 A, A′ 클릭</td></tr>
+          <tr><td>계산 중</td><td>A–A′ 계산 중 — 미리보기를 먼저 보여 줍니다</td></tr>
+          <tr><td>최종</td><td>A–A′ 최종 — 다음: <b>Ctrl+P</b> 「도면」</td></tr>
+          <tr><td>긋는 중</td><td class="x">(없음 — 도구 줄이 안내, 좌표만)</td></tr>
+          <tr><td>조판</td><td>조판 — 고른 n장 · 다 되면 「n장 SVG 저장」 · 돌아가기는 「작업」 탭 또는 Esc</td></tr>
+          <tr><td>조판편집</td><td>조판편집 — 휠 = 축척 · 가운데 끌기 = 그림 · 끝내려면 「편집 끝」 또는 Esc</td></tr>
+          <tr><td>저장 중</td><td>저장 중 3 / 4 — 멈추려면 「멈추기」</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 22px">크기</h2>
+      <table class="bt">
+        <thead><tr><th style="width: 220px">자리</th><th>크기 (px)</th></tr></thead>
+        <tbody>
+          <tr><td>창 머리 · 탭 줄 · 한 줄 리본</td><td class="m">32 · 36 · 44</td></tr>
+          <tr><td>화면 머리 · 정보 줄 · 상태줄</td><td class="m">32(평면) / 36(단면) · 30 · 28</td></tr>
+          <tr><td>목록 · 평면 · 단면 · 오른쪽 판</td><td class="m">240 · 652 · 728 · 300 (1920 기준)</td></tr>
+          <tr><td>조판 목록 · 종이 · 설정 판</td><td class="m">240 · 나머지 · 360</td></tr>
+          <tr><td>단추 높이</td><td class="m">리본 32 · 머리 26 · 판 32 · 판 아래 36 · 홈 44</td></tr>
+          <tr><td>아이콘</td><td class="m">리본 18 · 머리 · 판 · 메뉴 16 · 상태 14</td></tr>
+          <tr><td>둥근 모서리</td><td class="m">칩 0 · 칸 4 · 단추 6 · 카드 8</td></tr>
+          <tr><td>간격</td><td class="m">4 · 6 · 8 · 12 · 16 · 24</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 색 · 글자 -->
+  <section style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 40px">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 22px">색 토큰 (theme.hpp)</h2>
+      <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; font-size: 12px; line-height: 16px">
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #FAF9F5; border: 1px solid #C2C0B6"></span><span><b>Ground</b><br><span style="font-family: 'IBM Plex Mono', monospace">#FAF9F5</span> 종이</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #FFFFFF; border: 1px solid #C2C0B6"></span><span><b>Card</b><br><span style="font-family: 'IBM Plex Mono', monospace">#FFFFFF</span> 칸 · 머리</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #F5F4ED; border: 1px solid #C2C0B6"></span><span><b>Wash</b><br><span style="font-family: 'IBM Plex Mono', monospace">#F5F4ED</span> 올림</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #F0EEE6; border: 1px solid #C2C0B6"></span><span><b>Desk</b><br><span style="font-family: 'IBM Plex Mono', monospace">#F0EEE6</span> 책상(조판)</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #E8E6DC; border: 1px solid #C2C0B6"></span><span><b>Press</b><br><span style="font-family: 'IBM Plex Mono', monospace">#E8E6DC</span> 누름</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #E3DACC; border: 1px solid #C2C0B6"></span><span><b>Oat</b><br><span style="font-family: 'IBM Plex Mono', monospace">#E3DACC</span> 켜짐 · 고름</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #141413"></span><span><b>Ink</b><br><span style="font-family: 'IBM Plex Mono', monospace">#141413</span> 먹 · 글</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #30302E"></span><span><b>Hand</b><br><span style="font-family: 'IBM Plex Mono', monospace">#30302E</span> 도구 칩 · 툴팁</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #3D3D3A"></span><span><b>Ink2</b><br><span style="font-family: 'IBM Plex Mono', monospace">#3D3D3A</span> 보조 글</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #5E5D59"></span><span><b>Muted</b><br><span style="font-family: 'IBM Plex Mono', monospace">#5E5D59</span> 설명 글</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #73726C"></span><span><b>Faint</b><br><span style="font-family: 'IBM Plex Mono', monospace">#73726C</span> 흐린 글</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #9C9A92"></span><span><b>꺼짐</b><br><span style="font-family: 'IBM Plex Mono', monospace">#9C9A92</span> 꺼진 단추만</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #DEDCD1"></span><span><b>Line</b><br><span style="font-family: 'IBM Plex Mono', monospace">#DEDCD1</span> 구분선</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #C2C0B6"></span><span><b>Edge</b><br><span style="font-family: 'IBM Plex Mono', monospace">#C2C0B6</span> 칸 테</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #B0AEA5"></span><span><b>Ring</b><br><span style="font-family: 'IBM Plex Mono', monospace">#B0AEA5</span> 켜짐 테</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #B5573A"></span><span><b>Action</b><br><span style="font-family: 'IBM Plex Mono', monospace">#B5573A</span> 주 단추 하나</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #3F6B31"></span><span><b>Done</b><br><span style="font-family: 'IBM Plex Mono', monospace">#3F6B31</span> ✓</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #7A5A00"></span><span><b>Caution</b><br><span style="font-family: 'IBM Plex Mono', monospace">#7A5A00</span> ▲ · 빈 구간</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #A33B3B"></span><span><b>Block</b><br><span style="font-family: 'IBM Plex Mono', monospace">#A33B3B</span> ● · 지우기</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #F3DEDA; border: 1px solid #C2C0B6"></span><span><b>BlockWash</b><br><span style="font-family: 'IBM Plex Mono', monospace">#F3DEDA</span> 실패 바탕</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #FF0000"></span><span><b>SectionRed</b><br><span style="font-family: 'IBM Plex Mono', monospace">#FF0000</span> 단면선 · 잘린 선</span></div>
+        <div style="display: flex; gap: 8px; align-items: center"><span style="width: 32px; height: 32px; flex: none; background: #FBF6E6; border: 1px solid #E5D7A8"></span><span><b>주의 바탕</b><br><span style="font-family: 'IBM Plex Mono', monospace">#FBF6E6</span> 배지 · 띠 <span style="color: #7A5A00">새</span></span></div>
+      </div>
+      <span style="font-size: 12px; color: #5E5D59">「주의 바탕」 #FBF6E6 · 테 #E5D7A8은 지금 theme.hpp에 없음 — 토큰으로 더한 뒤 씁니다. 글자는 Muted 이상(#5E5D59 이상 진하게)으로, Faint는 11 px 이상에서만.</span>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-family: 'Noto Serif KR', Batang, serif; font-weight: 500; font-size: 22px">글자</h2>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid #DEDCD1; padding-bottom: 8px"><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 40px; line-height: 48px">Production_2</span><span style="font-size: 12px; color: #5E5D59">명조 40 · 모델 이름(홈)</span></div>
+        <div style="display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid #DEDCD1; padding-bottom: 8px"><span style="font-family: 'Noto Serif KR', Batang, serif; font-size: 24px">A–A′</span><span style="font-size: 12px; color: #5E5D59">명조 24 · 22 · 17 · 15 — 단면 · 도면 이름</span></div>
+        <div style="display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid #DEDCD1; padding-bottom: 8px"><span style="font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 26px">3.00 m</span><span style="font-size: 12px; color: #5E5D59">모노 26 · 13 · 12 · 11 — 잰 값 · 좌표 · 키</span></div>
+        <div style="display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid #DEDCD1; padding-bottom: 8px"><span style="font-size: 13px">단면선 긋기 · 도면 점검</span><span style="font-size: 12px; color: #5E5D59">고딕 13 본문 · 12 설명 · 11 묶음 이름(굵게)</span></div>
+        <span style="font-size: 12px; line-height: 18px; color: #5E5D59">앱 글꼴: 고딕 = Malgun Gothic → Noto Sans KR, 명조 = Batang → Noto Serif KR, 모노 = Consolas → DejaVu Sans Mono. 이 화판은 웹 글꼴로 대신 그렸습니다.</span>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1920,"height":3000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
