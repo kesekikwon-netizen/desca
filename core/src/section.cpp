@@ -409,6 +409,28 @@ double profileRelief(const std::vector<Polyline>& profile) {
     return q(0.95) - q(0.05);
 }
 
+std::vector<SGap> profileGaps(const std::vector<Polyline>& profile, double length, double minGap) {
+    // 잘린 선 하나하나가 덮는 s 범위(점 순서와 무관)를 [0, length] 안으로 자른 뒤, 정렬해 이어 붙이며 사이의 틈을 모은다
+    std::vector<std::pair<double, double>> cover;
+    for (const auto& pl : profile) {
+        if (pl.empty()) continue;
+        double a = pl.front().x, b = a;
+        for (const auto& p : pl) { a = std::min(a, p.x); b = std::max(b, p.x); }
+        a = std::max(a, 0.0); b = std::min(b, length);
+        if (b > a) cover.emplace_back(a, b);
+    }
+    std::sort(cover.begin(), cover.end());
+    std::vector<SGap> out;
+    auto push = [&](double s0, double s1) { if (s1 - s0 > minGap) out.push_back({s0, s1}); };
+    double at = 0;
+    for (const auto& [a, b] : cover) {
+        if (a > at) push(at, a);
+        at = std::max(at, b);
+    }
+    if (length > at) push(at, length);
+    return out;
+}
+
 int suggestVerticalExaggeration(double relief, double visibleZ) {
     if (!(relief > 0) || !(visibleZ > 0)) return 1;
     for (int k : {1, 2, 5, 10})

@@ -151,3 +151,43 @@ TEST_CASE("레벨선 간격 규칙: 작업·인쇄 축척은 10 cm 선 / 50 cm �
         CHECK(lp.labelCm >= 50);
     }
 }
+
+// ---- v4 단계 5: 빈 구간(잘린 선이 덮지 않는 s 구간) ----
+TEST_CASE("profileGaps: 잘린 선이 없으면 전체가 빈 구간", "[gaps]") {
+    auto g = profileGaps({}, 12.0);
+    REQUIRE(g.size() == 1);
+    CHECK(g[0].s0 == Approx(0)); CHECK(g[0].s1 == Approx(12));
+}
+
+TEST_CASE("profileGaps: 0–2, 10–12 이면 가운데 2–10 한 곳", "[gaps]") {
+    std::vector<Polyline> p{{{0, 45}, {1, 45.1}, {2, 45.2}}, {{10, 45.4}, {11, 45.5}, {12, 45.6}}};
+    auto g = profileGaps(p, 12.0);
+    REQUIRE(g.size() == 1);
+    CHECK(g[0].s0 == Approx(2)); CHECK(g[0].s1 == Approx(10));
+}
+
+TEST_CASE("profileGaps: 겹치는 잘린 선은 하나로 합쳐 빈 구간 없음", "[gaps]") {
+    std::vector<Polyline> p{{{0, 1}, {5, 1}}, {{4, 1}, {12, 1}}};
+    CHECK(profileGaps(p, 12.0).empty());
+}
+
+TEST_CASE("profileGaps: 끝에 붙은 빈 구간과 거꾸로 놓인 점 순서", "[gaps]") {
+    std::vector<Polyline> p{{{8, 1}, {3, 1}, {1, 1}}};   // s 가 줄어드는 순서
+    auto g = profileGaps(p, 12.0);
+    REQUIRE(g.size() == 2);
+    CHECK(g[0].s0 == Approx(0)); CHECK(g[0].s1 == Approx(1));
+    CHECK(g[1].s0 == Approx(8)); CHECK(g[1].s1 == Approx(12));
+}
+
+TEST_CASE("profileGaps: minGap 이하 틈은 버림", "[gaps]") {
+    std::vector<Polyline> p{{{0, 1}, {5, 1}}, {{5.01, 1}, {12, 1}}};
+    CHECK(profileGaps(p, 12.0).empty());               // 1 cm 틈 < 기본 2 cm
+    CHECK(profileGaps(p, 12.0, 0.005).size() == 1);    // 기준을 낮추면 잡힘
+}
+
+TEST_CASE("profileGaps: 단면선 밖(s<0, s>length) 점은 잘라 셈", "[gaps]") {
+    std::vector<Polyline> p{{{-1, 1}, {3, 1}}, {{9, 1}, {13, 1}}};
+    auto g = profileGaps(p, 12.0);
+    REQUIRE(g.size() == 1);
+    CHECK(g[0].s0 == Approx(3)); CHECK(g[0].s1 == Approx(9));
+}

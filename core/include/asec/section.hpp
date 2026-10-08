@@ -88,6 +88,10 @@ LevelPlan planLevels(double pxPerMeter, double minLinePx, double minLabelPx, int
 double niceStep(double range, int targetCount);
 /// 단면선 기복(m): 열린 단면선(지면) 점 높이의 5–95 백분위 차. 닫힌 고리(덤불·돌 덩어리)는 뺌. 점 없으면 0
 double profileRelief(const std::vector<Polyline>& profile);
+/// 빈 구간(v4 단계 5): 단면선 길이 [0, length] 중 잘린 선(profile 의 s 범위들의 합집합)이 덮지 않는 구간.
+/// minGap(m) 이하의 아주 짧은 틈은 버린다. 결과는 s 오름차순.
+struct SGap { double s0 = 0, s1 = 0; };
+std::vector<SGap> profileGaps(const std::vector<Polyline>& profile, double length, double minGap = 0.02);
 /// 화면 세로 과장 추천(1·2·5·10): 기복이 보이는 높이 visibleZ(m, 1:1 일 때)의 15% 이상 차지하는 가장 작은 배율.
 /// 기복 없음·보이는 높이 없음이면 1. 화면 보기 전용 — 도면·내보내기는 언제나 1:1
 int suggestVerticalExaggeration(double relief, double visibleZ);
