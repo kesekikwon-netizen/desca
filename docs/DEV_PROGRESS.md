@@ -78,8 +78,9 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **남은 문제:** 그리기 도구 줄 글 「╱ 단면선 그리기」(옛 이름, `buildCtxBar`). 캡처에서 그리기 모드가 켜진 채 찍힘(원인 확인 전). 축척 칸이 아직 상태줄에 있음.
 
 ### 2026-10-09 · Claude Code — 단계 −2, 첫 커밋 · 푸시
-- **무엇을:** 사용자 허락으로 줄바꿈만 바뀐 대기 155개를 풀고(git restore --staged .), 지금까지의 개발 · 진행 기록 · 지시서를 첫 커밋으로 묶어 origin/feature/design-v2에 푸시.
-- **확인:** git diff --cached --name-only → 0개. 커밋 뒤 git status 깨끗함.
+- **무엇을:** 사용자 허락으로 줄바꿈만 바뀐 대기 155개를 풀고(`git restore --staged .`), 지금까지의 개발 · 진행 기록 · 지시서를 첫 커밋으로 묶음.
+- **확인:** `git diff --cached --name-only` → 0개. 커밋 `ae6e1ce` 뒤 `git status` 깨끗함.
+- **푸시 실패:** `git push -u origin feature/design-v2` → 403 「Permission … denied to kwonyoungin11」. 이 PC의 GitHub 로그인 계정에 저장소 쓰기 권한이 없다. **해결은 사용자가:** 저장소 주인(kesekikwon-netizen)이 Settings › Collaborators에 kwonyoungin11을 더하거나, 이 PC에서 주인 계정으로 다시 로그인. 해결 전까지 커밋은 이 PC에만 있다 — 다음 AI는 푸시 전에 `git push`가 되는지 먼저 확인할 것.
 
 ## 5. 다음 할 일 (위에서부터)
 1. 단계 8 — 도구 줄 글을 「단면선 긋기 › A 찾는 중 / A′ 찾는 중」으로, 그리는 동안 상태줄 「다음:」 숨김. 캡처에서 그리기 모드가 켜진 이유 확인.
