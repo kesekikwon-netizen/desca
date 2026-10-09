@@ -1,6 +1,5 @@
-# 푸시 · PR마다 빌드와 단위 시험을 자동으로 돌린다.
-# - linux: 계산 코어(archsection) + 도구 + 시험만(Qt 없이 빠르게)
-# - windows: 앱 전체(Qt 6.8.3, 배포판과 같은 판) + 시험 + 실행 파일 묶음(내려받기용)
+# 푸시 · PR마다 빌드와 단위 시험을 자동으로 돌린다. 대상은 Windows 만(DEV_RULES R7.4 — Linux 작업은 2026-10-09 B5 에서 삭제).
+# - windows: 앱 전체(Qt 6.8.3, 배포판과 같은 판) + 시험 + offscreen UI 감사(1920x1040 · 4K 200 %) + 실행 파일 묶음(내려받기용)
 name: CI
 
 on:
@@ -16,22 +15,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  linux-core:
-    name: Linux · 코어와 시험
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: 도구 설치
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build zlib1g-dev
-      - name: 구성
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DASEC_BUILD_APP=OFF
-      - name: 빌드
-        run: cmake --build build
-      - name: 단위 시험
-        run: ./build/asec_tests
-      - name: 합성 모델 만들기(도구가 도는지)
-        run: ./build/asec-make-synthetic /tmp/asec-synthetic
-
   windows-app:
     name: Windows · 앱 전체
     runs-on: windows-2022
@@ -70,16 +53,33 @@ jobs:
           Copy-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\zlib1.dll" $out -ErrorAction SilentlyContinue
           Get-ChildItem build -Recurse -Filter z*.dll | Copy-Item -Destination $out -ErrorAction SilentlyContinue
           & windeployqt --release --no-translations --no-system-d3d-compiler --no-compiler-runtime "$out\SectionViewer.exe"
-      - name: UI 감사 (offscreen, 화면 없이)
+      - name: UI 감사 (offscreen, 화면 없이 — 1920x1040 ×1 · 3840x2160 ×2)
         shell: pwsh
         # windeployqt는 qoffscreen.dll을 넣지 않으므로 Qt에서 직접 복사한다.
-        # 화면(OpenGL) 없이도 감사 판정(단추 겹침·자리 규칙)은 위젯 상태로만 하므로 돈다.
+        # 화면(OpenGL) 없이도 감사 판정(단추 겹침·자리 규칙·해상도·배율)은 위젯 상태로만 하므로 돈다.
+        # GUI 실행 파일은 `&` 로 부르면 끝을 기다리지 않아 판정이 되지 않았다(2026-10-09 확인) → Start-Process 로 끝까지 기다려(300 s, 넘으면 죽임 — DEV_RULES R7.2)
+        # 종료 코드 ≠ 0 이거나 ui-audit.txt 의 마지막 RESULT 줄이 「ui-audit RESULT ok」가 아니면 실패. 실행마다 --settings · --ui-audit 폴더는 따로.
         run: |
           & .\build\Release\asec-make-synthetic.exe "$env:TEMP\kerf-synth"
+          if ($LASTEXITCODE -ne 0) { throw "asec-make-synthetic failed (exit=$LASTEXITCODE)" }
           Copy-Item "$env:QT_ROOT_DIR\plugins\platforms\qoffscreen.dll" dist\Kerf-ci\
           $env:QT_QPA_PLATFORM = "offscreen"
-          & dist\Kerf-ci\SectionViewer.exe "$env:TEMP\kerf-synth\Synthetic.3mx" --line 200002 450006 200014 450006 --size 1920x1040 --settings "$env:TEMP\kerf-audit-settings" --ui-audit "$env:TEMP\kerf-audit" --quit
-          if ($LASTEXITCODE -ne 0) { throw "ui-audit failed (exit=$LASTEXITCODE)" }
+          $exe = (Resolve-Path dist\Kerf-ci\SectionViewer.exe).Path
+          $model = "$env:TEMP\kerf-synth\Synthetic.3mx"
+          foreach ($case in @(@{ size = '1920x1040'; scale = '1' }, @{ size = '3840x2160'; scale = '2' })) {
+            $tag = "$($case.size)-x$($case.scale)"
+            if ($case.scale -ne '1') { $env:QT_SCALE_FACTOR = $case.scale } else { Remove-Item Env:QT_SCALE_FACTOR -ErrorAction SilentlyContinue }
+            $settings = "$env:TEMP\kerf-audit-settings-$tag"; $audit = "$env:TEMP\kerf-audit-$tag"; $log = "$env:TEMP\kerf-audit-$tag.log"
+            $argLine = "`"$model`" --line 200002 450006 200014 450006 --size $($case.size) --settings `"$settings`" --ui-audit `"$audit`" --quit"
+            $p = Start-Process -FilePath $exe -ArgumentList $argLine -PassThru -NoNewWindow -RedirectStandardOutput $log
+            $null = $p.Handle
+            if (-not $p.WaitForExit(300000)) { $p.Kill(); throw "ui-audit ${tag}: timeout (killed after 300 s)" }
+            if (Test-Path $log) { Get-Content $log | Select-String 'ui-audit ' | ForEach-Object { $_.Line } }
+            $txt = Join-Path $audit 'ui-audit.txt'
+            $res = if (Test-Path $txt) { (Select-String -Path $txt -Pattern '^ui-audit RESULT' | Select-Object -Last 1).Line } else { '(ui-audit.txt missing)' }
+            Write-Host "ui-audit $tag exit=$($p.ExitCode) $res"
+            if ($p.ExitCode -ne 0 -or $res -ne 'ui-audit RESULT ok') { throw "ui-audit $tag failed (exit=$($p.ExitCode), $res)" }
+          }
       - name: 실행 묶음 올리기
         uses: actions/upload-artifact@v4
         with:
