@@ -140,3 +140,23 @@ TEST_CASE("sheet: plan cover scale, outside step, section window", "[sheet]") {
     SectionPaperWindow sh = sectionPaperWindow(3, 2, 60, a.plotW, a.plotH, 40, 1, 12, 0);
     CHECK(sh.s0 == Approx(w0.s0 - 12 * w0.mPerMm));
 }
+
+// ---- 단계 14: 도면 파일 이름 ----
+TEST_CASE("sheet: 도면 파일 이름 규칙", "[sheet]") {
+    CHECK(sheetFileName("Production_2", "A–A′", 20) == "Production_2_A-A′_1-20.svg");
+    CHECK(sheetFileName("Production_2", "평면도", 110) == "Production_2_평면도_1-110.svg");
+    CHECK(sheetFileName("제주", "B–B′", 20.0) == "제주_B-B′_1-20.svg");
+}
+
+TEST_CASE("sheet: 파일 이름 금지 글자·앞뒤 공백점", "[sheet]") {
+    CHECK(sheetFileName("a/b:c*d?e\"f<g>h|i\\j", "도면", 20) == "a_b_c_d_e_f_g_h_i_j_도면_1-20.svg");
+    CHECK(sheetFileName("  모델. ", " 도면.", 20) == "모델_도면_1-20.svg");
+    CHECK(sheetFileName("...", "...", 20) == "__1-20.svg");
+}
+
+TEST_CASE("sheet: 같은 이름이면 _2 _3", "[sheet]") {
+    CHECK(uniqueSheetFileName("a_1-20.svg", {}) == "a_1-20.svg");
+    CHECK(uniqueSheetFileName("a_1-20.svg", {"a_1-20.svg"}) == "a_1-20_2.svg");
+    CHECK(uniqueSheetFileName("a_1-20.svg", {"a_1-20.svg", "a_1-20_2.svg"}) == "a_1-20_3.svg");
+    CHECK(uniqueSheetFileName("a_1-20.svg", {"b.svg"}) == "a_1-20.svg");
+}

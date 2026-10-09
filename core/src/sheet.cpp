@@ -282,4 +282,53 @@ bool sectionsFromJson(const std::string& text, std::vector<SavedSection>& out, i
         return false;
     }
 }
+
+// ---- 단계 14: 도면 파일 이름 ----
+namespace {
+std::string sanitizeFilePart(const std::string& s) {
+    static const std::string bad = "\\/:*?\"<>|";
+    std::string o;
+    for (size_t i = 0; i < s.size();) {
+        unsigned char c = static_cast<unsigned char>(s[i]);
+        // en dash(U+2013, UTF-8 E2 80 93) → '-'. ′(U+2032, E2 80 B2)은 그대로 둔다.
+        if (c == 0xE2 && i + 2 < s.size() && static_cast<unsigned char>(s[i + 1]) == 0x80 &&
+            static_cast<unsigned char>(s[i + 2]) == 0x93) {
+            o += '-';
+            i += 3;
+            continue;
+        }
+        o += (bad.find(static_cast<char>(c)) == std::string::npos ? static_cast<char>(c) : '_');
+        ++i;
+    }
+    size_t a = 0, b = o.size();
+    while (a < b && (o[a] == ' ' || o[a] == '.')) ++a;
+    while (b > a && (o[b - 1] == ' ' || o[b - 1] == '.')) --b;
+    return o.substr(a, b - a);
+}
+std::string denomText(double denom) {
+    long long d = std::llround(denom);
+    if (std::fabs(denom - double(d)) < 1e-9) return std::to_string(d);
+    char b[32];
+    std::snprintf(b, sizeof b, "%.6f", denom);
+    std::string s = b;
+    while (s.size() > 1 && s.back() == '0') s.pop_back();
+    return s;
+}
+}  // namespace
+
+std::string sheetFileName(const std::string& model, const std::string& sheet, double denom) {
+    return sanitizeFilePart(model) + "_" + sanitizeFilePart(sheet) + "_1-" + denomText(denom) + ".svg";
+}
+
+std::string uniqueSheetFileName(const std::string& base, const std::vector<std::string>& existing) {
+    auto has = [&](const std::string& n) { return std::find(existing.begin(), existing.end(), n) != existing.end(); };
+    if (!has(base)) return base;
+    size_t dot = base.rfind('.');
+    std::string stem = dot == std::string::npos ? base : base.substr(0, dot);
+    std::string ext = dot == std::string::npos ? std::string() : base.substr(dot);
+    for (int k = 2;; ++k) {
+        std::string c = stem + "_" + std::to_string(k) + ext;
+        if (!has(c)) return c;
+    }
+}
 }  // namespace asec

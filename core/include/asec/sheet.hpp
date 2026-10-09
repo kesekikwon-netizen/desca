@@ -101,6 +101,13 @@ std::string formatAzimuth(double azDeg);
 std::string facingKo(double lineAzDeg);
 /// 0 → "A–A′", 1 → "B–B′", … 25 → "Z–Z′", 26 → "A1–A1′"
 std::string sectionLetterName(int index);
+/// 도면 파일 이름: `모델_도면_1-분모.svg`. 도면 이름의 –(en dash)는 -로, ′는 그대로.
+/// Windows 금지 글자 `\ / : * ? " < > |`는 _로, 각 부분의 앞뒤 공백·점을 뗀다.
+/// 분모가 정수면 정수로(1-20), 아니면 소수(1-22.5).
+std::string sheetFileName(const std::string& model, const std::string& sheet, double denom);
+/// 같은 이름이 있으면 이름 뒤(확장자 앞)에 _2, _3… 을 붙인 첫 빈 이름.
+/// existing = 이미 있는 파일 이름들. 확장자가 없으면 뒤에 바로 붙인다.
+std::string uniqueSheetFileName(const std::string& base, const std::vector<std::string>& existing);
 /// 최근 목록 맨 앞에 넣기(같은 경로는 대소문자·구분자 무시하고 하나만), 최대 maxN
 std::vector<std::string> pushRecent(const std::vector<std::string>& list, const std::string& item, size_t maxN = 8);
 
