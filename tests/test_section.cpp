@@ -152,6 +152,23 @@ TEST_CASE("레벨선 간격 규칙: 작업·인쇄 축척은 10 cm 선 / 50 cm �
     }
 }
 
+// ---- v4 단계 0: 양자화로 평면에서 밀린 타일 경계도 잘림 ----
+TEST_CASE("양자화로 평면에서 밀린 타일 경계도 잘림", "[cut]") {
+    // 재현: OpenCTM 저장 뒤 아래쪽 타일의 위쪽 끝이 y=6.0 대신 y=5.9998 로 깎임(실측 0.08–0.24 mm)
+    // 평면(y=6) 아래 타일의 위쪽 띠에서 잘린 선이 나와야 함
+    auto m = synth::gridMesh(4, 3, 8, 6 - 0.0002, 0.04);
+    SectionFrame f(SectionLine{{2, 6}, {14, 6}});
+    std::vector<CutSeg> s;
+    cutMesh(*m, f, 0, 0, f.L, s, 0.001);  // 빈 구간 메우기용 스냅(2패스와 같은 값)
+    CHECK(s.size() > 50);   // 고치기 전: 0 (RED)
+    auto L = buildProfile(s, CleanupParams{});
+    REQUIRE(L.size() == 1);
+    double mn = 1e9, mx = -1e9;
+    for (auto& p : L[0]) { mn = std::min(mn, p.x); mx = std::max(mx, p.x); }
+    CHECK(mn == Approx(2.0).margin(0.05));
+    CHECK(mx == Approx(6.0).margin(0.05));
+}
+
 // ---- v4 단계 5: 빈 구간(잘린 선이 덮지 않는 s 구간) ----
 TEST_CASE("profileGaps: 잘린 선이 없으면 전체가 빈 구간", "[gaps]") {
     auto g = profileGaps({}, 12.0);

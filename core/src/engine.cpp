@@ -69,7 +69,9 @@ bool computeSection(MeshSource& src, const SectionRequest& rq, SectionOutput& ou
     if (f.L < 1e-3) { if (err) *err = "단면선이 너무 짧습니다"; return false; }
     auto t0 = clk::now();
     std::vector<MeshPtr> meshes;
-    BandQuad band = sectionBand(rq.line, 0.0);
+    // 단계 0: OpenCTM 양자화(실측 0.24 mm)로 타일 끝이 평면에서 어긋나도 수집되게 띠 여유 1 mm.
+    // 자르기는 [0, L] 로 그대로 자르고, 평면에 안 닿는 타일은 cutMesh 평면 스냅(planeTol)이 살린다.
+    BandQuad band = sectionBand(rq.line, 0.001);
     // 단면 평면 자체(두께 0)도 포함되도록 띠가 비어 있으면 약간 넓힘
     if (rq.line.front + rq.line.back < 1e-6) band = sectionBand(SectionLine{rq.line.a, rq.line.b, 0.001, 0.001}, 0.0);
     out.previewLod = rq.meshRes > 0;
@@ -90,7 +92,31 @@ bool computeSection(MeshSource& src, const SectionRequest& rq, SectionOutput& ou
 
     auto t1 = clk::now();
     std::vector<CutSeg> segs;
-    for (auto& m : *cutSrc) cutMesh(*m, f, 0.0, 0.0, f.L, segs);
+    for (auto& m : *cutSrc) cutMesh(*m, f, 0.0, 0.0, f.L, segs, 0.0);  // 1패스: 스냅 없이 정확히
+    // 단계 0 두 패스: 1패스로 덮지 못한 빈 구간(joinGaps gapTol 로 못 잇는 것만)만
+    // 평면 스냅(cutMesh planeTol)으로 메운다. 메운 조각은 빈 구간 범위로 잘라 겹치지 않게 한다.
+    // (스냅을 처음부터 걸면 정확한 격자에서도 가짜 겹침이 생겨 자릿값 시험을 깬다.)
+    {
+        std::vector<std::pair<double, double>> cov;
+        for (auto& sg : segs) {
+            double a = std::min(sg.s0, sg.s1), b = std::max(sg.s0, sg.s1);
+            if (b > a) cov.emplace_back(a, b);
+        }
+        std::sort(cov.begin(), cov.end());
+        const double fillMin = rq.cleanup.gapTol > 0 ? rq.cleanup.gapTol : 0;
+        double at = 0;
+        for (auto& [a, b] : cov) {
+            if (a - at > fillMin && f.L > at) {
+                double g1 = std::min(a, f.L);
+                if (g1 - at > fillMin)
+                    for (auto& m : *cutSrc) cutMesh(*m, f, 0.0, at, g1, segs, 0.001);
+            }
+            at = std::max(at, b);
+            if (at >= f.L) break;
+        }
+        if (f.L - at > fillMin)
+            for (auto& m : *cutSrc) cutMesh(*m, f, 0.0, at, f.L, segs, 0.001);
+    }
     out.result.line = rq.line;
     out.result.srs = src.srs;
     out.result.rawSegments = segs.size();

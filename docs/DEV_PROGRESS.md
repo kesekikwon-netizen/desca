@@ -19,13 +19,13 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-09 · Claude Code (Opus) — **이 계정의 작업은 여기서 마무리.** 디자인 보완은 다른 계정(Max)으로 |
+| 마지막 갱신 | 2026-10-09 · Muse Spark — A1 core 완료(`hatchPolygon` · `closeCutRegion` + 시험 10개). 디자인 보완은 다른 계정(Max) |
 | 디자인 상태 | ⏸ 보완 대기 — Strata 일관성(C1–C7 미결정). 위 안내 · `docs/design-v4/STRATA_CONSISTENCY.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
-| 바뀐 파일(내용) | 모두 커밋됨 — `git log --oneline 4422b4e..HEAD` · CI: `.github/workflows/ci.yml` |
+| 바뀐 파일(내용) | 단계 0 고치기 미커밋 4개 — `core/include/asec/section.hpp` · `core/src/section.cpp` · `core/src/engine.cpp` · `tests/test_section.cpp` + 이 기록(`docs/DEV_PROGRESS.md`). 커밋은 사용자 허락 후 · CI: `.github/workflows/ci.yml` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
-| 시험 | `asec_tests` 114 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 · `--ui-audit` RESULT ok · GitHub Actions(Linux · Windows) 통과 |
+| 시험 | `asec_tests` 125 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 · `--ui-audit` RESULT ok · GitHub Actions(Linux · Windows) 통과 |
 | 최근 캡처 | `C:\dev\tmp\kerf-shots\work-v4d.png` · `draw-v4.png` · `C:\dev\tmp\ui\` (이 PC에만) |
 
 ## 2. 이 PC에서 빌드 · 실행 (검증된 명령)
@@ -48,7 +48,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 | --- | --- | --- | --- |
 | −2 | 저장소 정리(줄바꿈만 바뀐 155개 대기 풀기) | ✅ | 2026-10-09 `git restore --staged .` → 대기 0, 내용 변화 없음 |
 | −1 | 기준선 빌드 · 시험 | ✅ | §2. 108/110 |
-| 0 | 잘린 선 빈 구간 원인 조사 | ⬜ | |
+| 0 | 잘린 선 빈 구간 원인 조사 | ✅ | 원인 분류 + 고치기 완료. 합성선 전체 0–12 한 줄(54점). 시험 115 통과·1 실패(알려진 것)·1 건너뜀 |
 | 1 | `--ui-audit` | 🟨 | 탭 · 리본 · 겹침 · 축척 칸 · 높이 배지 · 그리는 동안 문장 · 아이콘 · 툴팁 검사 — 지금 RESULT ok. **남음:** lists-match(단계 10) · sheet 항목(단계 11) · same-name-different-action |
 | 2 | 탭 넷 | ✅ | 파일 · 홈 · 보기 · 자료. 측정 탭 없앰 |
 | 3 | 한 줄 리본 + 홈 3묶음 | 🟨 ⏸ | 44 px · 아이콘 옆 글자 · 홈=단면/뒤 깊이/도면 · 목록 머리 「＋ 새 단면」 없앰. **남음:** 1280 px 좁은 창 글자 숨기기 |
@@ -68,7 +68,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 | 16 | 빈 상태 | ⬜ ⏸ | |
 | 16a | 새 키 · 문장 · 토큰 | ⬜ ⏸ | |
 | 17 | 문서 · 마무리 | ⬜ | |
-| A1 | 단면 빗금(잘린 돌) | ⬜ ⏸ | 확정: 사선 45° · 종이 위 1.0 mm |
+| A1 | 단면 빗금(잘린 돌) | 🟨 (core만, UI는 ⏸) | core `hatchPolygon` · `closeCutRegion` + 시험 10개 끝. 남음: H 도구 · 리본 · 조판 빗금 줄 · 화면/SVG/DXF 캡처(디자인 결정 뒤) |
 | A2 | 단면 빗금 후보 | ⬜ ⏸ | |
 | A3 | 평면 윤곽 | ⬜ ⏸ | 확정: SVG · DXF 층만 |
 
@@ -116,6 +116,25 @@ C:\dev\kerf-v4c\asec_tests.exe
   - **판정:** Strata 캡처는 저장소에 올리지 않음 — 저장소가 **공개**이고 캡처에 조사구역 도형 · 실좌표가 보임 — 이 PC의 `C:\Users\권을\Documents\desc\design-v4\strata-ref\`에만 둠 — 잘못이면: 다른 PC의 디자인 세션이 캡처를 못 봄(사용자에게 받아야 함).
   - **판정:** 정보 줄 글 · 「평면에서 보기」 단추는 만들지 않고 멈춤 — 안내 자리(C4)가 Strata 방식으로 바뀔 수 있음 — 잘못이면: 단계 5 UI가 조금 늦어짐.
 
+### 2026-10-09 · Muse Spark — 단계 0 원인 분류(재현 + 탐침, 고치기는 승인 후)
+- **무엇을:** `asec-section C:\dev\kerf-synth\Synthetic.3mx 200002 450006 200014 450006`으로 재현 → profile이 `s 0–2` 8점 · `s 10–12` 7점만, 가운데 2–10 없음(증거 사진과 같음). 쪼개기 시험: 앞 4 m(`200002–200006`) 100 seg 정상 · 가운데 4 m(`200006–200010`) **rawSeg=0** · 뒤 4 m 101 seg 정상. `--front 3 --back 3`(16 타일) · `±1 mm`(8 타일)에서도 rawSeg=201 동일 → 타일 선택 개수가 원인이 아님. 임시 탐침(리포지토리 밖 컴파일·실행 뒤 삭제)으로 타일별 확인.
+- **원인:** 계산도 그리기도 메시 빔도 아님. **3MX 저장(OpenCTM 양자화)으로 타일 경계 꼭짓점이 ±0.1 mm 어긋난 것 + 수집이 정확히 닿은 타일만 포함**한다. 단면 평면 y=6: 빨간선은 아래쪽 행 타일(y 3–6)의 위쪽 띠에서만 나온다(위쪽 행은 d≥0 한쪽이라 자름 없음). 가운데 아래쪽 타일 2개(x 4–8 · 8–12)의 위쪽 끝이 y=5.9999185 · 5.9997649(평면에서 81 · 235 µm 아래)라 수집에서 빠지고, 넣어도 평면에 안 닿아 자름 0. 양쪽 끝 타일은 위쪽 끝이 y=6.0000772(위)라 우연히 살아남. 띠를 2 mm 넓혀도 rawSeg=201 그대로라 수집 여유만으로는 안 고쳐짐.
+- **확인:** 탐침 출력(타일별 bbox · segs) — 아래쪽 행 가운데 2타일 segs=0, y-max 5.9999185/5.9997649. `git status` 깨끗(탐침 파일 삭제함). 빌드 `cmake --build ... --target asec-section asec_tests` → `ninja: no work to do`(최신).
+- **판정:** 고치기는 FINAL_PLAN 단계 0 지시대로 승인 후. 고치면 `tests/test_section.cpp`에 실패하는 시험부터(양자화된 경계 재현). — 잘못이면: 양자화 운에 따라 잘린 선이 띄엄띄엄 나오는 채로 둠.
+- **고치기 제안(승인 필요):** ① 수집 띠에 여유(`computeSection`의 `sectionBand(line, 0)` → 약 1–2 mm) ② `cutMesh` 평면 판정에 스냅 여유(|d| < 약 1 mm는 평면 위로, 소음 0.24 mm의 4배) — 둘 다 있어야 가운데가 살아남. 부작용: 단면 위치가 1 mm 안에서만 움직임(자릿수 시험 mm 단위 안). **남은 문제:** 위쪽 행 타일 띠도 같이 살릴지(지금은 아래쪽 행만 빨간선을 만듦 — 부호 규칙 탓, 여유 뒤 중복은 `stitchSegments`가 이미 걸러냄).
+
+### 2026-10-09 · Muse Spark — 단계 0 고치기(승인됨, 두 패스)
+- **무엇을:** `cutMesh`에 `planeTol`(기본 0 = 옛 동작) 추가 — 평면 바로 아래(-tol < d < 0)만 평면 위로 보고, 교점은 원래 d 로 계산. `computeSection`은 1패스 스냅 없이 정확히 자른 뒤, `gapTol`(3 cm)로 못 잇는 빈 구간만 `sectionBand` 여유 1 mm로 수집 + 스냅 1 mm로 메우고 빈 구간 범위로 잘라 겹치지 않게 한다. 시험 `[cut]` 1개 추가(위쪽 끝 0.2 mm 깎인 타일 → 고치기 전 0개 RED).
+- **확인:** 새 시험 RED(0 > 50 안 됨) → GREEN. 전체 `asec_tests` → 115 통과 · 1 실패(알려진 CoalescingWorker) · 1 건너뜀. `asec-section` 시험선 → rawSeg 201에서 602, 줄 2개 15점에서 **한 줄 54점 s 0–12 전체**(웅덩이 바닥 · 주혈 모양 정상). 가운데 단독 4 m 선도 줄 1개 17점(전에는 0개). 빌드 경고 없음.
+- **판정:** 처음에는 스냅을 처음부터 걸었더니 정확한 격자 시험 2개가 깨짐(자릿값 0.01 mm → 1.3 mm, 파이프라인 1.5 mm → 2.6 mm — 스냅 조각과 진짜 조각이 가파른 벽에서 겹쳐 용접이 어긋남). 그래서 스냅은 빈 구간 메우기에만 쓰게 두 패스로 바꿈 — 정확한 길은 옛 코드 그대로 돌아감 — 잘못이면: 가파른 벽에서 mm 어긋남이 다시 나옴(파이프라인 시험이 잡아냄).
+- **남은 문제:** 커밋 안 함 — 사용자 허락 후 단계 커밋. 위쪽 행 타일은 빨간선을 만들지 않음(부호 규칙, 기존과 같음).
+
+### 2026-10-09 · Muse Spark — A1 core(`hatchPolygon` · `closeCutRegion`, UI는 ⏸)
+- **무엇을:** `core/include/asec/section.hpp`에 선언, `core/src/section.cpp`에 구현. `hatchPolygon(링들, 각도, 간격)`: 법선 방향 주사 + 반열림 판정(`ta<=0` 다름)으로 교점을 모아 짝-홀 쌍으로 묶음(구멍 포함, 링 자동 닫힘, 꼭짓점 겹침은 길이 0 쌍으로 버림). `closeCutRegion(잘린 선, s0, s1, 아래 점들)`: 윗경계는 잘린 선을 [s0,s1] 로 잘라 그대로 따르고(수직 벽 포함, 같은 s는 가장 높은 점), 덮개가 끊기면 실패. `tests/test_hatch.cpp` 10개(정사각형 0/45/90 · 오목 · 구멍 · 얇은 영역 · 빈 입력 · 영역 닫기/끊김/뒤바뀜) + `CMakeLists.txt` 등록.
+- **확인:** 시험 먼저 — 링크 실패 RED. 구현 뒤 `[hatch]` 81 assert 통과. 전체 `asec_tests` → 125 통과 · 1 실패(알려진 CoalescingWorker) · 1 건너뜀. 전체 빌드 경고 없음(새 경고 없음, 기존 fopen · mirrored 경고만).
+- **판정:** UI(H 도구 · 리본 · 조판 빗금 줄 · 캡처)는 디자인 결정 뒤(⏸ 유지) — core만 해도 도면 층 설계와 어긋나지 않게 `CutSeg` 자리 그대로 씀 — 잘못이면: UI 때 자리 변환이 필요함.
+- **남은 문제:** 단계 커밋은 아래에.
+
 ## 5. 다음 할 일 (위에서부터)
 **A. 디자인 세션(다른 계정, Max) — 먼저**
 1. `docs/design-v4/STRATA_CONSISTENCY.md`를 읽고 Strata 캡처(이 PC `C:\Users\권을\Documents\desc\design-v4\strata-ref\`)와 Strata 코드에서 공통 디자인 언어(토큰 · 리본 · 탭 · 판 치수)를 정리한다.
@@ -123,7 +142,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 3. 캔버스 화판과 `docs/design-v4/boards/` · `FINAL_PLAN.md` 결정표를 고치고, 이 파일의 ⏸를 풀 단계를 적는다.
 
 **B. 개발 — 디자인과 무관해서 지금 해도 되는 것(core, 시험 먼저)**
-1. 단계 0 — 합성 모델에서 잘린 선이 0–2 m · 10–12 m에만 있는 원인 조사(앱에서도 「잘린 선 2줄」로 재현됨). 이제 `profileGaps()`로 빈 구간을 숫자로 잴 수 있다.
+1. 단계 0 완료. 2. A1 core 완료(§4 기록). 다음은 단계 14 core.
 2. A1 core — `hatchPolygon(다각형, 각도, 간격)` · `closeCutRegion(…)` (FINAL_PLAN §9).
 3. 단계 14 core — 도면 파일 이름 함수(금지 글자 · 겹침 `_2`).
 4. 단계 12 core — 3D 기울어진 평면에서 「위에서 본 범위」 계산.

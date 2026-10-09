@@ -34,8 +34,13 @@ using Polyline = std::vector<Vec2>;  // (s, z)
 
 /// 메시를 d = dOffset 평면으로 잘라 [sMin,sMax] 안의 선분을 out 에 추가. 반환 = 추가된 선분 수.
 /// 꼭짓점이 평면 위(d==0)면 + 쪽으로 간주(기호적 섭동) → 겹선·퇴화 선분 없음.
+/// planeTol(m, 기본 0 = 옛 동작): 평면에서 tol 안쪽 아래(-tol < d < 0)는 평면 위로 간주한다.
+/// 3MX 저장(OpenCTM 양자화, 실측 0.24 mm)으로 타일 경계가 평면에서 어긋나도 잘리게 한다(단계 0).
+/// computeSection 은 빈 구간 메우기(2패스)에만 1 mm 로 쓴다. 바로 걸면 정확한 격자에서도
+/// 가짜 겹침이 생겨 자릿값이 깨지므로, 직접 부를 때는 보통 0 그대로 둔다.
+/// 교점 좌표는 원래 d 로 계산해 정확도를 유지한다. tol<=0 이면 옛 동작(스냅 없음).
 /// 공유 모서리 교점은 꼭짓점 번호 순으로 계산해 이웃 삼각형과 비트 단위로 같은 점이 나온다.
-size_t cutMesh(const Mesh& m, const SectionFrame& f, double dOffset, double sMin, double sMax, std::vector<CutSeg>& out);
+size_t cutMesh(const Mesh& m, const SectionFrame& f, double dOffset, double sMin, double sMax, std::vector<CutSeg>& out, double planeTol = 0.0);
 
 struct CleanupParams {
     double weldTol = 0.0005;     // 0.5 mm 이내 점 합치기
@@ -70,6 +75,18 @@ void smoothTaubin(Polyline& pl, int iters);
 double polylineLength(const Polyline& pl);
 /// 품질 지표: 중복 꼭짓점 수(연속 두 점 거리 < tol)
 size_t countDuplicateVertices(const std::vector<Polyline>& lines, double tol);
+
+/// ---- 빗금 (A1 core) ----
+/// 다각형 링들(바깥 + 구멍, 방향 무관)을 각도(angleDeg, x축 기준 반시계)·간격(spacing)으로
+/// 자른 빗금 선분들. 짝-홀 규칙: 모든 링의 교점을 모아 정렬해 쌍으로 묶는다.
+/// 링은 자동으로 닫는다(마지막→첫 점 변 포함). 빈 입력·간격<=0 이면 빈 벡터.
+/// 좌표는 다각형 자리 그대로(CutSeg s0,z0,s1,z1). 단면에서는 (s, z) 자리로 쓴다.
+std::vector<CutSeg> hatchPolygon(const std::vector<Polyline>& rings, double angleDeg, double spacing);
+/// 빗금 영역 닫기: 윗경계는 잘린 선(profile)을 s0–s1 구간에서 그대로 따라가고,
+/// 아래는 lower 점들(s0→s1 순서)을 거꾸로 붙인다. 연속 겹침점은 하나로.
+/// [s0,s1] 안에 잘린 선 빈 구간이 있으면 ok=false, poly 비움. lower 가 비면 실패.
+struct CutRegion { Polyline poly; bool ok = false; };
+CutRegion closeCutRegion(const std::vector<Polyline>& profile, double s0, double s1, const Polyline& lower);
 
 // ---- 레벨선 ----
 enum class LevelClass { Minor = 0, Major = 1, Master = 2 };  // 10cm / 50cm / 1m

@@ -11,15 +11,19 @@
 
 namespace asec {
 
-size_t cutMesh(const Mesh& m, const SectionFrame& f, double dOff, double sMin, double sMax, std::vector<CutSeg>& out) {
+size_t cutMesh(const Mesh& m, const SectionFrame& f, double dOff, double sMin, double sMax, std::vector<CutSeg>& out, double planeTol) {
     const float* P = m.pos.data();
     const size_t nt = m.triangleCount();
     size_t added = 0;
+    const double tol = planeTol > 0 ? planeTol : 0;
     auto D = [&](uint32_t i) { return f.d(P[3 * i], P[3 * i + 1]) - dOff; };
     for (size_t t = 0; t < nt; ++t) {
         uint32_t v[3] = {m.idx[3 * t], m.idx[3 * t + 1], m.idx[3 * t + 2]};
         double d[3] = {D(v[0]), D(v[1]), D(v[2])};
-        bool pos[3] = {d[0] >= 0, d[1] >= 0, d[2] >= 0};
+        // 단계 0 스냅: 평면 바로 아래(-tol < d < 0)는 평면 위로 간주(자릿값 판정용).
+        // 교점 보간은 아래에서 원래 d 로 계산한다. 위쪽(0 < d < tol)은 원래부터 + 쪽이라 그대로.
+        bool pos[3];
+        for (int k = 0; k < 3; ++k) pos[k] = (d[k] > -tol && d[k] < 0 ? 0.0 : d[k]) >= 0;
         if (pos[0] == pos[1] && pos[1] == pos[2]) continue;
         double sv[3], smin = 1e300, smax = -1e300;
         for (int k = 0; k < 3; ++k) { sv[k] = f.s(P[3 * v[k]], P[3 * v[k] + 1]); smin = std::min(smin, sv[k]); smax = std::max(smax, sv[k]); }
@@ -436,6 +440,107 @@ int suggestVerticalExaggeration(double relief, double visibleZ) {
     for (int k : {1, 2, 5, 10})
         if (relief * k >= 0.15 * visibleZ) return k;
     return 10;
+}
+
+// ---------------- 빗금 (A1 core) ----------------
+std::vector<CutSeg> hatchPolygon(const std::vector<Polyline>& rings, double angleDeg, double spacing) {
+    std::vector<CutSeg> out;
+    if (rings.empty() || !(spacing > 0)) return out;
+    const double a = angleDeg * 3.14159265358979323846 / 180.0;
+    const Vec2 u(std::cos(a), std::sin(a)), n(-u.y, u.x);
+    double tmin = 1e300, tmax = -1e300;
+    for (auto& r : rings)
+        for (auto& p : r) { double t = p.dot(n); tmin = std::min(tmin, t); tmax = std::max(tmax, t); }
+    if (!(tmax > tmin)) return out;
+    struct Edge { Vec2 p, q; };
+    std::vector<Edge> edges;
+    for (auto& r : rings) {
+        if (r.size() < 2) continue;
+        for (size_t i = 0; i < r.size(); ++i) {
+            Vec2 p = r[i], q = r[(i + 1) % r.size()];  // 링 자동 닫힘
+            if ((q - p).len() <= 1e-12) continue;
+            edges.push_back({p, q});
+        }
+    }
+    if (edges.empty()) return out;
+    double c = std::floor(tmin / spacing) * spacing;
+    if (c <= tmin) c += spacing;
+    for (; c < tmax && (tmax - c) > 1e-9; c += spacing) {
+        std::vector<double> ss;
+        for (auto& e : edges) {
+            double ta = e.p.dot(n) - c, tb = e.q.dot(n) - c;
+            // 반열림 판정: 평면 위 꼭짓점은 + 쪽. 꼭짓점을 지나면 2개가 같은 값으로 나와 쌍에서 버려짐.
+            // 같은 선 위의 변(ta==tb==0)은 스킵. 구멍 경계와 겹치는 선도 짝-홀로 맞게 짝지어짐.
+            if ((ta <= 0) == (tb <= 0)) continue;
+            double denom = ta - tb;
+            if (!(std::fabs(denom) > 0)) continue;
+            double t = ta / denom;
+            ss.push_back(e.p.dot(u) + (e.q.dot(u) - e.p.dot(u)) * t);
+        }
+        std::sort(ss.begin(), ss.end());
+        for (size_t i = 0; i + 1 < ss.size(); i += 2) {
+            if (ss[i + 1] - ss[i] < 1e-9) continue;
+            Vec2 p0 = u * ss[i] + n * c, p1 = u * ss[i + 1] + n * c;
+            out.push_back({p0.x, p0.y, p1.x, p1.y});
+        }
+    }
+    return out;
+}
+
+CutRegion closeCutRegion(const std::vector<Polyline>& profile, double s0, double s1, const Polyline& lower) {
+    CutRegion r;
+    if (s1 < s0) std::swap(s0, s1);
+    if (!(s1 > s0) || lower.empty()) return r;
+    // 윗경계: [s0,s1] 와 겹치는 잘린 선 변들을 잘라 모음(수직 벽 포함).
+    // 덮개 구간도 함께 모아 [s0,s1] 이 끊김 없이 덮이는지 본다.
+    std::vector<Vec2> top;
+    std::vector<std::pair<double, double>> cover;
+    for (auto& pl : profile) {
+        for (size_t i = 1; i < pl.size(); ++i) {
+            Vec2 A = pl[i - 1], B = pl[i];
+            double lo = std::min(A.x, B.x), hi = std::max(A.x, B.x);
+            if (hi < s0 || lo > s1) continue;
+            if (hi - lo <= 1e-12) {  // 수직 벽: 그 자리 점으로(덮개는 이웃 변이 만남)
+                if (A.x >= s0 - 1e-9 && A.x <= s1 + 1e-9) top.push_back(A);
+                continue;
+            }
+            Vec2 p0 = A, p1 = B;
+            if (p0.x > p1.x) std::swap(p0, p1);
+            if (p0.x < s0) { double t = (s0 - p0.x) / (p1.x - p0.x); p0 = {s0, p0.y + (p1.y - p0.y) * t}; }
+            if (p1.x > s1) { double t = (s1 - p0.x) / (p1.x - p0.x); p1 = {s1, p0.y + (p1.y - p0.y) * t}; }
+            top.push_back(p0); top.push_back(p1);
+            cover.emplace_back(p0.x, p1.x);
+        }
+    }
+    if (top.empty() || cover.empty()) return r;
+    // [s0,s1] 덮개 확인(1 µm 틈까지 허용)
+    std::sort(cover.begin(), cover.end());
+    double at = s0;
+    for (auto& [a, b] : cover) {
+        if (a > at + 1e-6) return r;  // 빈 구간
+        at = std::max(at, b);
+        if (at >= s1 - 1e-6) break;
+    }
+    if (at < s1 - 1e-6) return r;
+    // 윗경계 모양: s 순으로, 같은 s 묶음은 가장 높은 점만.
+    std::sort(top.begin(), top.end(), [](const Vec2& a, const Vec2& b) { return a.x < b.x; });
+    std::vector<Vec2> cov;
+    for (auto& p : top) {
+        if (!cov.empty() && std::fabs(p.x - cov.back().x) <= 1e-9) {
+            cov.back().y = std::max(cov.back().y, p.y);
+            continue;
+        }
+        cov.push_back(p);
+    }
+    // 다각형: 윗경계 + 아래 점들 거꾸로. 연속 겹침은 하나로(닫힘점은 남김).
+    Polyline poly = cov;
+    for (size_t i = lower.size(); i-- > 0;) {
+        if ((lower[i] - poly.back()).len() <= 1e-12) continue;
+        poly.push_back(lower[i]);
+    }
+    r.poly = std::move(poly);
+    r.ok = true;
+    return r;
 }
 
 // ---------------- 띠 ----------------
