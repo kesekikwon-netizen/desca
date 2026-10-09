@@ -226,9 +226,28 @@ QPushButton#danger { background: #FFFFFF; color: #A33B3B; border-color: #A33B3B;
 
 QDialog { background: #FAF9F5; }
 QWidget#dialogHead { background: #FFFFFF; border-bottom: 1px solid #DEDCD1; }
-QWidget#dialogSide { background: #F5F4ED; border-left: 1px solid #DEDCD1; }
+QWidget#dialogSide { background: #FFFFFF; border-left: 1px solid #DEDCD1; }
+QScrollArea#sideScroll { border: none; background: #FFFFFF; }
+QScrollArea#sideScroll > QWidget > QWidget#sideBody { background: #FFFFFF; }
+QWidget#sideBottom { background: #FFFFFF; border-top: 1px solid #DEDCD1; }
+QFrame#sideRule { background: #DEDCD1; border: none; }
+QLabel#sheetName { font-family: Batang, "Noto Serif KR", "Malgun Gothic"; font-size: 20px; font-weight: 500; color: #141413; }
+QToolButton#sheetTile { min-width: 64px; max-width: 64px; min-height: 46px; max-height: 46px; padding: 0; border: 1px solid #DEDCD1; border-radius: 8px; background: #FFFFFF; font-size: 11px; color: #141413; }
+QToolButton#sheetTile:hover { background: #F5F4ED; }
+QToolButton#sheetTile:checked { background: #E3DACC; border-color: #B0AEA5; }
+QToolButton#sheetTile:disabled { color: #73726C; background: #F5F4ED; }
+QToolButton#scaleGrid { min-height: 22px; max-height: 22px; padding: 0 4px; border: 1px solid #DEDCD1; border-radius: 4px; background: #FFFFFF; font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; color: #141413; }
+QToolButton#scaleGrid:hover { background: #F5F4ED; }
+QToolButton#scaleGrid:checked { background: #E3DACC; border-color: #141413; }
+QFrame#sheetCheck { background: #FFFFFF; border: 1px solid #C2C0B6; border-radius: 8px; }
+QLabel#checkOk { color: #3F6B31; font-weight: 700; font-size: 12px; }
+QLabel#checkWarn { color: #7A5A00; font-weight: 700; font-size: 12px; }
+QLabel#checkText { font-size: 12px; color: #141413; }
+QWidget#sheetPreview { background: #F0EEE6; }
+QLineEdit#sheetFind { min-height: 30px; max-height: 30px; border: 1px solid #C2C0B6; border-radius: 8px; background: #FFFFFF; padding: 0 10px; font-size: 12px; }
+QLabel#listCaption { font-size: 11px; font-weight: 700; color: #5E5D59; padding: 4px 6px 0 6px; }
 QWidget#dialogFoot { background: #FFFFFF; border-top: 1px solid #DEDCD1; }
-QLabel#sideHead { color: #5E5D59; font-size: 11px; }
+QLabel#sideHead { color: #5E5D59; font-size: 11px; font-weight: 700; }
 QGroupBox { border: none; border-top: 1px solid #DEDCD1; margin-top: 18px; padding-top: 10px; background: transparent; }
 QGroupBox::title { subcontrol-origin: margin; left: 0; padding: 0 8px 0 0; color: #5E5D59; font-size: 11px; }
 QLabel#calc { background: #FFFFFF; border: none; border-top: 1px solid #141413; border-bottom: 1px solid #DEDCD1; padding: 6px 2px; color: #141413; }

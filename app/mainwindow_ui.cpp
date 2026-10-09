@@ -54,7 +54,7 @@ using namespace asec;
 extern const char* const kVersion;
 
 static QString qs8(const std::string& s) { return QString::fromUtf8(s.c_str()); }
-static QString modelKey(const QString& path) {
+QString MainWindow::modelKey(const QString& path) {
     QByteArray h = QCryptographicHash::hash(QFileInfo(path).absoluteFilePath().toLower().toUtf8(), QCryptographicHash::Sha1).toHex().left(16);
     return QStringLiteral("model/") + QString::fromLatin1(h) + "/";
 }
@@ -1945,9 +1945,37 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     L << QStringLiteral("ui-audit guide-band=%1%2").arg(band < 0 ? QStringLiteral("not-checked") : QString::number(band)).arg(band == 0 ? QStringLiteral("  FAIL") : QString());
     ok &= band != 0;
 
-    // 6) 아직 만들지 않은 조판 쪽 항목
-    L << QStringLiteral("ui-audit lists-match=not-checked");
-    L << QStringLiteral("ui-audit sheet type-selectors=not-checked primary=not-checked notices-outside-check=not-checked");
+    // 6) 도면 탭(v5 C5 · 스펙 §8): 왼쪽 목록 348 · 오른쪽 판 320 · 고르는 곳은 목록 하나(판에 「평면도 | 단면도」 없음) · 흙색 주 단추 하나 ·
+    //    알림은 「도면 점검」 상자 안에만(warnBox 없음) · 레벨선 pt 칸 둘 · 축척 격자 8 · 종이 아래 도구 줄 6칸 · 떠 있는 「도면 보기」 1 · 점검 항목 3 이상 · 목록 줄 = 평면 1 + 단면 n
+    QString sheetLine = QStringLiteral("ui-audit sheet=not-checked");
+    int listsMatch = -1;
+    if (src_ && section_->hasResult()) {
+        dlgSheet(); pump(400);
+        if (QWidget* page = sheetHost_) {
+            int typeSel = 0, primary = 0, noticesOut = 0, ptSpins = 0, grid = 0, tools = 0, guides = 0, checkItems = 0, rightW = -1;
+            for (auto* b : page->findChildren<QToolButton*>())
+                if (b->isVisibleTo(page) && b->objectName() == QLatin1String("chip") && (b->text() == QStringLiteral("평면도") || b->text() == QStringLiteral("단면도"))) ++typeSel;
+            for (auto* b : page->findChildren<QPushButton*>()) if (b->isVisibleTo(page) && b->objectName() == QLatin1String("primary")) ++primary;
+            for (auto* f : page->findChildren<QFrame*>()) if (f->isVisibleTo(page) && f->objectName() == QLatin1String("warnBox")) ++noticesOut;
+            for (auto* s : page->findChildren<QDoubleSpinBox*>()) if (s->isVisibleTo(page) && s->suffix().trimmed() == QLatin1String("pt")) ++ptSpins;
+            for (auto* b : page->findChildren<QToolButton*>(QStringLiteral("scaleGrid"))) if (b->isVisibleTo(page)) ++grid;
+            for (auto* b : page->findChildren<QToolButton*>(QStringLiteral("floatCell"))) if (b->isVisibleTo(page)) ++tools;
+            for (auto* g : page->findChildren<QFrame*>(QStringLiteral("guideBand"))) if (g->isVisibleTo(page)) ++guides;
+            for (auto* l : page->findChildren<QLabel*>()) if (l->isVisibleTo(page) && (l->objectName() == QLatin1String("checkOk") || l->objectName() == QLatin1String("checkWarn"))) ++checkItems;
+            for (auto* w : page->findChildren<QWidget*>(QStringLiteral("dialogSide"))) if (w->isVisibleTo(page)) rightW = w->width();
+            const int sideW = sheetSide_ ? sheetSide_->width() : -1;
+            listsMatch = sheetList_ && sheetList_->count() == 1 + int(sections_.size()) + 2 ? 1 : 0;   // 절 이름 줄 「평면」 「단면」 2개 포함
+            const bool sheetOk = typeSel == 0 && primary == 1 && noticesOut == 0 && ptSpins == 2 && grid == 8 && tools == 6 && guides == 1 && checkItems >= 3 && sideW == 348 && rightW == 320;
+            sheetLine = QStringLiteral("ui-audit sheet type-selectors=%1 primary=%2 notices-outside-check=%3 pt-spins=%4 scale-grid=%5 tools=%6 guide=%7 check-items=%8 list-w=%9 side-w=%10%11")
+                            .arg(typeSel).arg(primary).arg(noticesOut).arg(ptSpins).arg(grid).arg(tools).arg(guides).arg(checkItems).arg(sideW).arg(rightW).arg(sheetOk ? QString() : QStringLiteral("  FAIL"));
+            ok &= sheetOk;
+            if (!dir.isEmpty()) grab().save(QDir(dir).filePath(QStringLiteral("sheet.png")));
+        }
+        closeSheetTab(); pump(200);
+    }
+    L << QStringLiteral("ui-audit lists-match=%1%2").arg(listsMatch < 0 ? QStringLiteral("not-checked") : QString::number(listsMatch)).arg(listsMatch == 0 ? QStringLiteral("  FAIL") : QString());
+    ok &= listsMatch != 0;
+    L << sheetLine;
 
     // 7) 아이콘 · 툴팁(D11)
     L << QStringLiteral("ui-audit icons-missing=%1 tooltip-missing=%2").arg(noIcon.size()).arg(noTip.size());

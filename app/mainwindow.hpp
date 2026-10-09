@@ -70,6 +70,7 @@ struct SheetParams {
     bool withImage = true, withLine = true, withLevels = true, withTitle = true;
     bool showBaseline = false; double baselineEl = 0;
     double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기 pt(10 cm · 50 cm) — 디자인 v5 결정 L
+    int hatchKind = 0; double hatchMm = 1.0;         // 잘린 돌 빗금: 0 45° · 1 검은 칠 · 2 점묘, 간격 mm(스펙 §8 — F 단계가 씀)
     QString heightLabel, srsLabel, facing, date;
     double imgDxMm = 0, imgDyMm = 0;   // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
 };
@@ -207,9 +208,17 @@ private:
     std::shared_ptr<SheetParams> lastSheet_;          // 지금 조판의 단면도 설정(다른 단면으로 갈 때 용지·넣을 것·형식을 이어 감)
     std::shared_ptr<PlanSheetParams> lastPlanSheet_;  // 목록에서 평면도로 돌아올 때 그대로
     bool reusePlanSheet_ = false;
+    std::vector<bool> sheetChecked_;                  // 조판 목록 고르기 칸(0 = 평면도, 1.. = 단면) — 「n장 저장」
+    std::function<void()> onSheetChecksChanged_;     // 열린 조판 판이 「n장」 글을 고치게
+    QPointer<QLabel> sheetCount_;
     QWidget* buildSheetSide();
     void refreshSheetList();
     void openSheetFromList(int row);
+    QWidget* sheetRowWidget(int row);                     // 조판 목록 한 줄(고르기 칸 · 썸네일 · 이름 · 「1:20 · A4 가로 · 저장 안 됨」)
+    QString sheetStatusText(int row) const;
+    void noteSheetSaved(const QString& prefix, const asec::SheetSpec& spec);   // 저장 뒤 목록 상태 글(QSettings 모델별)
+    int checkedSheetCount() const;
+    static QString modelKey(const QString& path);          // QSettings 모델별 키 머리
     void showWorkTab();
     void saveEmbeddedSheet();
     QWidget* startPage_ = nullptr;
