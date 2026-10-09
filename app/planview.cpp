@@ -648,6 +648,43 @@ bool PlanView::screenRayLocal(const QPointF& sp, Vec3& o, Vec3& d) const {
     return d.x * d.x + d.y * d.y + d.z * d.z > 0;
 }
 
+// 단면선 위 m 숫자 글 간격(스펙 §5). 이 Task(감사 먼저)에서는 늘 1 m — 간격 규칙은 다음 Task
+int PlanView::tickLabelStepM() const { return 1; }
+
+// 숫자 글 사각형: s = k·step(1 ≤ s < L)마다 눈금 중심에서 띠 반대쪽 16 px, 폭 = 글 폭 + 2(흰 테 1 px 양쪽), 높이 = 글꼴 높이 + 2.
+// paintOverlay 가 이 사각형 가운데에 글을 그리고, --ui-audit plan-tick 이 서로 겹치는 쌍을 센다(같은 함수라 판정 = 그림)
+QVector<PlanView::TickLabel> PlanView::tickLabels() const {
+    QVector<TickLabel> out;
+    if (!hasLine_ || width() <= 0 || height() <= 0) return out;
+    const SectionFrame f(line_);
+    if (f.L <= 0.4) return out;
+    const double z = refZ() + center_.z;
+    auto S = [&](const Vec2& q) { return localToScreen(q.x, q.y, z); };
+    const QPointF A = S(line_.a), B = S(line_.b);
+    const double pxLen = std::hypot(B.x() - A.x(), B.y() - A.y());
+    if (pxLen < 80) return out;
+    const QFontMetricsF fm(theme::monoFont(11));
+    const int step = std::max(1, tickLabelStepM());
+    for (double s = step; s < f.L - 1e-4; s += step) {
+        const QPointF c = S(f.planXY(s, 0));
+        const QPointF side = S(f.planXY(s, 0.4)) - c;
+        const double sl = std::hypot(side.x(), side.y());
+        const QPointF along = pxLen > 1 ? (B - A) / pxLen : QPointF(1, 0);
+        const QPointF n = sl > 1e-3 ? side / sl : QPointF(-along.y(), along.x());
+        const QString t = QStringLiteral("%1 m").arg(s, 0, 'f', 0);
+        const QPointF at = c - n * 16;
+        const double w = fm.horizontalAdvance(t) + 2, h = fm.height() + 2;
+        out.push_back({QRectF(at.x() - w / 2, at.y() - h / 2, w, h), t});
+    }
+    return out;
+}
+
+QVector<QRectF> PlanView::tickLabelRects() const {
+    QVector<QRectF> rs;
+    for (const TickLabel& t : tickLabels()) rs << t.rect;
+    return rs;
+}
+
 // 왼쪽 아래 뜬 카드: 「디테일 불러오는 중 12 / 40」 + 먹색 4 px 막대(다 오면 사라짐). 그림자 대신 1 px 테(성능)
 void PlanView::paintLodCard(QPainter& p) {
     const auto& F = lastFrame_;
@@ -757,8 +794,7 @@ void PlanView::paintOverlay(QPainter& p) {
     p.setPen(QPen(theme::SectionRed, redW, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
     const double pxLen = std::hypot(B.x() - A.x(), B.y() - A.y());
     if (hasLine_ && f.L > 0.4 && pxLen >= 80) {
-        p.setFont(theme::monoFont(11));
-        for (double s = 0.5; s < f.L - 1e-4; s += 0.5) {
+        for (double s = 0.5; s < f.L - 1e-4; s += 0.5) {   // 눈금 선은 0.5 m 마다 그대로(숫자 글 간격만 tickLabelStepM — 스펙 §5)
             QPointF c = S(f.planXY(s, 0));
             QPointF side = S(f.planXY(s, 0.4)) - c;
             double sl = std::hypot(side.x(), side.y());
@@ -770,15 +806,13 @@ void PlanView::paintOverlay(QPainter& p) {
             p.drawLine(c - n * h, c + n * h);
             p.setPen(QPen(theme::Ink, 1.2, Qt::SolidLine, Qt::RoundCap));
             p.drawLine(c - n * h, c + n * h);
-            if (meter) {
-                QString t = QStringLiteral("%1 m").arg(s, 0, 'f', 0);
-                QPointF at = c - n * 16;
-                QRectF tr(at.x() - 18, at.y() - 8, 36, 16);
-                p.setPen(Qt::white);   // 어두운 구덩이 위에서도 읽히게 흰 테(검토 UI 4)
-                for (const QPointF& o : {QPointF(-1, 0), QPointF(1, 0), QPointF(0, -1), QPointF(0, 1)}) p.drawText(tr.translated(o), Qt::AlignCenter, t);
-                p.setPen(theme::Ink);
-                p.drawText(tr, Qt::AlignCenter, t);
-            }
+        }
+        p.setFont(theme::monoFont(11));
+        for (const TickLabel& tl : tickLabels()) {   // 숫자 글은 감사(tickLabelRects)와 같은 사각형 가운데에
+            p.setPen(Qt::white);   // 어두운 구덩이 위에서도 읽히게 흰 테(검토 UI 4)
+            for (const QPointF& o : {QPointF(-1, 0), QPointF(1, 0), QPointF(0, -1), QPointF(0, 1)}) p.drawText(tl.rect.translated(o), Qt::AlignCenter, tl.text);
+            p.setPen(theme::Ink);
+            p.drawText(tl.rect, Qt::AlignCenter, tl.text);
         }
     }
     if (hasLine_ && line_.back > 1e-6 && f.L > 1e-6 && pxLen >= 80) {   // 선이 화면에서 짧으면(80 px 미만) 눈금처럼 숨김

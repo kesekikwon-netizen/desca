@@ -4,6 +4,8 @@
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLWidget>
+#include <QRect>
+#include <QVector>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -75,6 +77,10 @@ public:
     void fitAll();
     /// 감사용: 장면 상자(XY)가 지금 창 크기에서 화면에 다 들어가는가(창을 줄여도 맞춤이 유지되는지 — B5)
     bool contentFits() const;
+    /// 단면선 위 m 숫자 간격(m, 스펙 §5): {1, 2, 5, 10} 중 숫자 글끼리 겹치지 않는 가장 작은 값
+    int tickLabelStepM() const;
+    /// 감사 · 그리기 공용: 단면선 위 m 숫자 글 사각형(화면 px). 단면선이 없거나 화면 길이 < 80 px 면 빈 목록
+    QVector<QRectF> tickLabelRects() const;
     void topView();
     void homeView();
     QPointF compassCenter() const;                  // 나침반 자리(그리기 · 눌림 판정이 같은 값을 쓴다 — 검토 I1)
@@ -181,6 +187,8 @@ private:
 
     void freeGpu();
     void upload();
+    struct TickLabel { QRectF rect; QString text; };
+    QVector<TickLabel> tickLabels() const;   // 자리 = 눈금 중심에서 띠 반대쪽 16 px, 폭 = 글 폭 + 2(흰 테), 높이 = 글꼴 높이 + 2 — paintOverlay 와 tickLabelRects 가 같이 씀
     void updateMatrices();
     bool screenToLocalXY(const QPointF& sp, asec::Vec2& out) const;
     QPointF localToScreen(double x, double y, double z) const;

@@ -241,6 +241,8 @@ private:
     void updateVexUi();
     QLabel *stripLen_ = nullptr, *stripDepth_ = nullptr, *stripScale_ = nullptr, *stripState_ = nullptr, *stripLevels_ = nullptr;
     QWidget *planTitle_ = nullptr, *secTitleBar_ = nullptr;
+    QWidget* infoStrip_ = nullptr;             // 단면 머리 아래 정보 줄(계산 상태 · 잘린 선 · 입면 뒤 · 레벨선 범례)
+    int secHeaderStep_ = 0, stripStep_ = 0;    // 좁은 창에서 머리 · 정보 줄을 줄인 단계(0 = 모두 보임, 스펙 §4 — --ui-audit 가 읽는다)
     QComboBox* scaleCombo_ = nullptr;
     QLabel *lvLine_ = nullptr, *lvLabel_ = nullptr;
     QToolButton* depthChip_[5] = {};
