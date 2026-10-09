@@ -40,6 +40,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScreen>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QShortcut>
 #include <QSlider>
@@ -679,7 +680,7 @@ void MainWindow::updateVexUi() {
     vexBtn_->setToolTip(tip);
     vexBtn_->setProperty("state", state);
     vexBtn_->style()->unpolish(vexBtn_); vexBtn_->style()->polish(vexBtn_);
-    fitSectionHeader();   // 「세로 ×10 ▾」처럼 글이 길어지면 머리를 다시 맞춘다(Review Focus 2)
+    if (!headerBatch_) fitSectionHeader();   // 「세로 ×10 ▾」처럼 글이 길어지면 머리를 다시 맞춘다(Review Focus 2) — updateHeader 안에서는 그 끝에서 한 번
 }
 
 // 단면 머리(스펙 §4 · 사용자 답 Q1 A): 머리 폭에 들어가는 가장 작은 단계를 고른다 — ① 「북쪽을 봄」 숨김 ② 「크게」 숨김 ③ 「세로 ×1 ▾」 아이콘만
@@ -690,6 +691,11 @@ void MainWindow::fitSectionHeader() {
     fittingHeader_ = true;
     QLayout* lay = secTitleBar_->layout();
     const int avail = secTitleBar_->width();
+    {   // 입력이 지난번과 같으면 단계를 다시 훑지 않는다(확대 애니메이션 프레임마다 보였다 숨기던 것 — rework 2 code S2)
+        const QString key = QStringLiteral("%1|%2|%3|%4|%5").arg(avail).arg(secTitleFull_, secFacing_ ? secFacing_->text() : QString(), vexBtn_ ? vexBtn_->text() : QString(), vexBtn_ ? vexBtn_->property("state").toString() : QString());
+        if (key == secHeaderKey_) { fittingHeader_ = false; return; }
+        secHeaderKey_ = key;
+    }
     auto apply = [&](int step) {
         if (secFacing_) secFacing_->setVisible(step < 1);
         if (secMaxBtn_) secMaxBtn_->setVisible(step < 2);
@@ -719,7 +725,7 @@ void MainWindow::fitSectionHeader() {
 
 void MainWindow::setSecTitleText(const QString& full) {
     secTitleFull_ = full;
-    fitSectionHeader();
+    if (!headerBatch_) fitSectionHeader();   // updateHeader 안에서는 그 끝에서 한 번(방위 글을 바꾼 뒤)
 }
 
 // 정보 줄(스펙 §4 · 사용자 답 Q2 A): 폭이 모자라면 ① 「레벨선 10 cm · 숫자 50 cm」 숨김 ② 「입면 뒤 0–3.00 m」 숨김 ③ 「잘린 선 …」을 점 수 뺀 짧은 글(툴팁 전체)
@@ -782,6 +788,8 @@ QString MainWindow::windowTitleCheck() const {
 
 void MainWindow::updateHeader() {
     if (!secTitle_) return;
+    ++headerBatch_;   // 머리 맞춤은 이 함수가 끝날 때 한 번 — 제목 · 세로 글 · 방위 글을 다 바꾼 뒤(어느 return 길이든, qScopeGuard)
+    const auto fitHeaderOnce = qScopeGuard([this] { if (--headerBatch_ == 0) fitSectionHeader(); });
     QString st, tip;
     QString bt = heightBadgeText(&st, &tip);
     for (auto* b : {heightBadge_, heightBadge2_}) {
@@ -1660,6 +1668,7 @@ void MainWindow::applyHighContrast(bool on) {
     QSettings().setValue("ui/highContrast", on);
     qApp->setStyleSheet(theme::styleSheet(on));
     section_->setStyle(secStyle());
+    secHeaderKey_.clear();   // 시트가 바뀌면 글 폭이 달라질 수 있다 — 머리를 다시 맞춘다
     updateHeader();
 }
 
