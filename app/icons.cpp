@@ -132,6 +132,24 @@ QIcon icon(const QString& name, int px, const QColor& ink) {
     return ic;
 }
 
+QIcon iconWithCaret(const QString& name, int px, const QColor& ink, const QColor& halo) {
+    const kerficons::Svg* s = find(name);
+    if (!s) return icon(name, px, ink);
+    QIcon ic;
+    for (qreal d : iconDprs()) {
+        QPixmap pm = renderGlyph(s, px, ink, d, 1.0);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        const qreal w = px * 0.375, h = w * 0.6, x = px - w - 0.5, y = px - h - 0.5;   // 16 px → ▾ 6 × 3.6, 오른쪽 아래(리본 메뉴 칩의 ▾ 와 같은 자리 규칙)
+        QPolygonF tri; tri << QPointF(x, y) << QPointF(x + w, y) << QPointF(x + w / 2, y + h);
+        p.setPen(QPen(halo, 1.5)); p.setBrush(ink);
+        p.drawPolygon(tri);
+        p.end();
+        ic.addPixmap(pm);
+    }
+    return ic;
+}
+
 QPixmap chipPixmap(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, QIcon::Mode mode, QIcon::State state, qreal dpr, bool caret) {
     const Look L = lookFor(kind, mode == QIcon::Selected ? QIcon::Normal : mode, state, c);
     return renderChip(find(name), tile, glyphPx, L, dpr, caret);

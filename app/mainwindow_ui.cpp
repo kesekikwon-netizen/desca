@@ -569,6 +569,8 @@ QWidget* MainWindow::buildSectionFrame() {
         // 좁은 창(스펙 §4 4단계): 상자 대신 「그릴 것 ▾」 메뉴 단추 하나 — 같은 QAction 넷이라 체크 상태 · 키 I · L · V 가 그대로(깊이 음영은 키가 없어 마우스로 닿아야 함)
         secTogglesMenu_ = new QToolButton; secTogglesMenu_->setObjectName("secTogglesMenu"); secTogglesMenu_->setFocusPolicy(Qt::NoFocus); secTogglesMenu_->setAutoRaise(true);
         secTogglesMenu_->setIcon(kerf::icon(QStringLiteral("layers"), 16, theme::Hand)); secTogglesMenu_->setIconSize(QSize(16, 16)); secTogglesMenu_->setProperty("iconName", QStringLiteral("layers"));
+        secTogglesMenu_->setIcon(kerf::iconWithCaret(QStringLiteral("layers"), 16, theme::Hand, theme::Card)); secTogglesMenu_->setProperty("caretBaked", true);   // 메뉴 단추라는 표시 ▾ 를 아이콘에(스펙 §4 「그릴 것 ▾」 — 폭을 늘리지 않음, rework 2 UI S1)
+        secTogglesMenu_->setAccessibleName(QStringLiteral("그릴 것"));
         secTogglesMenu_->setPopupMode(QToolButton::InstantPopup);
         secTogglesMenu_->setToolTip(QStringLiteral("그릴 것 켜기 · 끄기 — 입면 영상 · 잘린 선 · 레벨선 · 깊이 음영 (I · L · V)"));
         { auto* m = new QMenu(secTogglesMenu_); for (const char* k : {"image", "line", "levels", "fade"}) m->addAction(action(k)); secTogglesMenu_->setMenu(m); }
@@ -578,7 +580,8 @@ QWidget* MainWindow::buildSectionFrame() {
     // 세로:가로 — 누르면 화면 세로 과장(×1·×2·×5·×10, X 키로 돌아가며). 기복이 작으면 추천을 함께 보여 줌
     vexBtn_ = new QToolButton; vexBtn_->setObjectName("vexBtn"); vexBtn_->setFocusPolicy(Qt::NoFocus);
     vexBtn_->setAutoRaise(true); vexBtn_->setPopupMode(QToolButton::InstantPopup);
-    vexBtn_->setIcon(theme::icon(theme::Ico::Vex, 16)); vexBtn_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);   // v4 D11
+    vexIcon_ = theme::icon(theme::Ico::Vex, 16); vexCaretIcon_ = kerf::iconWithCaret(QString::fromLatin1(theme::iconName(theme::Ico::Vex)), 16, theme::Hand, theme::Card);
+    vexBtn_->setIcon(vexIcon_); vexBtn_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);   // v4 D11
     {
         auto* m = new QMenu(vexBtn_);
         for (int k : {1, 2, 5, 10}) {
@@ -676,6 +679,7 @@ void MainWindow::updateVexUi() {
         tip = QStringLiteral("이 단면의 기복은 %1 cm라 1:1 화면에서는 거의 평평하게 보입니다 — 세로 ×%2 권장. ").arg(vexRelief_ * 100, 0, 'f', 0).arg(vexSuggest_) + tip;
     }
     (void)t;
+    vexFull_ = plain;
     vexBtn_->setText(plain);
     vexBtn_->setToolTip(tip);
     vexBtn_->setProperty("state", state);
@@ -692,14 +696,18 @@ void MainWindow::fitSectionHeader() {
     QLayout* lay = secTitleBar_->layout();
     const int avail = secTitleBar_->width();
     {   // 입력이 지난번과 같으면 단계를 다시 훑지 않는다(확대 애니메이션 프레임마다 보였다 숨기던 것 — rework 2 code S2)
-        const QString key = QStringLiteral("%1|%2|%3|%4|%5").arg(avail).arg(secTitleFull_, secFacing_ ? secFacing_->text() : QString(), vexBtn_ ? vexBtn_->text() : QString(), vexBtn_ ? vexBtn_->property("state").toString() : QString());
+        const QString key = QStringLiteral("%1|%2|%3|%4|%5").arg(avail).arg(secTitleFull_, secFacing_ ? secFacing_->text() : QString(), vexFull_, vexBtn_ ? vexBtn_->property("state").toString() : QString());
         if (key == secHeaderKey_) { fittingHeader_ = false; return; }
         secHeaderKey_ = key;
     }
     auto apply = [&](int step) {
         if (secFacing_) secFacing_->setVisible(step < 1);
         if (secMaxBtn_) secMaxBtn_->setVisible(step < 2);
-        if (vexBtn_) vexBtn_->setToolButtonStyle(step < 3 ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
+        if (vexBtn_) {   // ③ 아이콘만 — 메뉴라는 표시는 아이콘에 구운 ▾(QSS 가 메뉴 표시를 지우고, 글 ▾ 는 1280 머리에 들어가지 않음 — rework 2 UI S1)
+            vexBtn_->setToolButtonStyle(step < 3 ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
+            vexBtn_->setIcon(step < 3 ? vexIcon_ : vexCaretIcon_);
+            vexBtn_->setProperty("caretBaked", step >= 3);
+        }
         if (secToggles_) secToggles_->setVisible(step < 4);
         if (secTogglesMenu_) secTogglesMenu_->setVisible(step >= 4);
     };
@@ -710,11 +718,12 @@ void MainWindow::fitSectionHeader() {
     if (step == 5) {   // ⑤ 남는 폭에 제목을 맞춘다 — 글 폭과 라벨 sizeHint 의 차(여백)는 되풀이해 흡수
         apply(4);
         int tw = secTitle_->fontMetrics().horizontalAdvance(secTitleFull_);
+        const int floorW = secTitle_->fontMetrics().horizontalAdvance(secTitleFull_.left(1) + QChar(0x2026));   // 바닥 = 첫 글자 + 「…」(「…」만 남지 않게 — 감사 clippedLabels)
         for (int pass = 0; pass < 4; ++pass) {
             lay->activate();
             const int over = lay->minimumSize().width() - avail;
             if (over <= 0) break;
-            tw = std::max(24, tw - over);
+            tw = std::max(floorW, tw - over);
             setElidedText(secTitle_, secTitleFull_, Qt::ElideRight, tw);
         }
     }
@@ -2410,9 +2419,13 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
                     reach = acts.contains(action("image")) && acts.contains(action("line")) && acts.contains(action("levels")) && acts.contains(action("fade"));
                 }
         if (!reach) F.toggles = false;
-        // 보이는 메뉴 단추(「그릴 것」 · 세로 과장)는 ▾ 가 보여야 한다(스펙 §4 「그릴 것 ▾」 · 「세로 ×1 ▾」 — QSS 가 메뉴 표시를 지우므로 글 ▾, rework 2 UI S1)
+        // 보이는 메뉴 단추(「그릴 것」 · 세로 과장)는 ▾ 가 보여야 한다(스펙 §4 「그릴 것 ▾」 · 「세로 ×1 ▾」 — QSS 가 메뉴 표시를 지우므로 글 ▾ 또는 아이콘에 구운 ▾, rework 2 UI S1)
         for (QToolButton* mb : {secTogglesMenu_, vexBtn_})
-            if (mb && mb->isVisibleTo(secTitleBar_) && (mb->toolButtonStyle() == Qt::ToolButtonIconOnly || !mb->text().contains(QChar(0x25BE)))) F.carets = false;
+            if (mb && mb->isVisibleTo(secTitleBar_)) {
+                const bool textCaret = mb->toolButtonStyle() != Qt::ToolButtonIconOnly && mb->text().contains(QChar(0x25BE));
+                const bool iconCaret = mb->property("caretBaked").toBool() && !mb->icon().isNull();
+                if (!textCaret && !iconCaret) F.carets = false;
+            }
         // 정보 줄: 겹침 · 밖 · 짓눌림 + 잘린 글, 계산 상태 글은 늘 보임, 빈 구간 꼬리는 늘 보임(rework 2 correctness C1), 줄인 글에는 전체 글 툴팁
         int tip = 0;
         const int sb = overlapCount(infoStrip_) + clippedLabels(infoStrip_, &tip);

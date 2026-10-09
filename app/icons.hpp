@@ -25,6 +25,8 @@ struct ChipColors {
 [[nodiscard]] QList<qreal> iconDprs();
 /// 선 아이콘 QIcon(1× · 2×). 없는 이름이면 빈 QIcon + qWarning 한 번
 [[nodiscard]] QIcon icon(const QString& name, int px, const QColor& ink);
+/// 선 아이콘 + 오른쪽 아래 ▾(메뉴 단추 표시 — 폭을 늘리지 않음). halo = 바탕색 테(▾ 를 획과 떼어 놓는다). 배율은 iconDprs() 여섯 장
+[[nodiscard]] QIcon iconWithCaret(const QString& name, int px, const QColor& ink, const QColor& halo);
 /// 한 장 바로 그리기(ink 색, px 논리 픽셀, dpr 배율)
 [[nodiscard]] QPixmap glyph(const QString& name, int px, const QColor& ink, qreal dpr = 1.0);
 /// 리본 칩 아이콘: tile 한 변(px) 안에 glyph 크기 아이콘, 둥글기 tile/4. kind 에 따라 켜짐 색이 다르다

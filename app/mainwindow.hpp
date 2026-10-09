@@ -253,6 +253,8 @@ private:
     int secHeaderPasses_ = 0;                  // fitSectionHeader 가 실제로 단계를 다시 고른 횟수(감사 refit — rework 2 code S2)
     int headerBatch_ = 0;                      // updateHeader 안: 머리 맞춤은 끝에서 한 번만(방위 글까지 바꾼 뒤 — rework 2 code S2 · correctness C3)
     QString secHeaderKey_;                     // 마지막으로 맞춘 입력(폭 · 제목 · 방위 · 세로 글 · 상태) — 같으면 바로 돌아간다
+    QString vexFull_;                          // 「세로 ×1 ▾」 전체 글(열쇠 — 좁은 머리 3단계 뒤로는 아이콘만)
+    QIcon vexIcon_, vexCaretIcon_;             // 세로 과장 아이콘 · ▾ 를 구운 아이콘(아이콘만일 때 메뉴 표시 — rework 2 UI S1)
     void fitSectionHeader();                   // 스펙 §4 · Q1 A: 북쪽을 봄 → 크게 → 세로 아이콘만 → 토글을 메뉴로 → 제목 줄임표
     void setSecTitleText(const QString& full); // 제목은 이 길로만(updateHeader · 감사 1280L)
     QString stripStateRich_, stripCutFull_, stripCutShort_;   // 정보 줄 글(상태는 서식 글, 잘린 선은 전체 · 점 수 뺀 짧은 글)
