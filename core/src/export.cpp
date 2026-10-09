@@ -1,4 +1,5 @@
 #include "asec/export.hpp"
+#include "asec/sheet.hpp"
 
 #include <cstdio>
 #include <fstream>
@@ -30,9 +31,9 @@ bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const f
     DxfWriter d;
     d.addLayer("DRAW_SOIL", 7, 25);      // 빈 층 · 토층선 0.25 mm
     d.addLayer("DRAW_OUTLINE", 7, 35);   // 빈 층 · 유구 윤곽 0.35 mm
-    d.addLayer("LEVEL_10CM", 9, 9);
-    d.addLayer("LEVEL_50CM", 8, 18);
-    d.addLayer("LEVEL_1M", 8, 25);
+    d.addLayer("LEVEL_10CM", 9, dxfLineWeight(o.levelMinorPt));   // 디자인 v5 결정 L: 10 cm 0.2 pt(→ 0.09 mm) · 50 cm = 1 m 0.5 pt(→ 0.18 mm)
+    d.addLayer("LEVEL_50CM", 8, dxfLineWeight(o.levelMajorPt));
+    d.addLayer("LEVEL_1M", 8, dxfLineWeight(o.levelMajorPt));
     d.addLayer("SECTION_IMAGE", 7, -3);
     d.addLayer("SECTION_PROFILE", 1, 50);
     d.addLayer("LEVEL_TEXT", 7, 18);

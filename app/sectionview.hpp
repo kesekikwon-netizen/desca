@@ -10,6 +10,7 @@ struct SectionStyle {
     bool depthFade = true;   // 입면 깊이 음영(먼 면일수록 옅게) — 계산 단계에서 적용, 내보내기도 같은 설정
     double imageOpacity = 1.0;
     double lineWidthPx = 2.0;   // 화면 단면선 굵기(보기 메뉴 1.5 / 2 / 3 px). 인쇄는 0.35 mm 고정
+    double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기(pt, 디자인 v5 결정 L): 10 cm 선 · 50 cm(1 m 포함) 선. 내보내기는 이 값 그대로, 화면은 보이게 바닥값
     bool showBaseline = false;  // 기준선 EL(점선 + 「기준선 EL. 57.00 m」)
     double baselineEl = 0;      // 절대 표고(m)
     bool plotScaleBar = true;   // 그림 칸 안 축척 막대(도면은 표제란 띠에 따로 그림)
@@ -39,6 +40,7 @@ struct SheetPaintProbe {
     double worldStep = 0;
     bool uniform = true;
     bool drewCutLine = false;
+    double levelMinorPx = 0, levelMajorPx = 0;   // 실제로 쓴 레벨선 펜 굵기(painter 단위) — --sheet-check 가 pt 기대값과 비교
 };
 
 /// 보고서용 그리기(화면·내보내기 공용, 아무 스레드에서나 QImage 에 그릴 수 있음). ppm = 픽셀/m, ui = 글자·선 배율(DPI/96)

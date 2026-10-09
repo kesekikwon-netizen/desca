@@ -14,6 +14,8 @@ double ptToMm(double pt);
 /// 입력값을 0.05–3.0 pt 로 자른다. NaN 은 기본 0.2
 double clampLineWeightPt(double pt);
 LineWeights defaultLineWeights();
+/// pt → DXF 선 굵기 코드(그룹 370, 1/100 mm). DXF 가 허용하는 값(0 · 5 · 9 · 13 · 15 · 18 · 20 · 25 · 30 · 35 · 40 · 50 · 53 · 60 · 70 · 80 · 90 · 100 · 106 · 120 · 140 · 158 · 200 · 211) 중 가장 가까운 것. 입력은 clampLineWeightPt 로 자름
+int dxfLineWeight(double pt);
 
 struct SheetSpec {
     Paper paper = Paper::A4;

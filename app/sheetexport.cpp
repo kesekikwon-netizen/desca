@@ -284,6 +284,7 @@ void MainWindow::paintSheet(QPainter& p, const SectionDoc& doc0, const SheetPara
     doc.st.showImage = sp.withImage; doc.st.showLine = sp.withLine; doc.st.showLevels = sp.withLevels;
     doc.st.imageOpacity = 1.0; doc.st.showBaseline = sp.showBaseline; doc.st.baselineEl = sp.baselineEl;
     doc.st.plotScaleBar = !sp.withTitle;
+    doc.st.levelMinorPt = clampLineWeightPt(sp.levelMinorPt); doc.st.levelMajorPt = clampLineWeightPt(sp.levelMajorPt);
     // 영상: 이 쪽에 보이는 거리 범위만 잘라서(PDF 에 쪽마다 전체 영상이 들어가지 않게)
     QImage img = img0; SectionImgGeo geo = geo0;
     if (!img.isNull() && geo.res > 0) {
@@ -321,6 +322,8 @@ SheetParams MainWindow::defaultSheetParams() const {
     sp.withLine = st.value("sheet/withLine", true).toBool();
     sp.withLevels = st.value("sheet/withLevels", true).toBool();
     sp.withTitle = st.value("sheet/withTitle", true).toBool();
+    sp.levelMinorPt = clampLineWeightPt(st.value("sheet/levelMinorPt", 0.2).toDouble());
+    sp.levelMajorPt = clampLineWeightPt(st.value("sheet/levelMajorPt", 0.5).toDouble());
     sp.title = QStringLiteral("%1 단면도").arg(sectionName());
     if (current_ >= 0 && current_ < int(sections_.size()) && !sections_[size_t(current_)].note.empty())
         sp.title += QStringLiteral(" · ") + qs8(sections_[size_t(current_)].note);
@@ -691,6 +694,7 @@ bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const Shee
     const int pages = p.split ? G.L.cols * G.L.rows : 1;
     if (p.format == 1) {   // DXF: 모델 공간 1:N(용지 배치 없음)
         DxfParams dp; dp.world3d = false; dp.denom = p.spec.denom; dp.image = p.withImage; dp.imageDpi = std::min(p.dpi, 200.0);
+        dp.levelMinorPt = p.levelMinorPt; dp.levelMajorPt = p.levelMajorPt;
         SectionDoc doc = doc0; doc.st.showLevels = p.withLevels;
         return exportSectionDxf(doc, src, dp, path, msg, cancel);
     }
@@ -1109,6 +1113,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         s.setValue("sheet/denom", st->spec.denom); s.setValue("sheet/format", st->format); s.setValue("sheet/dpi", st->dpi);
         s.setValue("sheet/withImage", st->withImage); s.setValue("sheet/withLine", st->withLine);
         s.setValue("sheet/withLevels", st->withLevels); s.setValue("sheet/withTitle", st->withTitle);
+        s.setValue("sheet/levelMinorPt", st->levelMinorPt); s.setValue("sheet/levelMajorPt", st->levelMajorPt);
         bDefault->setText(QStringLiteral("✓ 기본으로 저장함"));
     });
     QObject::connect(bSave, &QPushButton::clicked, d, [=, &io, &accepted] {
@@ -1666,6 +1671,11 @@ bool MainWindow::runSheetCheck(const QString& outDir, QString* log) {
         const int red = flag(redCount(s1, e1.plot) > 0);
         const int so = flag(outside(e1));
         lines << QStringLiteral("sheet-check section zoom=1.00 image-visible=%1 cut-red-visible=%2 labels-outside-plot=%3").arg(vis).arg(red).arg(so);
+        {   // 디자인 v5 결정 L: 레벨선 10 cm 0.2 pt · 50 cm 0.5 pt — 종이 위 mm × (px/mm) 가 실제 펜 굵기와 같아야 한다
+            const double expMinor = ptToMm(sec.levelMinorPt) * k, expMajor = ptToMm(sec.levelMajorPt) * k;
+            const int lvOk = flag(std::abs(e1.levelMinorPx - expMinor) < 0.05 && std::abs(e1.levelMajorPx - expMajor) < 0.05 && e1.levelMajorPx > e1.levelMinorPx);
+            lines << QStringLiteral("sheet-check level-pt minor=%1 expect=%2 major=%3 expect=%4 ok=%5").arg(e1.levelMinorPx, 0, 'f', 3).arg(expMinor, 0, 'f', 3).arg(e1.levelMajorPx, 0, 'f', 3).arg(expMajor, 0, 'f', 3).arg(lvOk);
+        }
         QImage s2; SheetPaintProbe e2;
         paintSec(2.07, s2, e2);
         s2.save(QDir(outDir).filePath(QStringLiteral("sheet_section_z2.png")));

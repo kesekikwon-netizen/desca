@@ -58,7 +58,7 @@ struct OpenedScene {
 };
 
 struct SectionExportParams { int format = 0; double denom = 20, dpi = 300; };  // format 0 PNG 1 TIFF 2 GeoTIFF
-struct DxfParams { bool world3d = false; double denom = 20; bool image = true; double imageDpi = 200; };
+struct DxfParams { bool world3d = false; double denom = 20; bool image = true; double imageDpi = 200; double levelMinorPt = 0.2, levelMajorPt = 0.5; };   // 레벨선 pt — 디자인 v5 결정 L
 struct PlanParams { bool wholeModel = true; double denom = 100, dpi = 200; bool overlayLine = true; asec::Box3 area; };
 /// 도면(용지) 내보내기: 형식 0 PDF 1 DXF 2 PNG 3 TIFF
 struct SheetParams {
@@ -69,6 +69,7 @@ struct SheetParams {
     QString title;               // 도면명
     bool withImage = true, withLine = true, withLevels = true, withTitle = true;
     bool showBaseline = false; double baselineEl = 0;
+    double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기 pt(10 cm · 50 cm) — 디자인 v5 결정 L
     QString heightLabel, srsLabel, facing, date;
     double imgDxMm = 0, imgDyMm = 0;   // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
 };

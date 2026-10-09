@@ -141,3 +141,31 @@ TEST_CASE("DXF 그리기 순서: 레벨선 → IMAGE → 단면선, 라벨은 50
     CHECK(txt.find("\n1\n78.6\n", ent) == std::string::npos);   // 10 cm 선에는 라벨 없음
     CHECK(txt.find("\n1\n78.50\n", ent) == std::string::npos);  // 소수 2자리 아님
 }
+
+// 디자인 v5 결정 L — 레벨선 레이어 굵기: 10 cm = levelMinorPt(기본 0.2 pt → 9), 50 cm · 1 m = levelMajorPt(기본 0.5 pt → 18)
+static int layerLw(const std::vector<std::pair<int, std::string>>& P, const std::string& name) {
+    for (size_t i = 0; i + 1 < P.size(); ++i)
+        if (P[i] == std::make_pair(2, name))
+            for (size_t j = i; j < P.size() && j < i + 12; ++j) if (P[j].first == 370) return std::stoi(P[j].second);
+    return -99;
+}
+TEST_CASE("DXF 레벨선 레이어 굵기는 pt 설정을 따른다(기본 0.2 / 0.5 pt)", "[dxf][pt]") {
+    auto r = sampleResult();
+    std::string txt, err;
+    {
+        DxfExportOptions o;
+        REQUIRE(exportSectionDxf(r, o, {}, &err, &txt));
+        auto P = pairsOf(txt);
+        CHECK(layerLw(P, "LEVEL_10CM") == 9);
+        CHECK(layerLw(P, "LEVEL_50CM") == 18);
+        CHECK(layerLw(P, "LEVEL_1M") == 18);
+    }
+    {
+        DxfExportOptions o; o.levelMinorPt = 1.0; o.levelMajorPt = 2.0;
+        REQUIRE(exportSectionDxf(r, o, {}, &err, &txt));
+        auto P = pairsOf(txt);
+        CHECK(layerLw(P, "LEVEL_10CM") == 35);
+        CHECK(layerLw(P, "LEVEL_50CM") == 70);
+        CHECK(layerLw(P, "LEVEL_1M") == 70);
+    }
+}

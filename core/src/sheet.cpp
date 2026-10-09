@@ -355,4 +355,11 @@ double clampLineWeightPt(double pt) {
 }
 
 LineWeights defaultLineWeights() { return LineWeights{}; }
+int dxfLineWeight(double pt) {
+    static const int kValid[] = {0, 5, 9, 13, 15, 18, 20, 25, 30, 35, 40, 50, 53, 60, 70, 80, 90, 100, 106, 120, 140, 158, 200, 211};
+    const double hmm = ptToMm(clampLineWeightPt(pt)) * 100.0;   // 1/100 mm
+    int best = kValid[0]; double bd = std::abs(hmm - kValid[0]);
+    for (int v : kValid) { const double dv = std::abs(hmm - v); if (dv < bd) { bd = dv; best = v; } }
+    return best;
+}
 }  // namespace asec

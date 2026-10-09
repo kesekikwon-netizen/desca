@@ -527,6 +527,7 @@ bool MainWindow::exportSectionDxf(const SectionDoc& doc, MeshSource& src, const 
     DxfExportOptions o;
     o.mode = p.world3d ? DxfCoordMode::World3D : DxfCoordMode::Drawing2D;
     o.scaleDenom = p.denom;
+    o.levelMinorPt = clampLineWeightPt(p.levelMinorPt); o.levelMajorPt = clampLineWeightPt(p.levelMajorPt);
     QString pngName;
     if (p.image) {
         SectionRequest rq;

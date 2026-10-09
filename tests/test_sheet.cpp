@@ -204,3 +204,14 @@ TEST_CASE("sheet: line weights in pt convert to mm and clamp", "[sheet][pt]") {
     CHECK(d.minorPt == Approx(0.2));
     CHECK(d.majorPt == Approx(0.5));
 }
+
+// 디자인 v5 결정 L — DXF 레이어 굵기(그룹 370, 1/100 mm)는 pt 를 DXF 허용값으로 반올림. 0.2 pt = 0.071 mm → 9(0.09; 5 보다 가까움), 0.5 pt = 0.176 mm → 18
+TEST_CASE("sheet: pt to DXF lineweight snaps to allowed values", "[sheet][pt][dxf]") {
+    CHECK(dxfLineWeight(0.2) == 9);
+    CHECK(dxfLineWeight(0.5) == 18);
+    CHECK(dxfLineWeight(1.0) == 35);     // 0.353 mm
+    CHECK(dxfLineWeight(2.0) == 70);     // 0.706 mm
+    CHECK(dxfLineWeight(3.0) == 106);    // 1.058 mm
+    CHECK(dxfLineWeight(0.05) == 0);     // 0.018 mm → 가장 가까운 허용값 0
+    CHECK(dxfLineWeight(99.0) == 106);   // 3.0 pt 로 잘림
+}

@@ -9,6 +9,7 @@
 #include <QWheelEvent>
 #include <cmath>
 #include "theme.hpp"
+#include "asec/sheet.hpp"
 
 using namespace asec;
 
@@ -132,14 +133,21 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     if (vex > 1.0 && lp.lineCm == 10 && 0.1 * ppmZ >= fm.height() * 1.35) lp.labelCm = 10;
     if (st_.showLevels) {
         levels = levelLines(zVis0, zVis1, lp.lineCm);
+        // 굵기(디자인 v5 결정 L): 10 cm 선 0.2 pt · 50 cm(1 m 포함) 선 0.5 pt — 종이 위 mm 를 painter 단위로(ui 는 96 dpi 기준 배율 → mm 당 ui·96/25.4).
+        // 내보내기 · 도면 미리보기(forExport)는 그 값 그대로(일러스트레이터에서 0.2 / 0.5 pt). 작업 화면(ui 1)은 0.27 px 라 안 보이므로 바닥값 0.75 / 1.0 / 1.25 px 유지
+        const double pxPerMm = ui * 96.0 / 25.4;
+        const double wMinor = forExport ? ptToMm(st_.levelMinorPt) * pxPerMm : std::max(0.75 * ui, ptToMm(st_.levelMinorPt) * pxPerMm);
+        const double wMajor = forExport ? ptToMm(st_.levelMajorPt) * pxPerMm : std::max(1.0 * ui, ptToMm(st_.levelMajorPt) * pxPerMm);
+        const double wMaster = forExport ? wMajor : std::max(1.25 * ui, wMajor);
+        if (probe) { probe->levelMinorPx = wMinor; probe->levelMajorPx = wMajor; }
         for (auto& lv : levels) {
             double y = Y(lv.z);
             QColor c; double w;
-            // Strata 레벨선: 10 cm #DEDCD1 0.75 px, 50 cm #9C9A92 1 px, 1 m 조금 굵게
-            if (lv.cls == LevelClass::Master) { c = theme::LevelMajor; w = 1.25; }
-            else if (lv.cls == LevelClass::Major) { c = theme::LevelMajor; w = 1.0; }
-            else { c = theme::LevelMinor; w = 0.75; }
-            p.setPen(QPen(c, w * ui));
+            // Strata 레벨선 색: 10 cm #DEDCD1, 50 cm · 1 m #9C9A92
+            if (lv.cls == LevelClass::Master) { c = theme::LevelMajor; w = wMaster; }
+            else if (lv.cls == LevelClass::Major) { c = theme::LevelMajor; w = wMajor; }
+            else { c = theme::LevelMinor; w = wMinor; }
+            p.setPen(QPen(c, w));
             p.drawLine(QPointF(pr.left(), y), QPointF(pr.right(), y));
         }
     }

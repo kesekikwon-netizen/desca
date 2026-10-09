@@ -21,6 +21,7 @@ struct DxfExportOptions {
     DxfCoordMode mode = DxfCoordMode::Drawing2D;  // 2D: X=A 기준 거리, Y=절대표고 / 3D: 실좌표(EPSG), 단면 수직면
     bool levels = true;
     int levelStepCm = 10;
+    double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기 pt(10 cm · 50 cm = 1 m 포함) — 디자인 v5 결정 L. 레이어 370 값은 dxfLineWeight()
     double scaleDenom = 20;   // 문자 크기 계산용(1/20 → 2 mm 글자 = 0.04 m)
     double textMm = 2.0;
     std::string title = "A-A'";
