@@ -28,7 +28,7 @@
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
 | 바뀐 파일(내용) | **커밋 대기(2026-10-09 팩토리):** `CLAUDE.md`(「소프트웨어 팩토리」 절) · `factory/`(profile · backlog · jobs 양식 · scripts 4개) · `.claude/agents/correctness-reviewer.md` · `security-reviewer.md` · `kerf-ui-reviewer.md` · `builder.md` · `spec-writer.md`(v5 문구) · `.claude/skills/factory/SKILL.md`(v5 · CI 절) · 이 파일. 로컬 HEAD `4781e1d`(디자인 v5 확정)는 **아직 push 안 됨**(`origin`은 `de14dc2`). 그 밖은 단계별 커밋됨 — `git log --oneline 4422b4e..HEAD` · CI: `.github/workflows/ci.yml` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
-| 시험 | `asec_tests` 139 통과 · 1 건너뜀 · `--ui-audit` RESULT ok(offscreen · 실제 화면, 항목 추가: sheet · ribbon-context · compass-hit · draw-step2-note · sheet-discard · square-borders) · `--sheet-check` ok · `--icon-sheet` ok · GitHub Actions: 로컬 커밋 push 전 |
+| 시험 | `asec_tests` 139 통과 · 1 건너뜀 · `--ui-audit` RESULT ok(offscreen · 실제 화면, 항목 추가: sheet · ribbon-context · compass-hit · draw-step2-note · sheet-discard · square-borders) · `--sheet-check` ok · `--icon-sheet` ok · GitHub Actions: `614633f` success(Windows 앱 · Linux 코어) |
 | 최근 캡처 | `C:\dev\tmp\kerf-shots\r3-home.png` · `r2-work.png` · `C:\dev\tmp\ui-screen\draw2.png` · `sheet.png` · `r3-chip.png` · `r3-sheet-right.png`(실제 화면) · offscreen 감사 `C:\dev\tmp\ui\` (이 PC에만) |
 
 ## 2. 이 PC에서 빌드 · 실행 (검증된 명령)
@@ -224,6 +224,12 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 시험 먼저 — 빈 구현으로 `--sheet-batch` → `saved=0 expected=4 RESULT fail`(EXIT 9) → 구현 뒤 `Synthetic_평면도_1-90.svg · A-A′_1-50 · B-B′_1-50 · C-C′_1-50` 4장 `RESULT ok`(EXIT 0, 합성 모델 + `--extra-line` 2개). 빌드 새 경고 0. `--ui-audit` RESULT ok. `--sheet-check` ok. `asec_tests "~CoalescingWorker*"` 통과.
 - **판정:** 「n장 저장됨 · 폴더 열기」 줄은 묶음 저장(폴더 대화상자) 뒤에만 보여 캡처로 확인하지 못함 — 코드 경로 + `--sheet-batch` 결과로 갈음 — 잘못이면: 글 모양을 눈으로 못 봄(다음 실제 저장 때 확인). DXF · PDF · PNG · TIFF 묶음도 같은 함수(형식 칩대로) — SVG 만 `--sheet-batch` 로 판정.
 - **남은 문제:** B5(해상도 · DPI) → D2 · D3 → F · G · H · I. 사용자 화면의 「no Qt platform plugin」 대화상자: `C:\dev\desca-build\app\platforms` 에 `qoffscreen.dll` 이 없어 offscreen 실행이 뜨지 못한 것(이 PC 의 다른 빌드 폴더) — 복사해 둠.
+
+### 2026-10-09 · Claude Code — CI 고침: MSVC 문자열 길이 한계(C2026) — 커밋 `614633f`
+- **무엇을:** `0f7fbfe`(E4) push 뒤 GitHub Actions 「Windows · 앱 전체」가 실패(Linux 코어는 통과). 로그: `app/theme.hpp(319,1): error C2026: string too big, trailing characters truncated`. `styleSheet()`의 원시 문자열 하나가 20280 바이트로 MSVC 한계(16380 바이트)를 넘음. 빈 줄 자리에서 `QStringLiteral` 두 조각(9839 · 10462 바이트)으로 나눔 — 화면 모양 변화 없음.
+- **확인:** 클라우드 세션(Linux, Qt 없음)이라 앱 빌드는 못 함. 바뀐 함수만 떼어 g++로 컴파일 → 결과 스타일시트 길이가 고치기 전과 같음(일반 20241 · 고대비 20584 바이트). push 뒤 GitHub Actions run #13(`614633f`) → **success**(Windows 앱 · Linux 코어 둘 다).
+- **판정:** 이 PC의 clang-cl은 이 한계가 없어 로컬 `/verify`로는 잡히지 않음 — 스타일시트에 줄을 더할 때 한 조각이 16 KB를 넘지 않게 나눈다 — 잘못이면: Windows CI만 다시 깨짐(로컬은 통과).
+- **남은 문제:** 없음.
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.
