@@ -1,10 +1,10 @@
 ---
 id: 20261009-01-b5-dpi
 title: 디자인 v5 B5 해상도 · DPI 안정성(4K · 와이드 · 배율, Windows만)
-status: review            # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
+status: approved          # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
 rework_count: 0           # 최대 2. 넘으면 needs-human
 ai_review: pass           # pending | pass | fail  (검토자 셋·UI 검토 결과 종합)
-user_approval: pending    # pending | approved | rejected  (사용자가 /factory approve 로 말한 뒤에만 approved)
+user_approval: approved   # pending | approved | rejected  (사용자가 /factory approve 로 말한 뒤에만 approved)
 base_branch: feature/design-v2
 base_sha: 0f7fbfed7455c0c6db308af386ae935b27d6f77e
 branch: factory/20261009-01-b5-dpi
@@ -32,6 +32,7 @@ updated: 2026-10-09 23:14
 | 2026-10-09 23:22 | review | factory | 검토자 넷 시작(code · correctness · security · kerf-ui). AC10 실제 화면 감사는 팩토리가 직접 1회 재현(C:\dev\tmp\b5-ac10) → EXIT 0 RESULT ok |
 | 2026-10-09 23:40 | needs-human | factory | 검토 결과: code pass(should 3 · note 4) · correctness pass(should 2 · note 6) · security pass(note 4) · **UI 충돌**: 1차 fail(blocking 2 — 1280 단면 머리 겹침 · 리본 1280 look=20≠스펙 32) vs 2차 pass(둘 다 전부터 있던 것: RED 실행에서 이미 min-width=1280, 머리 코드 불변; AC9 1280 루브릭 미충족은 사실). **막힌 것:** 전부터 있던 1280 좁은 창 문제를 이 작업에서 고칠지(rework) · 후속 작업으로 뺄지, 리본 1280 타일 기대값(스펙 32 vs 실제 20) 디자인 결정. 선택지는 사용자에게 AskUserQuestion |
 | 2026-10-09 23:50 | review (승인 대기) | factory | 사용자 답: 「후속 작업으로 빼고 B5 는 승인 보고서로」 · 「스펙을 실제(1280 → 20)로 고친다」 → 1280 좁은 창 문제 + should 7건 = backlog #3c. review.md 종합 ai_review pass, approval.md 승인 보고서 작성. **사용자 승인 대기**(/factory approve 20261009-01-b5-dpi) |
+| 2026-10-09 23:58 | approved | 사용자 → factory | 사용자 「승인 (추천)」 · 「병합까지 진행 (추천)」. 승인 SHA 66737c5. SKILL §5 병합 절차 시작(worktree 에 feature/design-v2 merge → 전체 검증 → 재승인 → 본 저장소 --no-ff). push 없음 |
 
 ## 참조
 - 명세 `spec.md` · 구현 요약 `build.md` · 검증 `verify.md` · 검토 `review.md` · 승인 `approval.md`
