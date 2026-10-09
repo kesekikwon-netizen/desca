@@ -187,7 +187,9 @@ QLineEdit#coord { font-family: Consolas, "DejaVu Sans Mono", monospace; font-siz
 QLabel#statusMsg { color: #5E5D59; font-size: 12px; padding: 0; }
 QLabel#zSrc { color: #5E5D59; font-size: 11px; padding: 0 0 0 6px; }
 QLabel#zSrc[coarse="true"] { color: #7A5A00; }
-
+)");
+    // MSVC 는 문자열 리터럴 하나를 16380 바이트로 제한한다(C2026) — 둘로 나눈다.
+    s += QStringLiteral(R"(
 QDoubleSpinBox, QSpinBox, QComboBox, QLineEdit { background: #FFFFFF; border: 1px solid #C2C0B6; border-radius: 6px; padding: 1px 6px; min-height: 20px; selection-background-color: #E3DACC; selection-color: #141413; }
 QDoubleSpinBox, QSpinBox { font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; }
 QDoubleSpinBox:hover, QSpinBox:hover, QComboBox:hover, QLineEdit:hover { border-color: #B0AEA5; }
