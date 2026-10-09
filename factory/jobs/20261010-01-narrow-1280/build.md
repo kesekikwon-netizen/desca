@@ -177,5 +177,9 @@ ui-audit RESULT ok
 - `QLayout::activate()` 뒤 최소 폭 시점(context7 확답 없음)은 되풀이 맞춤으로 흡수 — 감사가 겹침 · 잘림을 직접 재므로 틀리면 FAIL 로 드러난다(모든 감사 ok).
 
 ## 수정 회차 기록
-- 1회:
+- 1회(2026-10-10, 팩토리 조정자 rework 1/2 — 문서만): test-runner 독립 검증에서 코드 · 시험 · 감사는 모두 통과했고 **AC13 만 실패**했다. 원인: `docs/design/DESIGN_SPEC.md` §12(감사 기대값)에 이번 작업의 새 감사 키가 없었다(`git grep` 0건). §4 · §5 · §7 에만 적어 두었다.
+  - 무엇을 바꿨나: ① §12 끝에 한 항목 「1280 좁은 창 반영(2026-10-10, #3c · 작업 20261010-01)」을 더했다(153행). 넣은 키: `sec-header-overlap=0 kept=1 toggles-reachable=1` · `strip-clipped=0 state-kept=1 elide-tip-missing=0` · `plan-tick-overlap=0` · `env … overflow=0 icon-dpr-bad=0 chip-dpr-bad=0`(넘침 판정 `>=`) · `vex-fit=1 mode=keep` · `home-clipped=0 elide-tip-missing=0 min-width≤1280` · `home-stale-children=0` · `narrow … look=20 … actual-look=20 … plan-fits=1 section-fits=1 zoom-kept=1 probe=WxH resized=1`(`kNarrowTile` 잠금, 1280 실행은 probe 1600×1000). 측정 상태 이름(run · 1280w · 1280L · 1280p · 1280d · probe · 1280v)도 함께 적었다. ② §4(작업 영역)에 Q3 규칙 한 줄을 더했다(88행): 「세로 과장(×N)을 바꾼 보기는 사용자 보기 — 창 · 판 크기가 바뀌어도 가로 축척을 지키고, 맞춤으로 되돌린다」(사용자 말 · 날짜 인용). Q3 규칙은 §4 에만 두었다(§2.1 B5 ③ 은 그 문장에서 가리키기만 함).
+  - 커밋: **`c9214e2`** 「문서: DESIGN_SPEC §12 감사 키 · §4 세로 과장 규칙(AC13 rework)」.
+  - `git diff a2e2228..HEAD --stat` → `docs/design/DESIGN_SPEC.md | 3 +++ · 1 file changed, 3 insertions(+)` — **문서만 바뀌었다**. `app/` · `core/` · `tests/` 는 그대로다. 빌드 · verify 는 팩토리가 따로 돈다.
+  - 확인: `git grep -F` 로 키 9개(`sec-header-overlap=0` · `strip-clipped=0` · `plan-tick-overlap=0` · `chip-dpr-bad=0` · `vex-fit=1` · `home-stale-children=0` · `home-clipped=0` · `resized=1` · `look=20`)를 찾았다. 모두 §12(제목 145행) 안의 153행에서 나온다. 새 `+` 줄에 `C:[\\/]` · `HKEY_` 는 없다. worktree 는 깨끗하다.
 - 2회:

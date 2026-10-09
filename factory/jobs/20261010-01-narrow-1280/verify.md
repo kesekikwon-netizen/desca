@@ -137,3 +137,17 @@
 | ui-audit 1280x800 ×1.25 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1280x800 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-053705\settings-1280x800-x1.25 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-053705\ui-audit-1280x800-x1.25 --quit` · `ui-audit.txt` |
 | ui-audit 1280x800 ×1.75 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1280x800 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-053705\settings-1280x800-x1.75 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-053705\ui-audit-1280x800-x1.75 --quit` · `ui-audit.txt` |
 | ci(base) | WARN | 3 |  | CI 308daac none (이 커밋의 실행 없음 — push 안 됨 또는 아직 시작 전) | `ci-status.ps1 -Sha 308daac82e8e46189600488c209d43020e046cc2` |
+
+## 검증 2026-10-10 07:38 · **PASS** · HEAD `c9214e2ddf7fee423c2c50c77aa09c9741911302`
+- 기준 `308daac82e8e46189600488c209d43020e046cc2` · 바뀐 파일 11개: app/icons.cpp, app/icons.hpp, app/mainwindow.hpp, app/mainwindow_ui.cpp, app/planview.cpp, app/planview.hpp, app/ribbon.cpp, app/ribbon.hpp, app/sectionview.cpp, app/sheetexport.cpp, docs/design/DESIGN_SPEC.md
+- 시험 범위: 빠른 시험(~CoalescingWorker*) · ui-audit: off (크기 1920x1040 · 배율 1)
+- 로그 폴더(미커밋, 이 PC): `C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-073834`
+
+| 단계 | 판정 | 종료 코드 | 초 | 요약 | 명령 · 로그 |
+| --- | --- | --- | --- | --- | --- |
+| configure | SKIP |  |  | 건너뜀: 이미 구성됨(CMakeCache.txt 있음) |  |
+| build | PASS | 0 | 9 | 빌드 성공, 새 경고 0개(기존 CRT deprecated · fopen · mirrored 만) | `cmake --build C:\dev\kerf-wt\20261010-01-narrow-1280-build` · `build.log` |
+| tests(quick) | PASS | 0 | 3 | assertions: 51325 ¦ 51325 passed /  | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec_tests.exe "~CoalescingWorker*"` · `tests-quick.log` |
+| asec-section | PASS | 0 | 1 | tiles(leaf)=12 tris=186272 rawSeg=602 polylines=1 vertices=54 z=[44.20,47.50] image=3000x825 res=0.0040  collect=12ms cut=1ms image=15ms | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec-section.exe C:\dev\kerf-synth\Synthetic.3mx 200002 450006 200014 450006 --out C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-073834\sec` · `asec-section.log` |
+| ui-audit | SKIP |  |  | 건너뜀: -UiAudit off |  |
+| ci(base) | WARN | 3 |  | CI 308daac none (이 커밋의 실행 없음 — push 안 됨 또는 아직 시작 전) | `ci-status.ps1 -Sha 308daac82e8e46189600488c209d43020e046cc2` |
