@@ -7,6 +7,14 @@ namespace asec {
 
 enum class Paper { A4 = 0, A3 = 1 };
 
+// ---- 레벨선 굵기(디자인 v5 결정 L): 10 cm 선 0.2 pt · 50 cm 선 0.5 pt. 1 pt = 25.4/72 mm. SVG · DXF · PDF · 화면 모두 같은 값
+struct LineWeights { double minorPt = 0.2; double majorPt = 0.5; };
+/// pt → 종이 위 mm (1 pt = 25.4 / 72 mm)
+double ptToMm(double pt);
+/// 입력값을 0.05–3.0 pt 로 자른다. NaN 은 기본 0.2
+double clampLineWeightPt(double pt);
+LineWeights defaultLineWeights();
+
 struct SheetSpec {
     Paper paper = Paper::A4;
     bool landscape = true;

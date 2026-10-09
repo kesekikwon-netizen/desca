@@ -1,6 +1,7 @@
 #include "catch_amalgamated.hpp"
 #include "asec/orbit.hpp"
 #include "asec/sheet.hpp"
+#include <limits>
 
 using namespace asec;
 using Catch::Approx;
@@ -187,4 +188,19 @@ TEST_CASE("sheet: 위에서 본 범위 0 이하면 한 점", "[sheet]") {
     TopDownRange n = topDownRange(100, 200, -1, 200, 100);
     CHECK(n.x0 == Approx(100));
     CHECK(n.x1 == Approx(100));
+}
+
+// 디자인 v5 결정 L — 레벨선 10 cm 0.2 pt · 50 cm 0.5 pt (일러스트레이터 기준). 1 pt = 25.4/72 mm
+TEST_CASE("sheet: line weights in pt convert to mm and clamp", "[sheet][pt]") {
+    CHECK(ptToMm(1.0) == Approx(0.35278).margin(1e-4));
+    CHECK(ptToMm(0.2) == Approx(0.07056).margin(1e-4));
+    CHECK(ptToMm(0.5) == Approx(0.17639).margin(1e-4));
+    CHECK(clampLineWeightPt(0.0) == Approx(0.05));
+    CHECK(clampLineWeightPt(10.0) == Approx(3.0));
+    CHECK(clampLineWeightPt(-1.0) == Approx(0.05));
+    CHECK(clampLineWeightPt(0.35) == Approx(0.35));
+    CHECK(clampLineWeightPt(std::numeric_limits<double>::quiet_NaN()) == Approx(0.2));
+    const LineWeights d = defaultLineWeights();
+    CHECK(d.minorPt == Approx(0.2));
+    CHECK(d.majorPt == Approx(0.5));
 }

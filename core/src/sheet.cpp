@@ -344,3 +344,15 @@ TopDownRange topDownRange(double cX, double cY, double mPerMm, double plotWmm, d
     return r;
 }
 }  // namespace asec
+
+// ---- 레벨선 굵기 pt(디자인 v5 결정 L)
+namespace asec {
+double ptToMm(double pt) { return pt * 25.4 / 72.0; }
+
+double clampLineWeightPt(double pt) {
+    if (std::isnan(pt)) return 0.2;
+    return std::min(3.0, std::max(0.05, pt));
+}
+
+LineWeights defaultLineWeights() { return LineWeights{}; }
+}  // namespace asec

@@ -194,7 +194,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 
 ### 2026-10-09 · Claude Code — 디자인 v5 D단계(홈 C3) · 개발 규칙 정본 `docs/DEV_RULES.md`
 - **무엇을:** `rebuildStartPage()` 다시 씀(스펙 §7, Strata 홈 뼈대): 왼쪽 앱 아이콘 56 + 「Kerf | 발굴 평·단면」 + 설명 + 「모델 열기 Ctrl+O」 · 「최근 ▾」 | 이어서 작업 카드(먹색 테: 이름 명조 40 · 보조 줄 · 칸 6 · 오른쪽 흙색 「이어서 열기 →」 + 단면 썸네일(누르면 그 단면으로, `pendingSection_`)) | 「최근 모델 n」 + 찾기 칸 + 삼선표(모델 · 상태 · 수평 · 높이 · 단면 · 마지막 열림, 두 번 누르면 엶, 오른쪽 클릭 폴더 열기 · 목록에서 지우기) | 「작업 순서」 세 걸음(✓ · ● 다음 · 숫자) | 「처음 쓰는 키」 줄 + 「모든 키 F1」. 옛 리본 걸음 단추(`buildSteps` · `stepBtn_`) · 끌어 놓기 칸 삭제(창 전체가 받음). 사용자 지시 「모든 개발규칙을 절대 준수하라, 규칙을 지정하라」 → **`docs/DEV_RULES.md`**(R1 절차 · R2 코드 · R3 검증 · R4 기록 · R5 Git · R6 검토 · R7 안전 + 과제 체크리스트), CLAUDE.md 맨 위에서 가리킴.
-- **확인:** 빌드 exit 0(새 경고 0). `--start-shot` → `C:\dev	mp\kerf-shots5-d1-home.png` 눈으로 확인(흙색은 「이어서 열기」 하나, 작업 순서 ✓✓●). `--ui-audit` RESULT ok. `asec_tests "~CoalescingWorker*"` 통과. cpp-reviewer(B · C diff) · ui-reviewer(홈 · 작업 · 그리기 캡처) 독립 검토 요청함(결과는 다음 기록에).
+- **확인:** 빌드 exit 0(새 경고 0). `--start-shot` → `C:\dev\tmp\kerf-shots\v5-d1-home.png` 눈으로 확인(흙색은 「이어서 열기」 하나, 작업 순서 ✓✓●). `--ui-audit` RESULT ok. `asec_tests "~CoalescingWorker*"` 통과. cpp-reviewer(B · C diff) · ui-reviewer(홈 · 작업 · 그리기 캡처) 독립 검토 요청함(결과는 다음 기록에).
 - **판정:** 홈 「모델 열기」 · 「최근」은 리본 모델 묶음과 같은 일(Strata 홈도 「새 조사 · 조사 열기」가 리본과 겹침) — 홈은 감사 대상 밖. 「도면」 칸은 저장 기록(`sheets` 메타)이 생기기 전까지 「—」.
 - **남은 문제:** 도면 판(E) · 레벨선 pt(E1–E2) 다음.
 
