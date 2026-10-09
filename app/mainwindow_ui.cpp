@@ -2196,6 +2196,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             if (st == QLatin1String("1280w")) { F.tickStep = plan_->tickLabelStepM(); F.tickPxPerM = plan_->metersPerPixel() > 0 ? 1.0 / plan_->metersPerPixel() : 0; }
         }
     };
+    constexpr int kNarrowTile = 20;   // DESIGN_SPEC §2.1 · §3.3 · §12 — 사용자 결정 2026-10-09 「스펙을 실제(1280 → 20)로 고친다」(need32 = 1682 라 32 는 1280 에 안 들어감)
     const RibbonLook nk = Ribbon::looks().at(Ribbon::chooseLook(lw, 1280));   // lookWidths 에 리본 좌우 여백이 이미 들어 있다
     const QSize keepSize = size();
     const QString keepMsg2 = msg_ ? msg_->text() : QString(); const bool planActive2 = planTitle_ && planTitle_->property("active").toBool();
@@ -2291,7 +2292,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     ok &= homeStale <= 0;
     L << QStringLiteral("ui-audit vex-fit=%1 mode=keep ppm=%2/%3%4").arg(vexFit).arg(ppmA, 0, 'g', 6).arg(ppmB, 0, 'g', 6).arg(vexFit == 0 ? QStringLiteral("  FAIL") : QString());
     ok &= vexFit != 0;
-    const bool narrowOk = nk.tile <= 32 && !nk.labels && narrowW <= 1280 && ak.tile <= 32 && !ak.labels && planFits != 0 && secFits != 0 && zoomKept != 0 && resized;
+    const bool narrowOk = nk.tile == kNarrowTile && !nk.labels && narrowW <= 1280 && ak.tile == kNarrowTile && !ak.labels && planFits != 0 && secFits != 0 && zoomKept != 0 && resized;
     L << QStringLiteral("ui-audit narrow rule-at-1280 look=%1 labels=%2 window-min-width=%3 actual-width=%4 actual-look=%5 actual-labels=%6 plan-fits=%7 section-fits=%8 zoom-kept=%9 probe=%10x%11 resized=%12%13")
              .arg(nk.tile).arg(nk.labels ? 1 : 0).arg(narrowMinW).arg(narrowW).arg(ak.tile).arg(ak.labels ? 1 : 0).arg(planFits).arg(secFits).arg(zoomKept).arg(probe.width()).arg(probe.height()).arg(resized ? 1 : 0).arg(narrowOk ? QString() : QStringLiteral("  FAIL"));
     ok &= narrowOk;
