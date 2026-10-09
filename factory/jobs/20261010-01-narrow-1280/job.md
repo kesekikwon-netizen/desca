@@ -11,10 +11,10 @@ branch: factory/20261010-01-narrow-1280
 worktree: C:\dev\kerf-wt\20261010-01-narrow-1280
 build_dir: C:\dev\kerf-wt\20261010-01-narrow-1280-build
 head_sha: 308daac82e8e46189600488c209d43020e046cc2  # +미커밋
-last_verify: FAIL (2026-10-10 01:47)
+last_verify: FAIL (2026-10-10 04:47)
 human_review_required: 화면 · 감사(`app/mainwindow_ui.cpp` --ui-audit 판정 추가 · 리본 1280 기대값 32 → 20 · DESIGN_SPEC 기대값 변경, profile §8). CI · 좌표 · 파일 형식 해당 없음
 created: 2026-10-10 00:03
-updated: 2026-10-10 01:47
+updated: 2026-10-10 04:47
 ---
 # 20261010-01-narrow-1280 — 1280 좁은 창: 단면 머리 · 정보 줄 · 평면 눈금 · 리본 기대값 20 + B5 검토 should 7건
 
