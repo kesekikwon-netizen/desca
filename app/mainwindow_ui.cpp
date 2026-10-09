@@ -127,20 +127,32 @@ int overlapCount(QWidget* bar) {
     }
     return n;
 }
-// root 아래 보이는 QLabel 중 줄바꿈 없이 글이 잘린(폭 < sizeHint) 수. tipMissing = 줄인 글(동적 속성 fullText 와 다름)인데 툴팁이 전체 글이 아닌 수
-int clippedLabels(QWidget* root, int* tipMissing) {
+// root 아래 보이는 QLabel 중 글이 잘린 수: ① 줄바꿈 없이 폭 < sizeHint(짓눌림) ② 전체 글(동적 속성 fullText)이 있는데 보이는 글이 비었거나 「…」만 남았거나
+// 폭이 「…」 한 자보다 좁음(줄임표 라벨은 sizeHint 가 줄인 글을 따라 ①에 안 걸린다 — rework 2 code S1: 「<모델> 기준」이 폭 0 으로 사라진 것을 놓쳤다).
+// tipMissing = 줄인 글(fullText 와 다름)인데 툴팁이 전체 글이 아닌 수. names = 잘린 라벨의 글(앞 16자, 최대 6개 — 진단용)
+int clippedLabels(QWidget* root, int* tipMissing, QStringList* names = nullptr) {
     int n = 0;
     if (!root) return n;
+    const QString ell(QChar(0x2026));
     for (QLabel* l : root->findChildren<QLabel*>()) {
         if (!l->isVisibleTo(root)) continue;
-        if (!l->wordWrap() && l->width() < l->sizeHint().width()) ++n;
         const QVariant full = l->property("fullText");
-        if (tipMissing && full.isValid() && l->text() != full.toString() && l->toolTip() != full.toString()) ++*tipMissing;
+        const QString fullS = full.isValid() ? full.toString() : QString();
+        const QString shown = l->text().trimmed();
+        const bool squeezed = !l->wordWrap() && l->width() < l->sizeHint().width();
+        const bool gone = !fullS.trimmed().isEmpty() && (shown.isEmpty() || shown == ell || l->width() < l->fontMetrics().horizontalAdvance(ell));
+        if (squeezed || gone) { ++n; if (names && names->size() < 6) *names << (fullS.isEmpty() ? l->text() : fullS).left(16); }
+        if (tipMissing && full.isValid() && l->text() != fullS && l->toolTip() != fullS) ++*tipMissing;
     }
     return n;
 }
 // 라벨 글을 width(px)에 맞게 줄임표로(QFontMetrics::elidedText — 넓으면 "…", 아니면 원래 글). 동적 속성 fullText = 전체 글(full 이 비면 text),
 // 줄였으면 툴팁 = 전체 글, 아니면 빈 툴팁 — 감사 clippedLabels 의 elide-tip-missing 이 읽는다. 머리 제목 · 정보 줄 · 홈 한 줄 글이 같이 쓴다
+// 정보 줄 「잘린 선 n줄 · 빈 구간 …」의 빈 구간 꼬리(첫 「 · 」 뒤, 없으면 전체) — 좁은 창에서도 지켜야 하는 부분(스펙 §4 · Q2 A). fitInfoStrip 과 감사 gap-kept 가 같이 쓴다
+QString stripGapTail(const QString& cutShort) {
+    const int i = cutShort.indexOf(QStringLiteral(" · "));
+    return i < 0 ? cutShort : cutShort.mid(i + 3);
+}
 void setElidedText(QLabel* l, const QString& text, Qt::TextElideMode mode, int width, const QString& full = QString()) {
     const QString whole = full.isEmpty() ? text : full;
     const QString shown = l->fontMetrics().elidedText(text, mode, std::max(0, width));
@@ -639,6 +651,7 @@ void MainWindow::fitSectionHeader() {
         if (secToggles_) secToggles_->setVisible(step < 4);
         if (secTogglesMenu_) secTogglesMenu_->setVisible(step >= 4);
     };
+    ++secHeaderPasses_;   // 감사 refit: updateHeader 한 번에 몇 번 다시 맞추는지
     secTitle_->setProperty("fullText", secTitleFull_); secTitle_->setText(secTitleFull_); secTitle_->setToolTip(QString());
     int step = 0;
     for (; step < 5; ++step) { apply(step); lay->activate(); if (lay->minimumSize().width() <= avail) break; }
@@ -2310,7 +2323,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     // 사용자가 확대한 보기는 창 크기가 바뀌어도 축척이 그대로(zoom-kept — 지킴 시험, 자동 맞춤이 사용자 보기까지 다시 맞추면 0)
     // 1280 좁은 창(spec 20261010-01 §3-A): 실행 크기가 1280 이하면 probe(1600×1000)를 거쳐 실제로 줄어든 창에서 잰다(ⓔ — 1280 실행의 plan-fits · zoom-kept 가 빈 값이 아니게).
     // 같은 블록에서 단면 머리(sec-header) · 정보 줄(strip) · 평면 눈금 글(plan-tick) · 홈 한 줄 글(home) · 세로 과장 뒤 맞춤 상태(vex-fit)를 상태별(run · 1280w · 1280L · 1280p · 1280d · probe · 1280v)로 잰다
-    struct Fit { int secOverlap = 0; bool kept = true, toggles = true; QStringList secAt; int stripBad = 0; bool stateKept = true; int tipMissing = 0; QStringList stripAt; int tickBad = 0; QStringList tickAt; int tickStep = -1; double tickPxPerM = 0; } F;
+    struct Fit { int secOverlap = 0; bool kept = true, toggles = true, carets = true; QStringList secAt; int stripBad = 0; bool stateKept = true, gapKept = true; int tipMissing = 0; QStringList stripAt; int tickBad = 0; QStringList tickAt; int tickStep = -1; double tickPxPerM = 0; } F;
     auto measure = [&](const QString& st, bool ticks) {
         pump(100);
         // 단면 머리: 겹침 · 밖 · 짓눌림 합. 제목 · 축척 칸 · 맞춤 · 확대 · 축소는 늘 보이고, 켜기 · 끄기 넷은 상자(viewToggles)나 「그릴 것」 메뉴(secTogglesMenu, 같은 QAction 넷)로 닿는다
@@ -2331,11 +2344,15 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
                     reach = acts.contains(action("image")) && acts.contains(action("line")) && acts.contains(action("levels")) && acts.contains(action("fade"));
                 }
         if (!reach) F.toggles = false;
-        // 정보 줄: 겹침 · 밖 · 짓눌림 + 잘린 글, 계산 상태 글은 늘 보임, 줄인 글에는 전체 글 툴팁
+        // 보이는 메뉴 단추(「그릴 것」 · 세로 과장)는 ▾ 가 보여야 한다(스펙 §4 「그릴 것 ▾」 · 「세로 ×1 ▾」 — QSS 가 메뉴 표시를 지우므로 글 ▾, rework 2 UI S1)
+        for (QToolButton* mb : {secTogglesMenu_, vexBtn_})
+            if (mb && mb->isVisibleTo(secTitleBar_) && (mb->toolButtonStyle() == Qt::ToolButtonIconOnly || !mb->text().contains(QChar(0x25BE)))) F.carets = false;
+        // 정보 줄: 겹침 · 밖 · 짓눌림 + 잘린 글, 계산 상태 글은 늘 보임, 빈 구간 꼬리는 늘 보임(rework 2 correctness C1), 줄인 글에는 전체 글 툴팁
         int tip = 0;
         const int sb = overlapCount(infoStrip_) + clippedLabels(infoStrip_, &tip);
         F.stripBad += sb; F.tipMissing += tip; F.stripAt << QStringLiteral("%1:%2:%3").arg(st).arg(stripStep_).arg(sb);
         if (stripState_ && !stripState_->text().isEmpty() && !stripState_->isVisibleTo(infoStrip_)) F.stateKept = false;
+        if (stripCut_ && stripCut_->isVisibleTo(infoStrip_) && stripCutShort_.contains(QStringLiteral("빈 구간")) && !stripCut_->text().contains(stripGapTail(stripCutShort_))) F.gapKept = false;
         // 평면 눈금 글(run · 1280w): 숫자 글 사각형끼리 겹치는 쌍 수. px/m 은 위에서 본 화면이라 1/mpp
         if (ticks && plan_->hasLine()) {
             const QVector<QRectF> rs = plan_->tickLabelRects();
@@ -2350,6 +2367,50 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     const QSize keepSize = size();
     const QString keepMsg2 = msg_ ? msg_->text() : QString(); const bool planActive2 = planTitle_ && planTitle_->property("active").toBool();
     measure(QStringLiteral("run"), true);
+    // refit(rework 2 code S2 · correctness C3): 제목을 바꾼 뒤 updateHeader 한 번 = 머리 다시 맞춤 많아야 1번(방위 글까지 바꾼 끝에서), 같은 입력으로 또 부르면 0번
+    int refitA = -1, refitB = -1;
+    if (secTitle_) {
+        setSecTitleText(QStringLiteral("단면 감사"));
+        const int p0 = secHeaderPasses_; updateHeader(); refitA = secHeaderPasses_ - p0;
+        const int p1 = secHeaderPasses_; updateHeader(); refitB = secHeaderPasses_ - p1;
+    }
+    // 홈(rework 2 code B1 · UI B1): 실행 크기와 1280 에서 잰다 — 잘린 라벨(빈 글 · 「…」만 · 「…」보다 좁음 포함)과 이어서 작업 칸(폴더 칸 제외)에서 줄인 글 수
+    int homeClipped = 0, homeTip = 0, homeMinW = -1, homeStale = -1, homeCells = 0; QStringList homeNames, homeAt;
+    auto measureHome = [&](const QString& st, bool stale) {
+        if (!startPage_) return;
+        showStart(true); pump(250);
+        if (stale) {   // AC14: 홈을 두 번 그린 뒤(모델이 열린 채 showStart(true) 두 번) startPage_ 의 직접 자식 중 어느 레이아웃도 관리하지 않는 보이는 위젯 = 0 — deleteLater 대기분은 먼저 비운다
+            showStart(true); pump(250);
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            std::function<bool(QLayout*, QWidget*)> managed = [&managed](QLayout* l, QWidget* w) -> bool {
+                if (!l) return false;
+                if (l->indexOf(w) >= 0) return true;
+                for (int i = 0; i < l->count(); ++i) if (QLayout* sub = l->itemAt(i)->layout()) if (managed(sub, w)) return true;
+                return false;
+            };
+            homeStale = 0;
+            for (QObject* o : startPage_->children())
+                if (o->isWidgetType()) { auto* w = static_cast<QWidget*>(o); if (w->isVisibleTo(startPage_) && !managed(startPage_->layout(), w)) ++homeStale; }
+        }
+        QStringList nm; int tip = 0;
+        const int c = clippedLabels(startPage_, &tip, &nm);
+        int cells = 0;
+        for (QWidget* cw : startPage_->findChildren<QWidget*>(QStringLiteral("ccCells"))) {
+            if (!cw->isVisibleTo(startPage_)) continue;
+            for (QLabel* l : cw->findChildren<QLabel*>()) {
+                if (!l->isVisibleTo(cw)) continue;
+                bool inFolder = false;
+                for (QWidget* p = l->parentWidget(); p && p != cw; p = p->parentWidget()) if (p->objectName() == QLatin1String("ccCellFirst")) inFolder = true;
+                const QVariant full = l->property("fullText");
+                if (!inFolder && full.isValid() && l->text() != full.toString()) { ++cells; if (nm.size() < 6) nm << full.toString().left(16); }
+            }
+        }
+        homeClipped += c; homeTip += tip; homeCells += cells; homeMinW = std::max(homeMinW, minimumSizeHint().width());
+        for (const QString& s : nm) if (homeNames.size() < 6) homeNames << st + QLatin1Char(':') + s;
+        homeAt << QStringLiteral("%1:%2:%3").arg(st).arg(c).arg(cells);
+        showStart(false); pump(100);
+    };
+    measureHome(QStringLiteral("run"), false);
     const QSize probe = keepSize.width() > 1280 ? keepSize : QSize(1600, 1000);
     if (keepSize.width() <= 1280) {   // probe 크기에서 「맞춤 상태」를 명시해 둔다 — 1280 실행은 처음부터 1280 에 맞춰져 있어 이것 없이는 맞춤 길을 꺼도 1280 으로 돌아오면 들어맞는다(판정, build.md)
         resize(probe); pump(250);
@@ -2382,24 +2443,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         plan_->setDrawMode(false); plan_->setLine(keepL, hadL); pump(100);
         updateHeader();
     }
-    int homeClipped = -1, homeTip = 0, homeMinW = -1, homeStale = -1;
-    if (startPage_) {   // home: 1280 에서 홈의 한 줄 글이 잘리지 않고 창 최소 폭 ≤ 1280(ⓕ — 긴 모델 이름은 §4 회귀 7 이 따로 잰다)
-        // AC14: 홈을 두 번 그린 뒤(모델이 열린 채 showStart(true) 두 번) startPage_ 의 직접 자식 중 어느 레이아웃도 관리하지 않는 보이는 위젯 = 0 —
-        // rebuildStartPage 가 격자 안 위젯을 남겨 옛 덩어리가 (0,0)에 겹치던 버그. deleteLater 대기분은 먼저 비운다
-        showStart(true); pump(250); showStart(true); pump(250);
-        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        std::function<bool(QLayout*, QWidget*)> managed = [&managed](QLayout* l, QWidget* w) -> bool {
-            if (!l) return false;
-            if (l->indexOf(w) >= 0) return true;
-            for (int i = 0; i < l->count(); ++i) if (QLayout* sub = l->itemAt(i)->layout()) if (managed(sub, w)) return true;
-            return false;
-        };
-        homeStale = 0;
-        for (QObject* o : startPage_->children())
-            if (o->isWidgetType()) { auto* w = static_cast<QWidget*>(o); if (w->isVisibleTo(startPage_) && !managed(startPage_->layout(), w)) ++homeStale; }
-        homeClipped = clippedLabels(startPage_, &homeTip); homeMinW = minimumSizeHint().width();
-        showStart(false); pump(100);
-    }
+    measureHome(QStringLiteral("1280w"), true);   // home: 1280 에서 홈의 한 줄 글이 잘리지 않고 창 최소 폭 ≤ 1280(ⓕ — 긴 모델 이름은 §4 회귀 7 이 따로 잰다) + AC14
     if (!dir.isEmpty()) grab().save(QDir(dir).filePath(QStringLiteral("narrow.png")));
     int zoomKept = -1;
     if (src_ && section_->hasResult()) {
@@ -2423,19 +2467,22 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     }
     if (size() != keepSize) { resize(keepSize); pump(250); }
     showStatus(keepMsg2); setActiveView(planActive2 ? 0 : 1);
-    const bool secOk = F.secOverlap == 0 && F.kept && F.toggles;
-    L << QStringLiteral("ui-audit sec-header-overlap=%1 kept=%2 toggles-reachable=%3 at=%4%5").arg(F.secOverlap).arg(F.kept ? 1 : 0).arg(F.toggles ? 1 : 0).arg(F.secAt.join(QLatin1Char(','))).arg(secOk ? QString() : QStringLiteral("  FAIL"));
+    const bool secOk = F.secOverlap == 0 && F.kept && F.toggles && F.carets && refitA <= 1 && refitB <= 0;
+    L << QStringLiteral("ui-audit sec-header-overlap=%1 kept=%2 toggles-reachable=%3 carets=%4 refit=%5/%6 at=%7%8").arg(F.secOverlap).arg(F.kept ? 1 : 0).arg(F.toggles ? 1 : 0).arg(F.carets ? 1 : 0).arg(refitA).arg(refitB)
+             .arg(F.secAt.join(QLatin1Char(','))).arg(secOk ? QString() : QStringLiteral("  FAIL"));
     ok &= secOk;
-    const bool stripOk = F.stripBad == 0 && F.stateKept && F.tipMissing == 0;
-    L << QStringLiteral("ui-audit strip-clipped=%1 state-kept=%2 elide-tip-missing=%3 at=%4%5").arg(F.stripBad).arg(F.stateKept ? 1 : 0).arg(F.tipMissing).arg(F.stripAt.join(QLatin1Char(','))).arg(stripOk ? QString() : QStringLiteral("  FAIL"));
+    const bool stripOk = F.stripBad == 0 && F.stateKept && F.gapKept && F.tipMissing == 0;
+    L << QStringLiteral("ui-audit strip-clipped=%1 state-kept=%2 gap-kept=%3 elide-tip-missing=%4 at=%5%6").arg(F.stripBad).arg(F.stateKept ? 1 : 0).arg(F.gapKept ? 1 : 0).arg(F.tipMissing).arg(F.stripAt.join(QLatin1Char(','))).arg(stripOk ? QString() : QStringLiteral("  FAIL"));
     ok &= stripOk;
     if (F.tickAt.isEmpty()) L << QStringLiteral("ui-audit plan-tick-overlap=not-checked");
     else {
         L << QStringLiteral("ui-audit plan-tick-overlap=%1 step=%2 px-per-m=%3 at=%4%5").arg(F.tickBad).arg(F.tickStep).arg(F.tickPxPerM, 0, 'f', 1).arg(F.tickAt.join(QLatin1Char(','))).arg(F.tickBad == 0 ? QString() : QStringLiteral("  FAIL"));
         ok &= F.tickBad == 0;
     }
-    const bool homeOk = homeClipped <= 0 && homeTip == 0 && homeMinW <= 1280;
-    L << QStringLiteral("ui-audit home-clipped=%1 elide-tip-missing=%2 min-width=%3%4").arg(homeClipped).arg(homeTip).arg(homeMinW).arg(homeOk ? QString() : QStringLiteral("  FAIL"));
+    const bool homeOk = homeClipped == 0 && homeCells == 0 && homeTip == 0 && homeMinW <= 1280;
+    L << QStringLiteral("ui-audit home-clipped=%1%2 cells-elided=%3 elide-tip-missing=%4 min-width=%5 at=%6%7").arg(homeClipped)
+             .arg(homeNames.isEmpty() ? QString() : QStringLiteral(" [%1]").arg(homeNames.join(QLatin1Char(','))))
+             .arg(homeCells).arg(homeTip).arg(homeMinW).arg(homeAt.join(QLatin1Char(','))).arg(homeOk ? QString() : QStringLiteral("  FAIL"));
     ok &= homeOk;
     L << QStringLiteral("ui-audit home-stale-children=%1%2").arg(homeStale).arg(homeStale > 0 ? QStringLiteral("  FAIL") : QString());   // AC14
     ok &= homeStale <= 0;
