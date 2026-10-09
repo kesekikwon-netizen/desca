@@ -1,8 +1,8 @@
 ---
 id: 20261010-01-narrow-1280
 title: 1280 좁은 창: 단면 머리 · 정보 줄 · 평면 눈금 · 리본 기대값 20 + B5 검토 should 7건
-status: review            # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
-rework_count: 1           # 최대 2. 넘으면 needs-human
+status: rework            # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
+rework_count: 2           # 최대 2. 넘으면 needs-human
 ai_review: pending        # pending | pass | fail  (검토자 셋·UI 검토 결과 종합)
 user_approval: pending    # pending | approved | rejected  (사용자가 /factory approve 로 말한 뒤에만 approved)
 base_branch: feature/design-v2
@@ -32,6 +32,7 @@ updated: 2026-10-10 07:38
 | 2026-10-10 07:30 | verify | test-runner | **FAIL(문서 1건)** — 자동 · 코드 기준 전부 통과(V8 8가지 · V2 1.25 · 1.75 모두 RESULT PASS exit 0, 회귀 icon-sheet · sheet-check · ctx-shot exit 0, core/tests/CMake/CI diff 없음, AC14 캡처 겹침 없음, 새 경고 0). 유일한 실패 = AC13: DESIGN_SPEC §12 에 새 키 `chip-dpr-bad=0` · `vex-fit=1` · narrow `probe/resized` 줄 없음(코드 재검증 불필요, 문서 한 줄 rework). 수동 1(AC11, kerf-ui-reviewer) · 판별력 임시 변경 증명 4건은 제품 코드 수정 금지라 build.md 기록 인용 · 전체 시험(CoalescingWorker 포함) 미실행(core/tests 변경 없음) |
 | 2026-10-10 07:35 | rework(1/2) | factory | AC13 문서만 → builder 에게 DESIGN_SPEC §12 새 감사 키 줄(`sec-header-overlap=0` · `strip-clipped=0` · `plan-tick-overlap=0` · `chip-dpr-bad=0` · `vex-fit=1` · `home-stale-children=0` · narrow `probe/resized`) + Q3 「세로 ×N 바꾼 보기는 사용자 보기」 규칙 문장. **판정:** 코드는 a2e2228 그대로라 검토자 넷은 지금 코드 범위(308daac..a2e2228)로 동시에 시작 — rework 뒤 재검증은 문서 diff 확인 + build/tests(`-UiAudit off`)로(코드 불변 증거: `git diff a2e2228..HEAD -- app core tests` 비어 있음). 잘못이면: 문서 rework 가 코드를 건드리면 검토가 그 부분을 못 봄(그 경우 재검토) |
 | 2026-10-10 07:40 | review | builder → factory | rework 커밋 `c9214e2`(DESIGN_SPEC +3줄만). 확인: `git diff a2e2228..HEAD -- app core tests tools CMakeLists.txt app/CMakeLists.txt .github` 비어 있음(코드 불변) · AC13 키 9개 모두 §4 · §5 · §7 · §12 에 grep 됨 · `factory verify -UiAudit off` RESULT PASS(build 새 경고 0 · tests 51325 · asec-section 54). 감사 8조합은 코드가 같은 a2e2228 결과(07:30 PASS) 그대로. AC13 통과 → 검토 진행 중(넷) |
+| 2026-10-10 08:20 | rework(2/2, 마지막) | factory | 검토: code fail(B1 홈 「… 기준」 글 사라짐) · UI fail(B1 1280 카드 칸 이름 줄임) · correctness pass(should 4) · security pass. 충돌(UI N6 ↔ code B1)은 캡처 증거로 code 쪽. builder 에게 blocking 2 + 같은 뿌리 should 5(감사 보강 · 정보 줄 빈 구간 지킴 · EPSG 값 줄임 · 머리 맞추기 한 번 · 메뉴 ▾) — review.md 종합 그대로. 다시 blocking 이면 needs-human |
 
 ## 참조
 - 명세 `spec.md` · 구현 요약 `build.md` · 검증 `verify.md` · 검토 `review.md` · 승인 `approval.md`
