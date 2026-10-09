@@ -254,4 +254,93 @@ bool bandZRange(const std::vector<MeshPtr>& meshes, const SectionFrame& f, doubl
     return zmax >= zmin;
 }
 
+// ---------------- 국소 기복 · 등고선 (A3 core) ----------------
+HeightGrid localRelief(const HeightGrid& g, double radius) {
+    HeightGrid r;
+    if (!g.valid() || !(radius > 0)) return r;
+    r.x0 = g.x0; r.y0 = g.y0; r.step = g.step; r.nx = g.nx; r.ny = g.ny;
+    r.z.assign(g.z.size(), 0.0);
+    const int cr = int(std::ceil(radius / g.step));
+    const double r2 = radius * radius;
+    for (int j = 0; j < g.ny; ++j) {
+        for (int i = 0; i < g.nx; ++i) {
+            double sum = 0;
+            int n = 0;
+            for (int dj = -cr; dj <= cr; ++dj) {
+                int jj = j + dj;
+                if (jj < 0 || jj >= g.ny) continue;
+                for (int di = -cr; di <= cr; ++di) {
+                    int ii = i + di;
+                    if (ii < 0 || ii >= g.nx) continue;
+                    double dx = di * g.step, dy = dj * g.step;
+                    if (dx * dx + dy * dy > r2) continue;
+                    sum += g.at(ii, jj);
+                    ++n;
+                }
+            }
+            r.z[(size_t)j * g.nx + i] = n > 0 ? g.at(i, j) - sum / n : 0.0;
+        }
+    }
+    return r;
+}
+
+std::vector<Polyline> contoursAbove(const HeightGrid& g, double level) {
+    std::vector<Polyline> out;
+    if (!g.valid() || g.nx < 2 || g.ny < 2) return out;
+    auto X = [&](int i) { return g.x0 + i * g.step; };
+    auto Y = [&](int j) { return g.y0 + j * g.step; };
+    std::vector<CutSeg> segs;
+    for (int j = 0; j + 1 < g.ny; ++j) {
+        for (int i = 0; i + 1 < g.nx; ++i) {
+            double h[4] = {g.at(i, j), g.at(i + 1, j), g.at(i + 1, j + 1), g.at(i, j + 1)};
+            // 꼭짓점 순서: 0=(i,j) 1=(i+1,j) 2=(i+1,j+1) 3=(i,j+1). 변: 0-1 아래, 1-2 오른쪽, 2-3 위, 3-0 왼쪽.
+            Vec2 p[4] = {{X(i), Y(j)}, {X(i + 1), Y(j)}, {X(i + 1), Y(j + 1)}, {X(i), Y(j + 1)}};
+            int above = 0;
+            for (int k = 0; k < 4; ++k) above |= (h[k] >= level ? 1 : 0) << k;
+            if (above == 0 || above == 15) continue;
+            auto cross = [&](int a, int b) {
+                double denom = h[a] - h[b];
+                double t = denom != 0 ? (level - h[b]) / denom : 0.5;
+                t = std::clamp(t, 0.0, 1.0);
+                return Vec2(p[a].x + (p[b].x - p[a].x) * t, p[a].y + (p[b].y - p[a].y) * t);
+            };
+            // 변 위의 교점(변 순서대로 최대 4개)
+            Vec2 xp[4];
+            bool has[4] = {};
+            const int e[4][2] = {{0, 1}, {1, 2}, {2, 3}, {3, 0}};
+            for (int k = 0; k < 4; ++k) {
+                int a = e[k][0], b = e[k][1];
+                if (((h[a] >= level) ? 1 : 0) != ((h[b] >= level) ? 1 : 0)) { xp[k] = cross(a, b); has[k] = true; }
+            }
+            // 안장(0101·1010): 가운데 값으로 잇는 쪽을 정한다(항상 같은 쪽 → 겹선 없음)
+            auto seg = [&](Vec2 A, Vec2 B) { segs.push_back({A.x, A.y, B.x, B.y}); };
+            if (above == 0b0101 || above == 0b1010) {
+                double mid = (h[0] + h[1] + h[2] + h[3]) * 0.25;
+                bool highMid = mid >= level;
+                if (above == 0b0101) {  // 0·2 위: 가운데가 높으면 아래쪽(1·3) 모서리를 각각 두르고, 낮으면 위쪽을 두른다
+                    if (highMid) { seg(xp[0], xp[1]); seg(xp[2], xp[3]); }
+                    else { seg(xp[3], xp[0]); seg(xp[1], xp[2]); }
+                } else {  // 1·3 위: 반대로
+                    if (highMid) { seg(xp[3], xp[0]); seg(xp[1], xp[2]); }
+                    else { seg(xp[0], xp[1]); seg(xp[2], xp[3]); }
+                }
+                continue;
+            }
+            // 보통: 교점들을 변 순서대로 이으면 최대 2개 → 한 선분(4개면 두 선분)
+            Vec2 pts[4];
+            int n = 0;
+            for (int k = 0; k < 4; ++k)
+                if (has[k]) pts[n++] = xp[k];
+            for (int k = 0; k + 1 < n; k += 2) seg(pts[k], pts[k + 1]);
+        }
+    }
+    auto L = stitchSegments(segs, 1e-9);
+    for (auto& pl : L) {
+        if (pl.size() < 2) continue;
+        if (pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-6) pl.back() = pl.front();  // 닫힌 고리 표시
+        out.push_back(std::move(pl));
+    }
+    return out;
+}
+
 }  // namespace asec

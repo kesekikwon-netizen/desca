@@ -32,6 +32,20 @@ bool renderElevation(const std::vector<MeshPtr>& meshes, const SectionFrame& f, 
 /// 평면 정사영상(위에서 수직으로, 가장 높은 면). x0,y1 = 왼쪽 위 모서리(로컬), res m/px, W×H
 bool renderPlan(const std::vector<MeshPtr>& meshes, double x0, double y1, double res, int W, int H, RgbaImage& out, const std::atomic<bool>* cancel = nullptr);
 
+/// 높이 격자(로컬 XY, 균일 간격 노드). z[j*nx+i] = (x0+i*step, y0+j*step) 높이(m).
+struct HeightGrid {
+    double x0 = 0, y0 = 0, step = 1;
+    int nx = 0, ny = 0;
+    std::vector<double> z;
+    bool valid() const { return nx > 0 && ny > 0 && step > 0 && z.size() == (size_t)nx * ny; }
+    double at(int i, int j) const { return z[(size_t)j * (size_t)nx + (size_t)i]; }
+};
+/// 국소 기복(A3): 각 셀 높이 − 반경 radius(m) 안 셀들의 평균 높이. 평평·평면 경사는 0 근처.
+/// 격자가 비었거나 radius<=0 이면 빈 격자. 가장자리는 들어있는 셀만으로 평균낸다.
+HeightGrid localRelief(const HeightGrid& g, double radius);
+/// 기준 높이의 등고선(마칭 스퀘어, 닫힌 고리는 처음=끝). 구멍·경계에 닿는 선은 열린 채로 둔다.
+std::vector<Polyline> contoursAbove(const HeightGrid& g, double level);
+
 /// 메시들의 z 범위(띠 안 삼각형 기준)
 bool bandZRange(const std::vector<MeshPtr>& meshes, const SectionFrame& f, double dNear, double dFar, double sMin, double sMax, double& zmin, double& zmax);
 
