@@ -39,6 +39,7 @@
 #include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QScreen>
 #include <QSettings>
 #include <QShortcut>
 #include <QSlider>
@@ -1861,8 +1862,13 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         check(docTabCorner_, QStringLiteral("doc-corner")); check(inspector_, QStringLiteral("inspector"));
         const int minW = minimumSizeHint().width();
         const QSize want = property("auditSize").toSize();   // main.cpp --size W×H (없으면 ① 건너뜀)
-        const bool sizeOk = !want.isValid() || (width() == want.width() && height() == want.height());
-        const bool scaleOk = qFuzzyCompare(devicePixelRatioF(), scale.toDouble() > 0 ? scale.toDouble() : 1.0);
+        // 실제 화면(AC10)에서는 창이 화면 사용 가능 영역에 잘리고(이 PC 150 % · 2293×940 논리: 1040 요청 → 940 실측) dpr = OS 배율 × QT_SCALE_FACTOR 라
+        // ①은 화면에 들어가는 변만, ④는 offscreen(OS 배율 1)에서만 판정한다(판정, build.md)
+        const bool offscreen = QGuiApplication::platformName() == QLatin1String("offscreen");
+        const QSize avail = screen() ? screen()->availableGeometry().size() : QSize();
+        auto judgeDim = [&](int wantV, int availV) { return offscreen || !avail.isValid() || wantV <= availV; };
+        const bool sizeOk = !want.isValid() || ((!judgeDim(want.width(), avail.width()) || width() == want.width()) && (!judgeDim(want.height(), avail.height()) || height() == want.height()));
+        const bool scaleOk = !offscreen || qFuzzyCompare(devicePixelRatioF(), scale.toDouble() > 0 ? scale.toDouble() : 1.0);
         // 선 아이콘: 바로 그린 장과 크기 · 픽셀이 같아야 함. 리본 칩(보이는 것 전부): 돌려받은 장의 dpr 이 요청한 배율이어야 함
         int iconDprBad = 0;
         for (qreal d : {1.25, 1.75}) {
@@ -1873,9 +1879,10 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             for (auto* c : ribbon_->chips()) if (c->isVisibleTo(this) && !qFuzzyCompare(c->icon().pixmap(QSize(tile, tile), d).devicePixelRatio(), d)) ++iconDprBad;
         }
         const bool envOk = sizeOk && minW <= 1280 && overflow == 0 && scaleOk && iconDprBad == 0;
-        L << QStringLiteral("ui-audit env size=%1x%2 want=%3x%4 scale=%5 dpr=%6 min-width=%7 overflow=%8%9 icon-dpr-bad=%10%11").arg(width()).arg(height()).arg(want.width()).arg(want.height()).arg(scale).arg(devicePixelRatioF(), 0, 'f', 2).arg(minW).arg(overflow)
+        L << QStringLiteral("ui-audit env size=%1x%2 want=%3x%4 scale=%5 dpr=%6 min-width=%7 overflow=%8%9 icon-dpr-bad=%10%11%12").arg(width()).arg(height()).arg(want.width()).arg(want.height()).arg(scale).arg(devicePixelRatioF(), 0, 'f', 2).arg(minW).arg(overflow)
                  .arg(over.isEmpty() ? QString() : QStringLiteral(" [%1]").arg(over.join(QLatin1Char(','))))
                  .arg(iconDprBad)
+                 .arg(offscreen ? QString() : QStringLiteral(" screen-avail=%1x%2").arg(avail.width()).arg(avail.height()))   // 실제 화면일 때만: ① · ④ 가 어디까지 판정됐는지 읽을 수 있게
                  .arg(envOk ? QString() : QStringLiteral("  FAIL"));
         ok &= envOk;
     }
