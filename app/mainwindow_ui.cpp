@@ -740,22 +740,27 @@ void MainWindow::fitInfoStrip() {
     };
     int step = 0;
     for (; step < 4; ++step) { apply(step); lay->activate(); if (lay->minimumSize().width() <= avail) break; }
-    if (step == 4) {
+    if (step == 4) {   // ④ 빈 구간 꼬리(「빈 구간 없음」 · 「빈 구간 k곳 x m」)는 늘 그대로 — 「잘린 선 n줄」 앞부분을 먼저 줄이고(없애고), 다음 계산 상태를 바닥 40 px 까지(rework 2 correctness C1)
         apply(3);
         stripState_->setTextFormat(Qt::PlainText);   // 줄인 글은 서식 없이(sizeHint 가 글 폭과 같게)
-        int tS = stripState_->fontMetrics().horizontalAdvance(statePlain), tC = stripCut_->fontMetrics().horizontalAdvance(stripCutShort_);
-        for (int pass = 0; pass < 6; ++pass) {
+        const QString tail = stripGapTail(stripCutShort_), sep = QStringLiteral(" · ");
+        const QString head = tail == stripCutShort_ ? QString() : stripCutShort_.left(stripCutShort_.size() - tail.size() - sep.size());
+        const QFontMetrics fmS = stripState_->fontMetrics(), fmC = stripCut_->fontMetrics();
+        const int ellC = fmC.horizontalAdvance(QChar(0x2026)), minS = fmS.horizontalAdvance(QStringLiteral("… ") + statePlain.left(1));
+        int tS = fmS.horizontalAdvance(statePlain), tH = fmC.horizontalAdvance(head), tT = fmC.horizontalAdvance(tail);
+        for (int pass = 0; pass < 8; ++pass) {
             setElidedText(stripState_, statePlain, Qt::ElideRight, tS);
-            setElidedText(stripCut_, stripCutShort_, Qt::ElideRight, tC, stripCutFull_);
+            const QString h = head.isEmpty() || tH < 2 * ellC ? QString() : fmC.elidedText(head, Qt::ElideRight, tH);
+            const QString t = fmC.elidedText(tail, Qt::ElideRight, tT);
+            const QString shown = h.isEmpty() || h == QString(QChar(0x2026)) ? t : h + sep + t;
+            stripCut_->setText(shown); stripCut_->setProperty("fullText", stripCutFull_); stripCut_->setToolTip(shown == stripCutFull_ ? QString() : stripCutFull_);
             lay->activate();
-            const int over = lay->minimumSize().width() - avail;
+            int over = lay->minimumSize().width() - avail;
             if (over <= 0) break;
-            const int roomS = std::max(0, tS - 40), roomC = std::max(0, tC - 40);
-            if (roomS + roomC == 0) break;
-            int dS = std::min(roomS, (over * roomS + roomS + roomC - 1) / (roomS + roomC));
-            int dC = std::min(roomC, over - dS);
-            if (dS + dC < over) dS = std::min(roomS, over - dC);
-            tS -= dS; tC -= dC;
+            int d = std::min(over, tH); tH -= d; over -= d;                         // 1) 「잘린 선 n줄」
+            d = std::min(over, std::max(0, tS - 40)); tS -= d; over -= d;          // 2) 계산 상태 바닥 40
+            d = std::min(over, std::max(0, tS - minS)); tS -= d; over -= d;        // 3) 계산 상태 「… 첫 글자」까지
+            if (over > 0) tT = std::max(ellC, tT - over);                          // 4) 마지막 수단 — 그래도 넘치면 꼬리(감사 gap-kept 가 잡는다)
         }
     }
     stripStep_ = step;
