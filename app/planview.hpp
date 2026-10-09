@@ -190,6 +190,8 @@ private:
     struct TickLabel { QRectF rect; QString text; };
     QVector<TickLabel> tickLabels() const;   // 자리 = 눈금 중심에서 띠 반대쪽 16 px, 폭 = 글 폭 + 2(흰 테), 높이 = 글꼴 높이 + 2 — paintOverlay 와 tickLabelRects 가 같이 씀
     void updateMatrices();
+    void makeMatrices(int w, int h, QMatrix4x4& proj, QMatrix4x4& view) const;   // 화면 행렬 식 한 곳(ortho · 회전 · 이동) — updateMatrices · contentFits(B5 검토 ⓒ)
+    bool unprojectToRefZ(const QMatrix4x4& pv, const QPointF& sp, int w, int h, asec::Vec2& out) const;   // 화면 점 → 기준 높이 평면 교점(로컬) — screenToLocalXY · contentFits
     bool screenToLocalXY(const QPointF& sp, asec::Vec2& out) const;
     QPointF localToScreen(double x, double y, double z) const;
     double refZ() const;

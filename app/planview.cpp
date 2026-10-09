@@ -204,6 +204,7 @@ void PlanView::clearScene() {
     streamer_.reset();
     makeCurrent(); freeGpu(); doneCurrent();
     meshes_.clear(); hidx_ = HeightIndex(); hasScene_ = false; hasLine_ = false; lastFrame_ = FrameInfo(); update();
+    fitted_ = false;   // 장면이 없으면 맞춤 상태도 없다 — 창 크기가 바뀔 때 옛 상자로 fitAll 이 돌지 않게(B5 검토 ⓖ)
 }
 
 void PlanView::setStreamingScene(const std::vector<fs::path>& roots, const Vec3& center, const Box3& bounds, const SrsInfo& srs,
@@ -329,16 +330,33 @@ void PlanView::resizeEvent(QResizeEvent* e) {
 
 double PlanView::refZ() const { return bounds_.valid() ? bounds_.mx.z - center_.z : 0.0; }
 
-void PlanView::updateMatrices() {
-    double diag = std::max(1.0, bounds_.diag());
-    double w = width() * mpp_, h = height() * mpp_;
-    proj_.setToIdentity();
-    proj_.ortho(float(-w / 2), float(w / 2), float(-h / 2), float(h / 2), float(-diag * 4), float(diag * 4));
-    view_.setToIdentity();
-    view_.rotate(float(-(90.0 - pitch_)), 1, 0, 0);
-    view_.rotate(float(-yaw_), 0, 0, 1);
-    view_.translate(-target_);
+// 화면 행렬 식 한 곳(B5 검토 ⓒ): ortho ±w·mpp/2 · ±h·mpp/2 · ±4·diag, 회전 −(90 − pitch) X · −yaw Z, −target 이동. updateMatrices(저장) · contentFits(지금 크기로 임시) 가 같이 쓴다
+void PlanView::makeMatrices(int w, int h, QMatrix4x4& proj, QMatrix4x4& view) const {
+    const double diag = std::max(1.0, bounds_.diag());
+    const double ww = w * mpp_, hh = h * mpp_;
+    proj.setToIdentity();
+    proj.ortho(float(-ww / 2), float(ww / 2), float(-hh / 2), float(hh / 2), float(-diag * 4), float(diag * 4));
+    view.setToIdentity();
+    view.rotate(float(-(90.0 - pitch_)), 1, 0, 0);
+    view.rotate(float(-yaw_), 0, 0, 1);
+    view.translate(-target_);
 }
+
+// 화면 점(w×h 안) → 기준 높이(refZ) 평면과의 교점(로컬 XY). 행렬은 장면 중심 기준 float, 로컬은 double 로 center_ 를 더한다. screenToLocalXY · contentFits 가 같이 쓴다
+bool PlanView::unprojectToRefZ(const QMatrix4x4& pv, const QPointF& sp, int w, int h, Vec2& out) const {
+    bool inv = false;
+    const QMatrix4x4 m = pv.inverted(&inv);
+    if (!inv || w <= 0 || h <= 0) return false;
+    const float nx = float(sp.x() / w * 2 - 1), ny = float(1 - sp.y() / h * 2);
+    const QVector3D A = (m * QVector4D(nx, ny, -1, 1)).toVector3DAffine(), B = (m * QVector4D(nx, ny, 1, 1)).toVector3DAffine();
+    const double zr = refZ();
+    const double dz = B.z() - A.z();
+    const double t = std::fabs(dz) < 1e-9 ? 0 : (zr - A.z()) / dz;
+    out = Vec2(A.x() + t * (B.x() - A.x()) + center_.x, A.y() + t * (B.y() - A.y()) + center_.y);
+    return true;
+}
+
+void PlanView::updateMatrices() { makeMatrices(width(), height(), proj_, view_); }
 
 void PlanView::fitAll() {
     if (!bounds_.valid()) return;
@@ -352,27 +370,17 @@ void PlanView::fitAll() {
 }
 
 // 저장된 proj_ 가 아니라 지금 width() · height() · mpp_ · target_ · yaw_ · pitch_ 로 잰다 — offscreen(GL 없음)에서는 resizeGL 이 안 불려 proj_ 가 옛 크기 그대로라
-// viewRectLocal 로 재면 고치기 전에도 맞는 것처럼 보인다(spec §3-B Task 1). 식은 updateMatrices · screenToLocalXY 와 같다
+// viewRectLocal 로 재면 고치기 전에도 맞는 것처럼 보인다(spec §3-B Task 1). 식은 updateMatrices · screenToLocalXY 와 같은 함수(makeMatrices · unprojectToRefZ)
 bool PlanView::contentFits() const {
     if (!hasScene_ || !bounds_.valid() || width() <= 0 || height() <= 0) return false;
-    const double diag = std::max(1.0, bounds_.diag());
-    const double w = width() * mpp_, h = height() * mpp_;
     QMatrix4x4 proj, view;
-    proj.ortho(float(-w / 2), float(w / 2), float(-h / 2), float(h / 2), float(-diag * 4), float(diag * 4));
-    view.rotate(float(-(90.0 - pitch_)), 1, 0, 0);
-    view.rotate(float(-yaw_), 0, 0, 1);
-    view.translate(-target_);
-    bool inv = false;
-    const QMatrix4x4 m = (proj * view).inverted(&inv);
-    if (!inv) return false;
+    makeMatrices(width(), height(), proj, view);
+    const QMatrix4x4 pv = proj * view;
     Box3 v;
-    const double zr = refZ();
     for (QPointF c : {QPointF(0, 0), QPointF(width(), 0), QPointF(0, height()), QPointF(width(), height())}) {
-        const float nx = float(c.x() / width() * 2 - 1), ny = float(1 - c.y() / height() * 2);
-        const QVector3D A = (m * QVector4D(nx, ny, -1, 1)).toVector3DAffine(), B = (m * QVector4D(nx, ny, 1, 1)).toVector3DAffine();
-        const double dz = B.z() - A.z();
-        const double t = std::fabs(dz) < 1e-9 ? 0 : (zr - A.z()) / dz;
-        v.add(Vec3(A.x() + t * (B.x() - A.x()) + center_.x, A.y() + t * (B.y() - A.y()) + center_.y, bounds_.mn.z));
+        Vec2 q;
+        if (!unprojectToRefZ(pv, c, width(), height(), q)) return false;
+        v.add(Vec3(q.x, q.y, bounds_.mn.z));
     }
     return v.mn.x <= bounds_.mn.x + 1e-6 && v.mx.x >= bounds_.mx.x - 1e-6 && v.mn.y <= bounds_.mn.y + 1e-6 && v.mx.y >= bounds_.mx.y - 1e-6;   // 경계 1e-6 m(profile §7)
 }
@@ -622,19 +630,7 @@ QPointF PlanView::localToScreen(double x, double y, double z) const {
     return QPointF((c.x() / c.w() * 0.5 + 0.5) * width(), (1.0 - (c.y() / c.w() * 0.5 + 0.5)) * height());
 }
 
-bool PlanView::screenToLocalXY(const QPointF& sp, Vec2& out) const {
-    bool inv = false;
-    QMatrix4x4 m = (proj_ * view_).inverted(&inv);
-    if (!inv) return false;
-    float nx = float(sp.x() / width() * 2 - 1), ny = float(1 - sp.y() / height() * 2);
-    QVector4D a = m * QVector4D(nx, ny, -1, 1), b = m * QVector4D(nx, ny, 1, 1);
-    QVector3D A = a.toVector3DAffine(), B = b.toVector3DAffine();
-    double zr = refZ();
-    double dz = B.z() - A.z();
-    double t = std::fabs(dz) < 1e-9 ? 0 : (zr - A.z()) / dz;
-    out = Vec2(A.x() + t * (B.x() - A.x()) + center_.x, A.y() + t * (B.y() - A.y()) + center_.y);
-    return true;
-}
+bool PlanView::screenToLocalXY(const QPointF& sp, Vec2& out) const { return unprojectToRefZ(proj_ * view_, sp, width(), height(), out); }
 
 bool PlanView::screenRayLocal(const QPointF& sp, Vec3& o, Vec3& d) const {
     bool inv = false;
