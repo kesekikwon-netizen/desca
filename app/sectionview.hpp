@@ -65,6 +65,8 @@ public:
     bool hasResult() const { return has_; }
     const asec::SectionResult& result() const { return r_; }
     void fit();
+    /// 감사용: 단면선 전체(s 0–L)가 그림 칸 가로에 들어가는가(창을 줄여도 맞춤이 유지되는지 — B5)
+    bool contentFits() const;
     void zoomBy(double f);
     /// 휠 확대/축소(커서 위치의 (s, z) 고정, 부드럽게 — 설정 view/smoothZoom)
     void wheelZoom(const QPointF& at, double notches);
@@ -106,6 +108,7 @@ private:
     QImage img_;
     double imgS0_ = 0, imgZ1_ = 0, imgRes_ = 0.01;  // z 는 로컬
     bool has_ = false, busy_ = false, drawingHint_ = false;
+    bool fitted_ = false;   // 맞춤 상태(fit 뒤 사용자가 확대 · 이동 · 축척 지정을 안 함) — 창 크기가 바뀌면 다시 맞춘다. 사용자 보기는 가운데 · 축척 유지(B5)
     SectionStyle st_;
     Xf xf_;
     double zoomPending_ = 0;

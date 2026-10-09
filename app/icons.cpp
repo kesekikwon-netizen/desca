@@ -1,6 +1,6 @@
 // 아이콘 그리기: generated/kerf_icons.hpp 의 SVG 글자를 QSvgRenderer 로 그린다(디자인 v5 §11 · Strata KaIconsMockupEngine 과 같은 방식).
 // 선 아이콘은 currentColor 만 바꿔 그리고, 리본 칩은 둥근 타일(한 변의 1/4 둥글기) 위에 아이콘을 굽는다.
-// 배율: dpr 1 · 1.5 · 2 · 3 네 장을 QIcon 에 넣어 100–300 % 화면 어디서나 흐리지 않게(스펙 §2.1).
+// 배율: dpr 1 · 1.25 · 1.5 · 1.75 · 2 · 3 여섯 장을 QIcon 에 넣어 100–300 % 화면 어디서나 흐리지 않게(스펙 §2.1 — Windows 기본 배율 125 · 150 · 175 · 200 % 포함, B5).
 #include "icons.hpp"
 #include "kerf_icons.hpp"
 
@@ -16,7 +16,7 @@
 
 namespace kerf {
 namespace {
-constexpr qreal kDprs[] = {1.0, 1.5, 2.0, 3.0};
+constexpr qreal kDprs[] = {1.0, 1.25, 1.5, 1.75, 2.0, 3.0};   // 한 곳(iconDprs) — 소수 배율은 blank() 가 lround(px × dpr) 로 굽는다(18 × 1.25 = 22.5 → 23, QSize × qreal 의 qRound 와 같음)
 constexpr qreal kTileRadius = 0.25;     // 타일 한 변의 1/4 — 50 px 타일에서 12.5(Strata 와 같음)
 constexpr qreal kDisabledGlyph = 0.45;  // 꺼진 칩의 아이콘 불투명도(tokens.json glyphDisabledOpacity)
 
@@ -116,6 +116,8 @@ QStringList iconNames() {
     return out;
 }
 
+QList<qreal> iconDprs() { return QList<qreal>(std::begin(kDprs), std::end(kDprs)); }
+
 QPixmap glyph(const QString& name, int px, const QColor& ink, qreal dpr) { return renderGlyph(find(name), px, ink, dpr, 1.0); }
 
 QIcon icon(const QString& name, int px, const QColor& ink) {
@@ -126,7 +128,7 @@ QIcon icon(const QString& name, int px, const QColor& ink) {
         return {};
     }
     QIcon ic;
-    for (qreal d : kDprs) ic.addPixmap(renderGlyph(s, px, ink, d, 1.0));
+    for (qreal d : iconDprs()) ic.addPixmap(renderGlyph(s, px, ink, d, 1.0));
     return ic;
 }
 
@@ -136,7 +138,7 @@ QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const 
     for (auto mode : {QIcon::Normal, QIcon::Active, QIcon::Disabled, QIcon::Selected})
         for (auto state : {QIcon::Off, QIcon::On}) {
             const Look L = lookFor(kind, mode == QIcon::Selected ? QIcon::Normal : mode, state, c);
-            for (qreal d : kDprs) ic.addPixmap(renderChip(s, tile, glyphPx, L, d, caret), mode, state);
+            for (qreal d : iconDprs()) ic.addPixmap(renderChip(s, tile, glyphPx, L, d, caret), mode, state);
         }
     return ic;
 }

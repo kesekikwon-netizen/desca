@@ -45,12 +45,21 @@ void SectionView::fit() {
     xf_.s0 = L / 2 - pr.width() / 2 / xf_.ppm;
     xf_.zTop = (r_.zMin + r_.zMax) / 2 + oz + pr.height() / 2 / xf_.ppmZ();
     xf_.plot = pr;
+    fitted_ = true;
+}
+
+bool SectionView::contentFits() const {
+    if (!has_ || !xf_.plot.isValid() || xf_.ppm <= 0) return false;
+    const double L = SectionFrame(r_.line).L;
+    const double sa = xf_.s0, sb = xf_.s0 + xf_.plot.width() / xf_.ppm;
+    return sa <= 0.0 + 1e-6 && sb >= L - 1e-6;   // 경계 1e-6 m(profile §7 단면 끝점 s 좌표와 같은 값)
 }
 
 void SectionView::resizeEvent(QResizeEvent*) {
+    if (fitted_ && has_) { fit(); return; }   // 맞춤 상태면 새 크기에 다시 맞춤(B5) — 창을 줄여도 단면선 전체가 보인다
     QRectF pr = plotRect(rect(), 1.0);
     if (has_ && xf_.plot.isValid()) {
-        // 가운데 유지
+        // 가운데 유지(사용자가 바꾼 보기: 축척 그대로)
         double sc = xf_.s0 + xf_.plot.width() / 2 / xf_.ppm, zc = xf_.zTop - xf_.plot.height() / 2 / xf_.ppmZ();
         xf_.plot = pr;
         xf_.s0 = sc - pr.width() / 2 / xf_.ppm;
@@ -387,6 +396,7 @@ bool SectionView::screenToSZ(const QPointF& m, double& s, double& z) const {
 void SectionView::applyZoomAt(const QPointF& m, double f) {
     double s, z;
     if (!screenToSZ(m, s, z)) return;
+    fitted_ = false;
     xf_.ppm = std::clamp(xf_.ppm * f, 0.5, 50000.0);
     xf_.s0 = s - (m.x() - xf_.plot.left()) / xf_.ppm;
     xf_.zTop = z + (m.y() - xf_.plot.top()) / xf_.ppmZ();
@@ -395,6 +405,7 @@ void SectionView::applyZoomAt(const QPointF& m, double f) {
 
 void SectionView::wheelZoom(const QPointF& at, double notches) {
     if (!has_ || notches == 0) return;
+    fitted_ = false;   // 굴린 순간부터 사용자 보기(부드러운 확대 타이머가 돌기 전에 창 크기가 바뀌어도 확대를 지우지 않게 — B5)
     const double step = std::log(1.18) * notches;
     if (!QSettings().value("view/smoothZoom", true).toBool()) { zoomPending_ = 0; applyZoomAt(at, std::exp(step)); return; }
     zoomAnchor_ = at;
@@ -420,6 +431,7 @@ void SectionView::leaveEvent(QEvent*) { if (onCursor) onCursor(0, 0, 0, 0, false
 void SectionView::mouseMoveEvent(QMouseEvent* e) {
     if (panning_) {
         QPoint d = e->pos() - last_; last_ = e->pos();
+        fitted_ = false;
         xf_.s0 -= d.x() / xf_.ppm; xf_.zTop += d.y() / xf_.ppmZ();
         update();
     }
@@ -442,6 +454,7 @@ void SectionView::setScreenDenom(double d) {
 
 void SectionView::zoomBy(double f) {
     if (!has_) return;
+    fitted_ = false;   // 축척 지정(setScreenDenom) 포함
     zoomPending_ = 0; if (zoomTimer_) zoomTimer_->stop();
     QPointF m = xf_.plot.center();
     double s = xf_.s0 + (m.x() - xf_.plot.left()) / xf_.ppm, z = xf_.zTop - (m.y() - xf_.plot.top()) / xf_.ppmZ();

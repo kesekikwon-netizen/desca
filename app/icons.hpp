@@ -5,6 +5,7 @@
 #pragma once
 #include <QColor>
 #include <QIcon>
+#include <QList>
 #include <QPixmap>
 #include <QString>
 
@@ -20,6 +21,8 @@ struct ChipColors {
 [[nodiscard]] bool hasIcon(const QString& name);
 /// 묶음의 모든 이름(감사 · --icon-sheet)
 [[nodiscard]] QStringList iconNames();
+/// QIcon 에 굽는 배율 목록 {1, 1.25, 1.5, 1.75, 2, 3} — Windows 기본 배율 100 · 125 · 150 · 175 · 200 %(스펙 §2.1). icon · chipIcon · 리본 forceOn 칩이 모두 이것만 쓴다(B5)
+[[nodiscard]] QList<qreal> iconDprs();
 /// 선 아이콘 QIcon(1× · 2×). 없는 이름이면 빈 QIcon + qWarning 한 번
 [[nodiscard]] QIcon icon(const QString& name, int px, const QColor& ink);
 /// 한 장 바로 그리기(ink 색, px 논리 픽셀, dpr 배율)

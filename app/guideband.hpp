@@ -28,11 +28,14 @@ public:
     QString hint() const;
     bool titleShown() const;   // 감사용: 도구 이름(단계)이 보이는가
     QString debugWidths() const;   // 감사용: 문장 라벨 폭/권장 · 칩 폭/권장
+    qint64 iconCacheKey() const;   // 감사용: 지금 아이콘 장의 cacheKey(dpr 바뀌어 다시 구우면 달라진다 — B5)
 
 protected:
     bool eventFilter(QObject* watched, QEvent* e) override;
+    bool event(QEvent* e) override;   // QEvent::DevicePixelRatioChange(화면을 옮겨 배율이 바뀜) → 아이콘을 새 배율로 다시 굽는다(B5)
 
 private:
+    void bakeIcon();                  // iconName_ 을 지금 devicePixelRatioF() 로 굽고 iconDpr_ 에 기억
     QWidget* host_ = nullptr;
     QLabel* icon_ = nullptr;
     QLabel* title_ = nullptr;
@@ -43,7 +46,8 @@ private:
     QList<QLabel*> keyLabels_;
     QString fullHint_;
     QString fullTitle_;      // 「단면선 긋기 › A′ 찾는 중」 — 좁으면 「A′ 찾는 중」, 더 좁으면 숨김
-    QString iconName_;       // 지금 아이콘(같으면 SVG 를 다시 그리지 않음)
+    QString iconName_;       // 지금 아이콘(같으면 SVG 를 다시 그리지 않음 — 배율이 바뀐 때만 예외)
+    qreal iconDpr_ = 0;      // 아이콘을 구운 배율(place() 안전판: 지금 배율과 다르면 다시 굽는다 — Qt 가 자식에 사건을 안 보내는 경우)
     QStringList keys_;       // 지금 키 캡(같으면 라벨을 다시 만들지 않음 — 검토 I3)
     int reserveRight_ = 85;   // 되돌리기 · 다시(73) + 사이 12
 };

@@ -232,6 +232,7 @@ void PlanView::setStreamingScene(const std::vector<fs::path>& roots, const Vec3&
 }
 
 void PlanView::setCamera(double cx, double cy, double mpp) {
+    fitted_ = false;   // 저장된 카메라 복원 · --plan-cam 은 사용자 보기
     target_ = QVector3D(float(cx - center_.x), float(cy - center_.y), target_.z());
     mpp_ = std::clamp(mpp, 1e-5, 1e5);
     updateMatrices();
@@ -321,6 +322,11 @@ void PlanView::upload() {
 
 void PlanView::resizeGL(int, int) { updateMatrices(); }
 
+void PlanView::resizeEvent(QResizeEvent* e) {
+    QOpenGLWidget::resizeEvent(e);   // 프레임버퍼 · resizeGL(GL 이 있을 때) — 문서: 파생 클래스는 반드시 부른다
+    if (fitted_) fitAll(); else updateMatrices();   // 맞춤 상태면 새 크기에 다시 맞춤, 사용자 보기는 가운데 · 축척 유지(B5)
+}
+
 double PlanView::refZ() const { return bounds_.valid() ? bounds_.mx.z - center_.z : 0.0; }
 
 void PlanView::updateMatrices() {
@@ -336,12 +342,39 @@ void PlanView::updateMatrices() {
 
 void PlanView::fitAll() {
     if (!bounds_.valid()) return;
+    fitted_ = true;
     double w = bounds_.mx.x - bounds_.mn.x, h = bounds_.mx.y - bounds_.mn.y;
     target_ = QVector3D(float(bounds_.center().x - center_.x), float(bounds_.center().y - center_.y), float(bounds_.center().z - center_.z));
     double W = std::max(50, width() - 40), H = std::max(50, height() - 40);
     mpp_ = std::max(1e-4, std::max(w / W, h / H) * 1.04);
     updateMatrices();
     update();
+}
+
+// 저장된 proj_ 가 아니라 지금 width() · height() · mpp_ · target_ · yaw_ · pitch_ 로 잰다 — offscreen(GL 없음)에서는 resizeGL 이 안 불려 proj_ 가 옛 크기 그대로라
+// viewRectLocal 로 재면 고치기 전에도 맞는 것처럼 보인다(spec §3-B Task 1). 식은 updateMatrices · screenToLocalXY 와 같다
+bool PlanView::contentFits() const {
+    if (!hasScene_ || !bounds_.valid() || width() <= 0 || height() <= 0) return false;
+    const double diag = std::max(1.0, bounds_.diag());
+    const double w = width() * mpp_, h = height() * mpp_;
+    QMatrix4x4 proj, view;
+    proj.ortho(float(-w / 2), float(w / 2), float(-h / 2), float(h / 2), float(-diag * 4), float(diag * 4));
+    view.rotate(float(-(90.0 - pitch_)), 1, 0, 0);
+    view.rotate(float(-yaw_), 0, 0, 1);
+    view.translate(-target_);
+    bool inv = false;
+    const QMatrix4x4 m = (proj * view).inverted(&inv);
+    if (!inv) return false;
+    Box3 v;
+    const double zr = refZ();
+    for (QPointF c : {QPointF(0, 0), QPointF(width(), 0), QPointF(0, height()), QPointF(width(), height())}) {
+        const float nx = float(c.x() / width() * 2 - 1), ny = float(1 - c.y() / height() * 2);
+        const QVector3D A = (m * QVector4D(nx, ny, -1, 1)).toVector3DAffine(), B = (m * QVector4D(nx, ny, 1, 1)).toVector3DAffine();
+        const double dz = B.z() - A.z();
+        const double t = std::fabs(dz) < 1e-9 ? 0 : (zr - A.z()) / dz;
+        v.add(Vec3(A.x() + t * (B.x() - A.x()) + center_.x, A.y() + t * (B.y() - A.y()) + center_.y, bounds_.mn.z));
+    }
+    return v.mn.x <= bounds_.mn.x + 1e-6 && v.mx.x >= bounds_.mx.x - 1e-6 && v.mn.y <= bounds_.mn.y + 1e-6 && v.mx.y >= bounds_.mx.y - 1e-6;   // 경계 1e-6 m(profile §7)
 }
 
 void PlanView::topView() { yaw_ = 0; pitch_ = 90; updateMatrices(); update(); }
@@ -815,6 +848,7 @@ void PlanView::setSyncMark(bool on, double s) {
 }
 
 void PlanView::setViewPitch(double deg) {
+    fitted_ = false;
     pitch_ = std::clamp(deg, 8.0, 90.0);
     updateMatrices();
     update();
@@ -948,6 +982,7 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
     if (panning_) {
+        fitted_ = false;
         QMatrix4x4 rot; rot.rotate(float(yaw_), 0, 0, 1); rot.rotate(float(90.0 - pitch_), 1, 0, 0);
         QVector3D mv = rot.map(QVector3D(float(-d.x() * mpp_), float(d.y() * mpp_), 0));
         target_ += mv;
@@ -955,6 +990,7 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
     if (orbiting_) {
+        fitted_ = false;
         yaw_ = std::fmod(yaw_ - d.x() * 0.4 + 360.0, 360.0);
         pitch_ = orbitPitch(pitch_, d.y(), orbitLift_);
         update();
@@ -988,6 +1024,7 @@ void PlanView::wheelEvent(QWheelEvent* e) {
 
 // 커서 아래 지점(기준 높이 평면)이 화면에서 움직이지 않게 확대/축소
 void PlanView::applyZoomAt(const QPointF& at, double f) {
+    fitted_ = false;
     Vec2 before; bool ok = screenToLocalXY(at, before);
     mpp_ = std::clamp(mpp_ * f, 1e-5, 1e5);
     updateMatrices();
@@ -1001,6 +1038,7 @@ void PlanView::applyZoomAt(const QPointF& at, double f) {
 
 void PlanView::wheelZoom(const QPointF& at, double notches) {
     if (!hasScene_ || notches == 0) return;
+    fitted_ = false;   // 굴린 순간부터 사용자 보기(부드러운 확대 타이머가 돌기 전에 창 크기가 바뀌어도 확대를 지우지 않게 — B5)
     const double step = std::log(0.85) * notches;   // 한 칸 = 15 %
     if (!QSettings().value("view/smoothZoom", true).toBool()) { zoomPending_ = 0; applyZoomAt(at, std::exp(step)); return; }
     zoomAnchor_ = at;
@@ -1038,4 +1076,4 @@ bool PlanView::viewRectLocal(Box3& out) const {
     return true;
 }
 
-void PlanView::zoomBy(double f) { zoomPending_ = 0; if (zoomTimer_) zoomTimer_->stop(); mpp_ = std::clamp(mpp_ * f, 1e-5, 1e5); updateMatrices(); update(); }
+void PlanView::zoomBy(double f) { fitted_ = false; zoomPending_ = 0; if (zoomTimer_) zoomTimer_->stop(); mpp_ = std::clamp(mpp_ * f, 1e-5, 1e5); updateMatrices(); update(); }

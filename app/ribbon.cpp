@@ -194,7 +194,7 @@ QIcon Ribbon::chipIconCached(const Chip& c, const RibbonLook& L) {
     // 체크할 수 없는 칩이라 Off 상태로 그려진다 → On 모양을 Off 자리에 넣는다
     QIcon ic;
     for (auto mode : {QIcon::Normal, QIcon::Active, QIcon::Disabled, QIcon::Selected})
-        for (qreal d : {1.0, 1.5, 2.0, 3.0}) ic.addPixmap(src.pixmap(QSize(L.tile, L.tile), d, mode, QIcon::On), mode, QIcon::Off);
+        for (qreal d : kerf::iconDprs()) ic.addPixmap(src.pixmap(QSize(L.tile, L.tile), d, mode, QIcon::On), mode, QIcon::Off);   // 배율 목록은 한 곳(B5)
     return *iconCache_.insert(key, ic);
 }
 
