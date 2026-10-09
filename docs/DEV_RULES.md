@@ -6,6 +6,7 @@
 - R1.1 모든 작업은 superpowers 스킬을 **실제로 Skill 도구로 부른 뒤** 한다: 새 기능 `brainstorming → writing-plans → executing-plans`, 코드 수정 `test-driven-development`, 버그 · 시험 실패 · 이상 동작 `systematic-debugging`, 끝났다고 말하기 전 `verification-before-completion`, 기능 하나 끝나면 `requesting-code-review`(cpp-reviewer · UI는 ui-reviewer), 브랜치 마무리 `finishing-a-development-branch`.
 - R1.2 Qt · C++ · 라이브러리 API가 확실하지 않으면 **context7**(`resolve-library-id` → `query-docs`, Qt는 `/websites/doc_qt_io_qt-6_8`)로 확인한 뒤 쓴다. 지어내지 않는다. context7이 없으면 사용자에게 연결을 부탁하고 공식 문서(doc.qt.io)로 확인한다.
 - R1.3 목적에 맞는 다른 스킬 · MCP · 훅(`desca:verify` · `ui-visual-check` · `cpp-build-fix` · `cpp-debug` · `cpp-test`)은 사용자 요청 없이도 쓴다.
+- R1.5 **사전 허가(사용자 /goal 2026-10-10 「남은 개발작업 전체 완료할때까지 전부 추천으로 진행해서 권한 허가해줄께 마지막가지 개발완료해줘」):** 팩토리 대기 목록(`factory/backlog.md`)이 끝날 때까지 AskUserQuestion 으로 물을 결정(열린 질문 · needs-human · 승인 · 재승인 · 병합 · worktree 정리)은 **추천안을 자동으로 고르고** 그 자리에 「사용자 사전 허가(2026-10-10 /goal) · 추천안 <무엇>」 을 사용자 말 자리에 적는다. 예외: push(R5.1) · main 변경 · 배포 · 소프트웨어 설치(R7.1)는 여전히 사용자가 말할 때만. 되돌릴 수 없는 삭제(사용자 파일)는 하지 않는다.
 - R1.4 계획이 있는 작업은 계획 문서(`docs/superpowers/plans/*.md`)의 과제 순서대로, 장부(`.superpowers/sdd/<plan>/progress.md`)에 과제마다 `complete` 줄과 모든 `Ruling:`을 적는다. 계획과 다르게 한 것은 반드시 Ruling(무엇을 · 왜 · 잘못이면 무엇을 잃는지).
 
 ## R2. 코드
