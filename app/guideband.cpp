@@ -30,7 +30,7 @@ GuideBand::GuideBand(QWidget* host) : QFrame(host), host_(host) {
     h->setSpacing(8);
     icon_ = new QLabel; icon_->setFixedSize(16, 16);
     title_ = new QLabel; title_->setObjectName(QStringLiteral("guideTitle"));
-    auto* rule = new QFrame; rule->setObjectName(QStringLiteral("guideRule")); rule->setFixedSize(1, 16);
+    auto* rule = new QFrame; rule->setObjectName(QStringLiteral("guideRule")); rule->setFixedSize(1, 16); rule_ = rule;
     hint_ = new QLabel; hint_->setObjectName(QStringLiteral("guideHint"));
     keysBox_ = new QWidget; keysLay_ = new QHBoxLayout(keysBox_); keysLay_->setContentsMargins(0, 0, 0, 0); keysLay_->setSpacing(4);
     h->addWidget(icon_); h->addWidget(title_); h->addWidget(rule); h->addWidget(hint_); h->addWidget(keysBox_);
@@ -58,6 +58,7 @@ void GuideBand::setKeys(const QStringList& keys) {
         auto* l = new QLabel(keysBox_); l->setObjectName(QStringLiteral("kbd")); l->setFixedHeight(18); l->setAlignment(Qt::AlignCenter);   // 키 캡 18(스펙 §5)
         keysLay_->addWidget(l, 0, Qt::AlignVCenter); keyLabels_ << l;
         if (isVisible()) l->show();   // 보이는 칩 안에 더한 라벨은 바로 보여야 adjustSize 가 폭을 맞게 잼
+        l->ensurePolished();          // 시트(모노 11 · 테)를 먼저 입혀야 sizeHint 가 맞는다 — 아니면 칩이 25 px 좁아 문장이 잘림(실측)
     }
     for (int i = 0; i < keyLabels_.size(); ++i) { keyLabels_[i]->setVisible(i < keys.size()); if (i < keys.size()) keyLabels_[i]->setText(keys.at(i)); }
     adjustSize(); place();
@@ -69,13 +70,14 @@ void GuideBand::place() {
     const int hostW = std::max(160, host_->width() - 2 * kMargin);
     const int withBtns = std::max(160, hostW - reserveRight_);
     hint_->setText(fullHint_);
-    title_->setText(fullTitle_); title_->setVisible(true);
+    title_->setText(fullTitle_); title_->setVisible(true); rule_->setVisible(true);
     adjustSize();
     if (width() > withBtns) {
         const int cut = fullTitle_.indexOf(QStringLiteral(" › "));
         if (cut > 0) { title_->setText(fullTitle_.mid(cut + 3)); adjustSize(); }
     }
-    if (width() > withBtns) { title_->setVisible(false); adjustSize(); }
+    // 되돌리기 칸이 아래로 가면(FloatButtons::place) 칩은 호스트 폭을 다 쓸 수 있다: 단계 이름이 그 폭에 들어가면 지키고, 아니면 이름 · 선을 숨긴다(검토 UI 5)
+    if (width() > withBtns && width() > hostW) { title_->setVisible(false); rule_->setVisible(false); adjustSize(); }
     const int maxW = width() <= withBtns ? withBtns : hostW;
     if (width() > maxW) {
         const int over = width() - maxW;
@@ -84,10 +86,13 @@ void GuideBand::place() {
         hint_->setText(fm.elidedText(fullHint_, Qt::ElideRight, avail));
         adjustSize();
     }
+    if (width() != sizeHint().width()) adjustSize();   // 자식 시트가 늦게 입혀져 권장 폭이 바뀌었으면 한 번 더
     move(kMargin, kMargin);
     raise();
 }
 QString GuideBand::title() const { return title_->text(); }
+bool GuideBand::titleShown() const { return title_->isVisible(); }
+QString GuideBand::debugWidths() const { return QStringLiteral("hint=%1/%2 band=%3/%4").arg(hint_->width()).arg(hint_->sizeHint().width()).arg(width()).arg(sizeHint().width()); }
 QString GuideBand::hint() const { return hint_->text(); }
 
 bool GuideBand::eventFilter(QObject* watched, QEvent* e) {

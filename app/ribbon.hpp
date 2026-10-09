@@ -65,7 +65,7 @@ protected:
     bool eventFilter(QObject* watched, QEvent* e) override;
 
 private:
-    struct Chip { QToolButton* button = nullptr; kerf::ChipKind kind = kerf::ChipKind::Normal; QString icon; bool forceOn = false; };
+    struct Chip { QToolButton* button = nullptr; kerf::ChipKind kind = kerf::ChipKind::Normal; QString icon; bool forceOn = false; QAction* action = nullptr; };
     struct Group { QFrame* frame = nullptr; QLabel* caption = nullptr; QHBoxLayout* row = nullptr; };
 
     int chipWidth(const RibbonLook& L, const QToolButton* b) const;
@@ -82,6 +82,7 @@ private:
     QHash<QString, Group> groups_;
     QStringList order_;
     QList<Chip> chips_;
+    QList<QWidget*> widgetBoxes_;   // 칩이 아닌 위젯을 감싼 상자(타일 세로 가운데 맞춤)
     QHash<QString, QIcon> iconCache_;   // "이름|타일|종류"
     int lookIndex_ = 0;
     int appliedLine_ = 0;

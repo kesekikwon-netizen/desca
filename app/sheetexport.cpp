@@ -862,7 +862,7 @@ QWidget* scaleWithArrows(QSpinBox* spin) {
         b->setText(up ? QString::fromUtf8("▲") : QString::fromUtf8("▼"));
         b->setToolTip(up ? QStringLiteral("축척 분모 +10") : QStringLiteral("축척 분모 −10"));
         b->setFocusPolicy(Qt::NoFocus); b->setAutoRepeat(true); b->setFixedSize(22, 14);
-        b->setStyleSheet(QStringLiteral("QToolButton{font-size:8px;padding:0;border:1px solid #C2C0B6;border-radius:3px;background:#FFFFFF;color:#3D3D3A}QToolButton:hover{background:#F5F4ED}QToolButton:pressed{background:#E8E6DC}"));
+        b->setStyleSheet(QStringLiteral("QToolButton{font-size:8px;padding:0;border:1px solid #C2C0B6;border-radius:4px;background:#FFFFFF;color:#3D3D3A}QToolButton:hover{background:#F5F4ED}QToolButton:pressed{background:#E8E6DC}"));
         QObject::connect(b, &QToolButton::clicked, spin, [spin, up] { if (up) spin->stepUp(); else spin->stepDown(); });
         col->addWidget(b);
     }
@@ -926,8 +926,8 @@ PaperChips paperChips(const SheetSpec& s) {   // 용지 [A4 | A3] [가로 | 세�
     PaperChips pc; pc.w = new QWidget; auto* h = new QHBoxLayout(pc.w); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(8);
     pc.size = new QButtonGroup(pc.w); pc.size->setExclusive(true);
     pc.orient = new QButtonGroup(pc.w); pc.orient->setExclusive(true);
-    auto* a = new QWidget; { auto* hh = new QHBoxLayout(a); hh->setContentsMargins(0, 0, 0, 0); hh->setSpacing(0); hh->addWidget(chipBtn(QStringLiteral("A4"), pc.size, 0, "first")); hh->addWidget(chipBtn(QStringLiteral("A3"), pc.size, 1, "last")); }
-    auto* o = new QWidget; { auto* hh = new QHBoxLayout(o); hh->setContentsMargins(0, 0, 0, 0); hh->setSpacing(0); hh->addWidget(chipBtn(QStringLiteral("가로"), pc.orient, 0, "first")); hh->addWidget(chipBtn(QStringLiteral("세로"), pc.orient, 1, "last")); }
+    auto* a = new QWidget; { auto* hh = new QHBoxLayout(a); hh->setContentsMargins(0, 0, 0, 0); hh->setSpacing(2); hh->addWidget(chipBtn(QStringLiteral("A4"), pc.size, 0, "first")); hh->addWidget(chipBtn(QStringLiteral("A3"), pc.size, 1, "last")); }
+    auto* o = new QWidget; { auto* hh = new QHBoxLayout(o); hh->setContentsMargins(0, 0, 0, 0); hh->setSpacing(2); hh->addWidget(chipBtn(QStringLiteral("가로"), pc.orient, 0, "first")); hh->addWidget(chipBtn(QStringLiteral("세로"), pc.orient, 1, "last")); }
     h->addWidget(a); h->addWidget(o); h->addStretch();
     pc.size->button(s.paper == Paper::A3 ? 1 : 0)->setChecked(true);
     pc.orient->button(s.landscape ? 0 : 1)->setChecked(true);
@@ -986,7 +986,7 @@ void addDeskFloats(SheetPreview* pv, QAction* editAct, std::function<void()> pap
 }
 // 종이: Card · Edge 1 px · 둥글기 0 · 그림자 없음(스펙 §8)
 void paintPaperFrame(QPainter& p, const QPointF& o, const QSizeF& pz) {
-    p.setPen(QPen(theme::Edge, 1)); p.setBrush(Qt::NoBrush); p.drawRect(QRectF(o, pz));
+    p.setPen(QPen(theme::Edge, 1)); p.setBrush(Qt::NoBrush); p.drawRoundedRect(QRectF(o, pz), 4, 4);   // 화면 테두리만 둥글게(종이 위 도면 · 인쇄물은 그대로)
 }
 }  // namespace
 
@@ -1060,7 +1060,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     auto* hatchMm = new QDoubleSpinBox; hatchMm->setRange(0.2, 5.0); hatchMm->setDecimals(1); hatchMm->setSingleStep(0.1); hatchMm->setSuffix(QStringLiteral(" mm")); hatchMm->setValue(st->hatchMm); hatchMm->setFixedWidth(64); hatchMm->setAlignment(Qt::AlignRight);
     hatchMm->setToolTip(QStringLiteral("빗금 간격(종이 위 mm) — 잘린 돌(H)에 씀"));
     { auto* row = new QWidget; auto* h = new QHBoxLayout(row); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(6);
-        auto* chips = new QWidget; { auto* hh = new QHBoxLayout(chips); hh->setContentsMargins(0, 0, 0, 0); hh->setSpacing(0);
+        auto* chips = new QWidget; { auto* hh = new QHBoxLayout(chips); hh->setContentsMargins(0, 0, 0, 0); hh->setSpacing(2);
             hh->addWidget(chipBtn(QStringLiteral("45°"), hatchG, 0, "first", 40)); hh->addWidget(chipBtn(QStringLiteral("검은 칠"), hatchG, 1, nullptr, 56)); hh->addWidget(chipBtn(QStringLiteral("점묘"), hatchG, 2, "last", 40)); }
         h->addWidget(chips); h->addWidget(hatchMm); h->addStretch();
         g2->addWidget(lbl(QStringLiteral("빗금"), "hint"), r, 0); g2->addWidget(row, r++, 1); }
@@ -1073,7 +1073,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     v->addWidget(sideCaption(QStringLiteral("형식")));
     auto* fmtG = new QButtonGroup(d); fmtG->setExclusive(true);
     auto* fmtRow = new QWidget;
-    { auto* h = new QHBoxLayout(fmtRow); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(0);
+    { auto* h = new QHBoxLayout(fmtRow); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(2);
         h->addWidget(chipBtn(QStringLiteral("SVG"), fmtG, 4, "first", 48)); h->addWidget(chipBtn(QStringLiteral("DXF"), fmtG, 1, nullptr, 48)); h->addWidget(chipBtn(QStringLiteral("PDF"), fmtG, 0, nullptr, 48));
         h->addWidget(chipBtn(QStringLiteral("PNG"), fmtG, 2, nullptr, 48)); h->addWidget(chipBtn(QStringLiteral("TIFF"), fmtG, 3, "last", 48)); h->addStretch();
         v->addWidget(fmtRow); }
@@ -1202,9 +1202,9 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         bDefault->setText(QStringLiteral("★ 저장함"));
     });
     auto doSave = [=, &io, &accepted] {
-        io = *st; accepted = true;
-        if (d->property("embed").toBool()) saveEmbeddedSheet();
-        else d->accept();
+        io = *st;                                                                   // io = *params(lastSheet_ 가 소유) — 살아 있음
+        if (d->property("embed").toBool()) { saveEmbeddedSheet(); return; }       // 끼운 조판: accepted 는 이미 끝난 함수의 지역 변수(검토 C2)
+        accepted = true; d->accept();
     };
     QObject::connect(bSave, &QPushButton::clicked, d, doSave);
     QObject::connect(bPdf, &QPushButton::clicked, d, [=] { st->format = 0; (*refresh)(); doSave(); });
@@ -1225,7 +1225,9 @@ void MainWindow::showWorkTab() {
 }
 
 void MainWindow::saveEmbeddedSheet() {
-    if (embeddedSave_) embeddedSave_();
+    if (!embeddedSave_) return;
+    const std::function<void()> save = embeddedSave_;   // 실행 중 discardSheetTab 이 멤버를 비워도 캡처(doc · src · params)가 살아 있게(검토 C1)
+    save();
 }
 
 void MainWindow::showSheetTab(QWidget* page) {
@@ -1296,7 +1298,7 @@ QWidget* MainWindow::buildSheetSide() {
     QObject::connect(list, &QListWidget::itemClicked, this, [this](QListWidgetItem* it) {
         const int row = it->data(Qt::UserRole).toInt();
         if (row < 0) return;
-        QTimer::singleShot(0, this, [this, row] { openSheetFromList(row); });   // 이 목록은 새 조판으로 바뀌며 지워지므로 다음 차례에
+        QTimer::singleShot(0, this, [this, row] { if (sheetHost_) openSheetFromList(row); });   // 이 목록은 새 조판으로 바뀌며 지워지므로 다음 차례에. 그사이 탭이 버려졌으면 안 함(검토 M6)
     });
     QObject::connect(find, &QLineEdit::textChanged, list, [this, list](const QString& tx) {
         const QString q = tx.trimmed();
@@ -1330,9 +1332,9 @@ QWidget* MainWindow::sheetRowWidget(int row) {
     });
     h->addWidget(cb);
     auto* th = new QLabel; th->setFixedSize(64, 30); th->setAlignment(Qt::AlignCenter);
-    if (row == 0) { th->setText(QStringLiteral("평면")); th->setStyleSheet("QLabel{background:#F5F4ED;border:1px solid #DEDCD1;border-radius:3px;color:#5E5D59;font-size:11px;}"); }
+    if (row == 0) { th->setText(QStringLiteral("평면")); th->setStyleSheet("QLabel{background:#F5F4ED;border:1px solid #DEDCD1;border-radius:6px;color:#5E5D59;font-size:11px;}"); }
     else {
-        th->setStyleSheet("QLabel{background:#FFFFFF;border:1px solid #DEDCD1;border-radius:3px;}");
+        th->setStyleSheet("QLabel{background:#FFFFFF;border:1px solid #DEDCD1;border-radius:6px;}");
         if (auto f = thumbs_.find(row - 1); f != thumbs_.end() && !f->second.isNull())
             th->setPixmap(QPixmap::fromImage(f->second.scaled(62, 28, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
     }
@@ -1449,7 +1451,7 @@ void MainWindow::dlgSheet() {
         QString name = svg ? QStringLiteral("SVG") : QString::fromLatin1(kFormatName[std::clamp(sp.format, 0, 3)]);
         QString filter = QStringLiteral("%1 (*.%2)").arg(name, ext);
         QString f = askSavePath("sheet", base + QStringLiteral("_1-%1.").arg(sp.spec.denom, 0, 'f', 0) + ext, filter);
-        if (f.isEmpty()) return;
+        if (f.isEmpty() || src_ != src) return;   // 저장 창을 띄운 사이 모델이 바뀌었으면 옛 도면을 저장하지 않음(검토 C1)
         if (QFileInfo(f).suffix().isEmpty()) f += "." + ext;
         runTask(QStringLiteral("도면 %1 만드는 중").arg(name),
             [this, doc, src, sp, f, svg](QString* m) {
@@ -1547,7 +1549,7 @@ QDialog* MainWindow::buildPlanSheetDialog(PlanSheetParams& io, const QImage& pre
         v->addLayout(g2); }
     v->addWidget(sideCaption(QStringLiteral("형식")));
     auto* fmtG = new QButtonGroup(d); fmtG->setExclusive(true);
-    { auto* row = new QWidget; auto* h = new QHBoxLayout(row); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(0);
+    { auto* row = new QWidget; auto* h = new QHBoxLayout(row); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(2);
         h->addWidget(chipBtn(QStringLiteral("SVG"), fmtG, 4, "first", 48)); h->addWidget(chipBtn(QStringLiteral("DXF"), fmtG, 1, nullptr, 48)); h->addWidget(chipBtn(QStringLiteral("PDF"), fmtG, 0, nullptr, 48));
         h->addWidget(chipBtn(QStringLiteral("PNG"), fmtG, 2, nullptr, 48)); h->addWidget(chipBtn(QStringLiteral("TIFF"), fmtG, 3, "last", 48)); h->addStretch();
         v->addWidget(row); }
@@ -1661,9 +1663,9 @@ QDialog* MainWindow::buildPlanSheetDialog(PlanSheetParams& io, const QImage& pre
         s.setValue("plansheet/landscape", st->spec.landscape);
         s.setValue("plansheet/denom", st->spec.denom);
         s.setValue("plansheet/format", st->format);
-        io = *st; accepted = true;
-        if (d->property("embed").toBool()) saveEmbeddedSheet();
-        else d->accept();
+        io = *st;
+        if (d->property("embed").toBool()) { saveEmbeddedSheet(); return; }       // 검토 C2
+        accepted = true; d->accept();
     };
     QObject::connect(bSave, &QPushButton::clicked, d, doSave);
     QObject::connect(bPdf, &QPushButton::clicked, d, [=] { st->format = 0; (*refresh)(); doSave(); });
@@ -1696,7 +1698,7 @@ void MainWindow::dlgPlanSheet() {
         QString name = svg ? QStringLiteral("SVG") : QString::fromLatin1(kFormatName[std::clamp(sp.format, 0, 3)]);
         QString filter = QStringLiteral("%1 (*.%2)").arg(name, ext);
         QString f = askSavePath("plansheet", QFileInfo(path_).completeBaseName() + QStringLiteral("_평면도_1-%1.").arg(sp.spec.denom, 0, 'f', 0) + ext, filter);
-        if (f.isEmpty()) return;
+        if (f.isEmpty() || src_ != src) return;   // 저장 창을 띄운 사이 모델이 바뀌었으면 옛 도면을 저장하지 않음(검토 C1)
         if (QFileInfo(f).suffix().isEmpty()) f += "." + ext;
         runTask(QStringLiteral("평면도 %1 만드는 중").arg(name),
             [this, src, sp, f](QString* m) {
@@ -1828,7 +1830,7 @@ bool MainWindow::runSheetCheck(const QString& outDir, QString* log) {
     const int out2 = flag(outside(p2));
     lines << QStringLiteral("sheet-check plan zoom=2.07 spacing-grew=%1 font-px-same=%2 labels-outside-plot=%3").arg(grew).arg(fontSame).arg(out2);
     if (section_ && section_->hasResult()) {
-        SheetParams sec = defaultSheetParams();
+        SheetParams sec = defaultSheetParams(); sec.withLevels = true;   // 판정은 레벨선이 있어야 함(검토 M2)
         SectionDoc doc = section_->doc();
         auto paintSec = [&](double zoom, QImage& canvas, SheetPaintProbe& probe) {
             SheetGeom G = sheetGeom(doc, sec.spec);

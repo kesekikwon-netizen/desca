@@ -176,6 +176,7 @@ public:
     void saveModelState();
 
 protected:
+    bool eventFilter(QObject* o, QEvent* e) override;   // 앱 전체 키보드 초점 테(qApp 에 설치)
     void dragEnterEvent(QDragEnterEvent*) override;
     void dropEvent(QDropEvent*) override;
     void closeEvent(QCloseEvent*) override;
@@ -313,6 +314,7 @@ private:
     void updateDepthChips();
     void applyHighContrast(bool on);
     QString heightBadgeText(QString* state, QString* tip) const;
+    QString heightDatumShort() const;   // 높이 기준 짧은 이름(배지 · 홈 카드 공통)
     std::map<QString, QAction*> act_;
     struct Label { QObject* obj; QString ko, en; int kind; };  // kind 0 탭 1 그룹라벨 2 동작 3 제목
     std::vector<Label> labels_;

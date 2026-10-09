@@ -6,6 +6,7 @@
 
 #include <QDebug>
 #include <QPainter>
+#include <QPolygonF>
 #include <QPainterPath>
 #include <QPen>
 #include <QSet>
@@ -81,7 +82,7 @@ Look lookFor(ChipKind kind, QIcon::Mode mode, QIcon::State state, const ChipColo
     return L;
 }
 
-QPixmap renderChip(const kerficons::Svg* s, int tile, int glyphPx, const Look& L, qreal dpr) {
+QPixmap renderChip(const kerficons::Svg* s, int tile, int glyphPx, const Look& L, qreal dpr, bool caret) {
     QPixmap pm = blank(tile, dpr);
     QPainter p(&pm);
     p.setRenderHint(QPainter::Antialiasing);
@@ -96,6 +97,13 @@ QPixmap renderChip(const kerficons::Svg* s, int tile, int glyphPx, const Look& L
     }
     const qreal off = (tile - glyphPx) / 2.0;
     p.drawPixmap(QPointF(off, off), renderGlyph(s, glyphPx, L.glyph, dpr, L.glyphOpacity));
+    if (caret) {   // ▾ 6 px, 타일 오른쪽 아래(스펙 §3.1)
+        QColor ink = L.glyph; ink.setAlphaF(L.glyphOpacity);
+        p.setPen(Qt::NoPen); p.setBrush(ink);
+        const qreal x = tile - 11, y = tile - 10;
+        QPolygonF tri; tri << QPointF(x, y) << QPointF(x + 6, y) << QPointF(x + 3, y + 4);
+        p.drawPolygon(tri);
+    }
     return pm;
 }
 }  // namespace
@@ -122,13 +130,13 @@ QIcon icon(const QString& name, int px, const QColor& ink) {
     return ic;
 }
 
-QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c) {
+QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, bool caret) {
     const kerficons::Svg* s = find(name);
     QIcon ic;
     for (auto mode : {QIcon::Normal, QIcon::Active, QIcon::Disabled, QIcon::Selected})
         for (auto state : {QIcon::Off, QIcon::On}) {
             const Look L = lookFor(kind, mode == QIcon::Selected ? QIcon::Normal : mode, state, c);
-            for (qreal d : kDprs) ic.addPixmap(renderChip(s, tile, glyphPx, L, d), mode, state);
+            for (qreal d : kDprs) ic.addPixmap(renderChip(s, tile, glyphPx, L, d, caret), mode, state);
         }
     return ic;
 }

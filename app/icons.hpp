@@ -25,5 +25,5 @@ struct ChipColors {
 /// 한 장 바로 그리기(ink 색, px 논리 픽셀, dpr 배율)
 [[nodiscard]] QPixmap glyph(const QString& name, int px, const QColor& ink, qreal dpr = 1.0);
 /// 리본 칩 아이콘: tile 한 변(px) 안에 glyph 크기 아이콘, 둥글기 tile/4. kind 에 따라 켜짐 색이 다르다
-[[nodiscard]] QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c);
+[[nodiscard]] QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, bool caret = false);   // caret = 메뉴 칩 ▾(타일 오른쪽 아래)
 }  // namespace kerf

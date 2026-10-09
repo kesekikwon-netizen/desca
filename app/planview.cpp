@@ -647,7 +647,7 @@ void PlanView::paintEmpty(QPainter& p) {
 void PlanView::paintOverlay(QPainter& p) {
     // 북쪽 표시 + 축척 막대
     {
-        QPointF c(width() - 34, height() - 60);   // 오른쪽 아래 「진북」(스펙 §5) — 왼쪽 위 안내 칩 · 되돌리기 칸과 겹치지 않게
+        const QPointF c = compassCenter();   // 오른쪽 아래 「진북」(스펙 §5) — 눌림 판정(compassHit)과 같은 자리(검토 I1)
         double a = -yaw_ * M_PI / 180.0;
         QPointF dir(std::sin(a), -std::cos(a));
         QPointF tip = c + dir * 16, tail = c - dir * 12, side(dir.y(), -dir.x());
@@ -656,12 +656,12 @@ void PlanView::paintOverlay(QPainter& p) {
         p.setPen(Qt::NoPen); p.setBrush(theme::Ink); p.drawPath(arr);
         QFont f = theme::uiFont(11, true); p.setFont(f); p.setPen(theme::Ink);
         p.drawText(QRectF(c.x() - 20, c.y() - 37, 40, 13), Qt::AlignCenter, "N");
-        p.setFont(theme::uiFont(9));
+        p.setFont(theme::uiFont(11));   // 글자 체계 11 · 12 · 13 · 20(검토 UI 3)
         p.setPen(theme::Muted);
-        p.drawText(QRectF(c.x() - 28, c.y() + 24, 56, 12), Qt::AlignCenter, QStringLiteral("진북"));
+        p.drawText(QRectF(c.x() - 28, c.y() + 24, 56, 14), Qt::AlignCenter, QStringLiteral("진북"));
         double len = niceStep(mpp_ * 120, 1);
         double px = len / mpp_;
-        QRectF sb(16, height() - 28, px, 6);
+        QRectF sb(16, height() - 22, px, 6);   // 바깥 여백 16 — 나침반과 같은 기준선(검토 UI 2)
         p.setPen(QPen(theme::Ink, 1)); p.setBrush(Qt::white); p.drawRect(sb);
         p.setBrush(theme::Ink); p.drawRect(QRectF(sb.x(), sb.y(), px / 2, 6));
         p.setFont(theme::monoFont(11)); p.setPen(theme::Ink);
@@ -880,8 +880,10 @@ void PlanView::drawSectionPlane() {
     glDeleteBuffers(1, &vbo);
 }
 
+QPointF PlanView::compassCenter() const { return QPointF(width() - 38, height() - 52); }   // 오른쪽 아래, 바깥 여백 16
+
 bool PlanView::compassHit(const QPointF& p) const {
-    QPointF c(width() - 34, 40);
+    const QPointF c = compassCenter();
     return QRectF(c.x() - 28, c.y() - 42, 56, 80).contains(p);
 }
 

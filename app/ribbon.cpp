@@ -106,15 +106,19 @@ QToolButton* Ribbon::addAction(const QString& groupId, QAction* a, kerf::ChipKin
     b->setFont(f);
     if (f.pixelSize() < kFontPx) b->setStyleSheet(QStringLiteral("font-size: %1px;").arg(f.pixelSize()));
     g.row->addWidget(b, 0, Qt::AlignLeft | Qt::AlignTop);
-    chips_.append({b, kind, iconName});
+    chips_.append({b, kind, iconName, false, a});
     drawChip(chips_.last(), looks().at(lookIndex_));
     updateGeometry();
     return b;
 }
 
+// 칩이 아닌 위젯(입면 칸)은 상자에 담아 타일(아이콘) 세로 가운데에 맞춘다 — 위 여백은 applyLook 이 크기마다 다시 준다(검토 UI 2)
 void Ribbon::addWidget(const QString& groupId, QWidget* w) {
     if (!groups_.contains(groupId) || !w) return;
-    groups_[groupId].row->addWidget(w, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    auto* box = new QWidget(groups_[groupId].frame);
+    auto* bl = new QVBoxLayout(box); bl->setContentsMargins(0, 0, 0, 0); bl->setSpacing(0); bl->addWidget(w, 0, Qt::AlignTop);
+    groups_[groupId].row->addWidget(box, 0, Qt::AlignLeft | Qt::AlignTop);
+    widgetBoxes_ << box;
     updateGeometry();
 }
 
@@ -181,10 +185,11 @@ int Ribbon::lineHeight() const {
 }
 
 QIcon Ribbon::chipIconCached(const Chip& c, const RibbonLook& L) {
-    const QString key = QStringLiteral("%1|%2|%3|%4").arg(c.icon).arg(L.tile).arg(int(c.kind)).arg(c.forceOn ? 1 : 0);
+    const bool caret = c.action && c.action->menu();   // 메뉴가 열리는 칩은 타일 오른쪽 아래 ▾(스펙 §3.1 — 글자에 붙이면 폭이 늘어 1920 에서 타일 50 을 잃음)
+    const QString key = QStringLiteral("%1|%2|%3|%4|%5").arg(c.icon).arg(L.tile).arg(int(c.kind)).arg(c.forceOn ? 1 : 0).arg(caret ? 1 : 0);
     auto it = iconCache_.find(key);
     if (it != iconCache_.end()) return it.value();
-    QIcon src = kerf::chipIcon(c.icon, L.tile, L.glyph, c.forceOn ? kerf::ChipKind::Shown : c.kind, colors_);
+    QIcon src = kerf::chipIcon(c.icon, L.tile, L.glyph, c.forceOn ? kerf::ChipKind::Shown : c.kind, colors_, caret);
     if (!c.forceOn) return *iconCache_.insert(key, src);
     // 체크할 수 없는 칩이라 Off 상태로 그려진다 → On 모양을 Off 자리에 넣는다
     QIcon ic;
@@ -265,8 +270,9 @@ bool Ribbon::eventFilter(QObject* watched, QEvent* e) {
     if (e && (e->type() == QEvent::FocusIn || e->type() == QEvent::FocusOut)) {   // 초점 테는 Tab 으로 왔을 때만(QSS [kbdFocus="true"]:focus — 검토 UI 5)
         for (const Chip& c : chips_)
             if (c.button == watched) {
-                const Qt::FocusReason r = e->type() == QEvent::FocusIn ? static_cast<const QFocusEvent*>(e)->reason() : Qt::OtherFocusReason;
-                const bool kbd = r == Qt::TabFocusReason || r == Qt::BacktabFocusReason;
+                const Qt::FocusReason r = static_cast<const QFocusEvent*>(e)->reason();
+                if (r == Qt::ActiveWindowFocusReason || r == Qt::PopupFocusReason) break;   // 창 전환 · 팝업은 이전 값 유지(검토 M8)
+                const bool kbd = e->type() == QEvent::FocusIn && (r == Qt::TabFocusReason || r == Qt::BacktabFocusReason);
                 if (c.button->property("kbdFocus").toBool() != kbd) { c.button->setProperty("kbdFocus", kbd); c.button->style()->unpolish(c.button); c.button->style()->polish(c.button); }
                 break;
             }
@@ -298,6 +304,12 @@ void Ribbon::applyLook(int index, bool force) {
     for (const Chip& c : chips_) drawChip(c, L);
     const int gh = kGroupPadTop + kCaptionHeight + kCaptionGap + chipHeight(L) + kGroupPadBottom;   // 묶음 높이를 같게 — 입면 묶음 이름이 내려가지 않음(검토 UI 2)
     for (const QString& id : order_) groups_[id].frame->setFixedHeight(gh);
+    for (QWidget* box : widgetBoxes_) {   // 위젯 가운데 = 타일 가운데(칩 위 여백 6 + 타일/2)
+        QWidget* inner = box->layout()->count() ? box->layout()->itemAt(0)->widget() : nullptr;
+        const int ih = inner ? inner->sizeHint().height() : 0;
+        box->layout()->setContentsMargins(0, std::max(0, 6 + L.tile / 2 - ih / 2), 0, 0);
+        box->setFixedHeight(chipHeight(L));
+    }
     setFixedHeight(sizeHint().height());
     updateGeometry();
 }

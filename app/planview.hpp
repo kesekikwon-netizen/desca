@@ -75,6 +75,8 @@ public:
     void fitAll();
     void topView();
     void homeView();
+    QPointF compassCenter() const;                  // 나침반 자리(그리기 · 눌림 판정이 같은 값을 쓴다 — 검토 I1)
+    bool compassHit(const QPointF& p) const;
     void zoomBy(double f);
     /// 현재 화면에 보이는 로컬 XY 범위(평면 기준)
     bool viewRectLocal(asec::Box3& out) const;
@@ -180,7 +182,6 @@ private:
     QPointF localToScreen(double x, double y, double z) const;
     double refZ() const;
     void paintOverlay(QPainter& p);
-    bool compassHit(const QPointF& p) const;
     void paintEmpty(QPainter& p);
     void paintLodCard(QPainter& p);
     asec::Vec2 lockAxis(const asec::Vec2& w, Qt::KeyboardModifiers m) const;

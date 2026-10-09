@@ -189,7 +189,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     if (st_.plotScaleBar) {
         double len = niceStep(110 * ui / xf.ppm, 1);
         double px = len * xf.ppm;
-        QRectF sb(pr.right() - px - 14 * ui, pr.bottom() - 22 * ui, px, 5 * ui);
+        QRectF sb(pr.right() - px - 14 * ui, pr.bottom() - 30 * ui, px, 5 * ui);   // 맨 아래 격자선과 떨어뜨림(검토 UI 8)
         p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 220));
         p.drawRoundedRect(sb.adjusted(-8 * ui, -16 * ui, 8 * ui, 8 * ui), 4 * ui, 4 * ui);
         p.setPen(QPen(theme::Ink, 1.0 * ui)); p.setBrush(Qt::white); p.drawRect(sb);
@@ -269,9 +269,9 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
             p.setPen(theme::LevelText);
             p.drawText(QRectF(pr.right() + 8 * ui, ys - fm.height() / 2, std::max(0.0, area.right() - pr.right() - 10 * ui), fm.height()), Qt::AlignLeft | Qt::AlignVCenter, t);
         }
-        p.setFont(small); p.setPen(theme::Idle);
-        p.drawText(QRectF(area.left() + 4 * ui, pr.top() - fm.height() - 4 * ui, pr.left() - area.left(), fm.height()), Qt::AlignLeft, QStringLiteral("표고(m)"));
         p.restore();
+        p.setFont(small); p.setPen(theme::Idle);   // 잘림 영역 밖에서(안에서는 그림 칸 위라 전부 잘렸음 — 검토 UI 8)
+        p.drawText(QRectF(area.left() + 4 * ui, pr.top() - fm.height() - 4 * ui, pr.left() - area.left(), fm.height()), Qt::AlignLeft, QStringLiteral("표고 (m)"));
     }
     // 8) 거리 숫자는 그림 칸 아래 여백에서만 가로로 움직인다
     p.save();
@@ -352,7 +352,7 @@ void SectionView::paintEvent(QPaintEvent*) {
         p.drawText(r.adjusted(16, 18, -16, -50), Qt::AlignHCenter | Qt::AlignTop, QStringLiteral("단면선을 그리세요"));
         p.setFont(theme::uiFont(12)); p.setPen(theme::Muted);
         p.drawText(r.adjusted(16, 52, -16, -8), Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap,
-                   QStringLiteral("「단면선 그리기」(S) 후 평면에서 A, A′ 두 점을 클릭\n끝점을 끌면 단면이 바로 바뀝니다"));
+                   QStringLiteral("「단면선 긋기」(S) 후 평면에서 A, A′ 두 점을 클릭\n끝점을 끌면 단면이 바로 바뀝니다"));
         return;
     }
     SectionDoc d; d.r = r_; d.st = st_; d.imgS0 = imgS0_; d.imgZ1 = imgZ1_; d.imgRes = imgRes_;

@@ -22,14 +22,14 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-09 · Claude Code — 디자인 v5 A · B · C · D 끝, E1 · E2(레벨선 pt, `a368b9d` · `e9116b1`) 끝, B · C · D 검토 반영(`0f30c5a`). 다음 E3(도면 판). 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` · 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` |
+| 마지막 갱신 | 2026-10-09 · Claude Code — 디자인 v5 A–D · E1–E3 끝(E3 도면 탭 `27ca154`), 검토 1차(`0f30c5a`) · 2차 + 둥글기 지시 반영(이번 커밋). 다음 E4(여러 장 SVG). 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` · 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
 | 바뀐 파일(내용) | **커밋 대기(2026-10-09 팩토리):** `CLAUDE.md`(「소프트웨어 팩토리」 절) · `factory/`(profile · backlog · jobs 양식 · scripts 4개) · `.claude/agents/correctness-reviewer.md` · `security-reviewer.md` · `kerf-ui-reviewer.md` · `builder.md` · `spec-writer.md`(v5 문구) · `.claude/skills/factory/SKILL.md`(v5 · CI 절) · 이 파일. 로컬 HEAD `4781e1d`(디자인 v5 확정)는 **아직 push 안 됨**(`origin`은 `de14dc2`). 그 밖은 단계별 커밋됨 — `git log --oneline 4422b4e..HEAD` · CI: `.github/workflows/ci.yml` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
-| 시험 | `asec_tests` 139 통과 · 1 건너뜀(알려진 `CoalescingWorker` 는 이번엔 통과) · `--ui-audit` RESULT ok(offscreen · 실제 화면, 항목 5개 추가) · `--sheet-check` RESULT ok(level-pt) · `--icon-sheet` ok · GitHub Actions: 로컬 커밋 push 전 |
-| 최근 캡처 | `C:\dev\tmp\kerf-shots\rv-home.png` · `rv-work.png` · `C:\dev\tmp\ui-screen\draw.png` · `draw2.png`(실제 화면, 검토 반영 뒤) · offscreen 감사 `C:\dev\tmp\ui\` (이 PC에만) |
+| 시험 | `asec_tests` 139 통과 · 1 건너뜀 · `--ui-audit` RESULT ok(offscreen · 실제 화면, 항목 추가: sheet · ribbon-context · compass-hit · draw-step2-note · sheet-discard · square-borders) · `--sheet-check` ok · `--icon-sheet` ok · GitHub Actions: 로컬 커밋 push 전 |
+| 최근 캡처 | `C:\dev\tmp\kerf-shots\r3-home.png` · `r2-work.png` · `C:\dev\tmp\ui-screen\draw2.png` · `sheet.png` · `r3-chip.png` · `r3-sheet-right.png`(실제 화면) · offscreen 감사 `C:\dev\tmp\ui\` (이 PC에만) |
 
 ## 2. 이 PC에서 빌드 · 실행 (검증된 명령)
 - **한글 경로 함정:** 저장소가 `C:\Users\권을\…`에 있으면 CMake가 부르는 `rc.exe` · `llvm-rc`가 멈춘다(실측 2회). 그래서 **정션 `C:\dev\desca` → 저장소**를 만들어 그 경로로 빌드한다(이미 있음: `New-Item -ItemType Junction -Path C:\dev\desca -Target <저장소>`).
@@ -52,10 +52,10 @@ C:\dev\kerf-v4c\asec_tests.exe
 | −2 | 저장소 정리(줄바꿈만 바뀐 155개 대기 풀기) | ✅ | 2026-10-09 `git restore --staged .` → 대기 0, 내용 변화 없음 |
 | −1 | 기준선 빌드 · 시험 | ✅ | §2. 108/110 |
 | 0 | 잘린 선 빈 구간 원인 조사 | ✅ | 원인 분류 + 고치기 완료. 합성선 전체 0–12 한 줄(54점). 시험 115 통과·1 실패(알려진 것)·1 건너뜀 |
-| 1 | `--ui-audit` | 🟨 | 탭 · 리본 · 겹침 · 축척 칸 · 높이 배지 · 그리는 동안 문장 · 아이콘 · 툴팁 검사 — 지금 RESULT ok. **남음:** lists-match(단계 10) · sheet 항목(단계 11) · same-name-different-action |
+| 1 | `--ui-audit` | 🟨 | v5 기대값(스펙 §12) + 검토 1 · 2차 항목 + sheet 항목 + square-borders. **남음:** same-name-different-action · lists-match 의 줄 모양(D3) |
 | 2 | 탭 넷 | ✅ | 파일 · 홈 · 보기 · 자료. 측정 탭 없앰 |
-| 3 | 한 줄 리본 + 홈 3묶음 | 🟨 ⏸ | 44 px · 아이콘 옆 글자 · 홈=단면/뒤 깊이/도면 · 목록 머리 「＋ 새 단면」 없앰. **남음:** 1280 px 좁은 창 글자 숨기기 |
-| 3a | 아이콘 81개 | 🟨 ⏸ | 리본은 18 px 기존 Ico. **남음:** Icons 화판 모양으로 theme.hpp `icon()` 다시 그리기, `--icon-sheet` |
+| 3 | 리본(v5 C1 타일 리본) | ✅ | 묶음 7 · 타일 50 · 창 폭 따라 줄임 · 메뉴 칩 ▾ · 입면 칸 타일 가운데 · 찾기 142(검토 2차). 좁은 창 캡처 · 배율은 B5 |
+| 3a | 아이콘 SVG(C7) | ✅ | Lucide 24 + Kerf 38, `--icon-sheet`, 같은 아이콘 다른 일 없음(`dup-icons=0`), 위에서 · LAS 그림 바꿈 |
 | 4 | 단면 머리 켜기·끄기 · 축척 · 확대 | ✅ | 토글 4 · 「세로 ×1」 · 축척 칸(상태줄에서 옮김)이 단면 머리에, 평면 머리 「위에서」. 캡처 `work-v4d.png` |
 | 5 | 정보 줄 · 상태줄 · 커서 | ✅ | 정보 줄 「잘린 선 n줄 · m점 · 빈 구간 없음/k곳 x m」(core `profileGaps`, `0f30c5a`), 상태줄 v5(C6) 한 문장 + 배지 둘. 「평면에서 보기」는 v5 에서 빠짐(안내 칩 C4) |
 | 6 | 오른쪽 판 읽기 전용 | 🟨 | 「좌표 입력 · 복사」 + 그리는 중 상태(`0f30c5a`). **남음:** 스펙 §4 모양(2열 리더 · 「1 / 3」 · 쉼표 · 끝점 절) = 계획 D2 |
@@ -63,7 +63,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 | 8 | 그리는 동안 안내 한 곳 | ✅ | 도구 줄 「단면선 긋기 › A/A′ 찾는 중」, 그동안 상태줄은 좌표만. 캡처 `draw-v4.png`. `--ui-audit` 항목은 단계 1에서 |
 | 9 | 홈 화면 | ✅ | v5 D1(`85802ec`) + 검토 반영(`0f30c5a`): 「높이」 칸 · 폴더 「C: › dev」 · 표 높이 |
 | 10 | 목록 하나 | 🟨 ⏸ | 조판 목록 머리 「단면 목록」으로. **남음:** 줄 모양 · 도면 상태 줄 · 고르기 칸 |
-| 11 | 조판: 고르는 곳 하나 · 모드 칩 · 리본 접기 | 🟨 ⏸ | 「작업으로」 단추 숨김, 문서 탭 줄 새 모양(조판 열릴 때만 보임). **남음:** 「도면 종류」 제거 · 모드 칩 · 리본 접기 |
+| 11 | 조판: 고르는 곳 하나 · 모드 칩 · 리본 접기 | 🟨 | v5 E3(`27ca154`): 목록 348 · 책상 · 판 320 · 도면 점검 · 「n장 SVG 저장」. **남음:** E4 여러 장 저장 · `--sheet-batch` |
 | 12 | 도면 점검 | 🟨 (core만, UI는 ⏸) | core 위에서 본 범위 함수 + 시험 끝. 남음: 점검 상자 UI · 캡처(디자인 결정 뒤) |
 | 13 | 형식 · DXF 공간 | ⬜ ⏸ | |
 | 14 | 여러 장 저장 | 🟨 (core만, UI는 ⏸) | core 파일 이름 함수 + 시험 끝. 남음: 일괄 저장 UI · `--sheet-batch` · 캡처(디자인 결정 뒤) |
@@ -211,10 +211,18 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **판정:** 장부 `Task R1` Ruling 9개(안내 칩 줄이기 순서 · 판 폭 고정 · Ignored · 배지 22+테 · 감사 글꼴 허용 · 2b 순서 · 그리는 중 띠 · 「저장됨」 · 미룬 지적 목록). 미룬 지적은 계획에 **D2(오른쪽 판 §4) · D3(목록 줄)** 로 더함.
 - **남은 문제:** 재검토(cpp · ui) 결과 대기. 커밋 push 전(사용자 지시 때).
 
+### 2026-10-09 · Claude Code — 검토 2차 반영(cpp C2 · I3 · M13, ui 8항목) + 사용자 지시 「UI 사각형 선 전부 라운드」
+- **사용자 지시(말 그대로, 2026-10-09):** 「앱안에 ui의 사각형 선들은 전부 라운드 처리하라」 → 스펙 §2.1 · DEV_RULES R2.3 에 규칙으로 적음.
+- **검토 결과(R6.2):** cpp-reviewer(`a368b9d..0f30c5a`): Critical 2(C1 저장 중 `embeddedSave_` 파괴 UAF · C2 끼운 조판의 `accepted` 지역 변수 참조) · Important 3(I1 나침반 눌림 자리 · I2 `updateHeader` 가 그리는 중 판 덮음 · I3 도면 문맥에서 그리기 지속) · Minor 13 → **C · I 전부 + Minor 1 · 2 · 3 · 5 · 6 · 7 · 8 · 12 · 13 고침**, 나머지 Minor 는 판정. ui-reviewer: 7항목 3점 → 우선 지적(글자 체계 · 그리는 중 상태 셋 · 꺼짐 모양 · 접근성 · 표고 (m) · 아이콘 · 판 머리 · 여백) 고침.
+- **무엇을:** `saveEmbeddedSheet` 가 함수 복사본을 부름 + 저장 창 뒤 모델 바뀌면 저장 안 함(C1), 끼운 조판은 `accepted` 안 씀(C2), `PlanView::compassCenter()` 한 곳(I1, 감사 `compass-hit`), `updateHeader` 가 그리는 중이면 정보 줄만 쓰고 돌아감(I2), `setRibbonContext` 가 단면 문맥을 떠나면 도구 내려놓음(I3), 빈 구간 길이 = 결과 선(M1), `--sheet-check` 레벨선 켬(M2), 리본 DXF 도 pt 설정(M3), 모델 바뀌면 찾기 칸 비움(M5), 조판 목록 지연 호출 가드(M6), 감사가 상태줄 · 활성 보기 되돌림(M7), 초점 이유 Active · Popup 은 이전 값(M8), 높이 이름 `heightDatumShort()` 한 곳(M12), 감사 `sheet-discard`(M13). UI: 글자 체계 11 · 12 · 13 · 20(단면 머리 `viewTitleText` 13 · 오른쪽 판 이름 명조 20 · 「진북」 11 · 홈 빈 상태 20), 안내 칩 단계 이름은 폭이 되면 보임 + 세로선 같이 숨김 + 새 키 캡 라벨 `ensurePolished`(칩 25 px 좁아 문장 잘림 실측 → 고침), A′ 단계 판 「A 찍음 · 끝점 A′를 찍으세요」, 꺼짐 QSS(좌표 입력 · 찾기 · 홈 단추), 모든 단추 Tab 초점 테(앱 전체 이벤트 필터) · 목록 · 표 · 배지 TabFocus, 「표고 (m)」 잘림 밖으로, 축척 막대 격자선과 띄움, 빈 상태 글 「단면선 긋기」, Z 셀 빈 글, 위에서(사각 + 화살) · LAS(구름 + 점) 아이콘, 메뉴 칩 ▾ 굽기, 작업 순서 숫자 + 흙색 토큰, 홈 빈 상태 주 단추 하나(왼쪽 「모델 열기」 흙색 · 카드 단추 · 칸 숨김) · 「열어 본 모델이 여기에 쌓입니다」 · 찾기 돋보기, 네 판 32 px 머리 + 여백 16, 입면 칸 타일 가운데(`elev-center-dy=1`), 나침반 · 축척 막대 여백 16. 둥글기: viewFrame 8(둥근 마스크) · chip 6 + 사이 2 px · smallRow · 메뉴 목록 · QMenu · continueCard · thumb · 입력 칸 6 · 체크 3 · 썸네일 6 · 종이 미리보기 테두리 4. 찾기 칸 150 → 142(need50 1916).
+- **확인:** 시험 먼저 — 감사 항목 `ribbon-context`(elev-center-dy=8) · `compass-hit=0` · `draw-step2-note=0` · `square-borders=7` RED → 고친 뒤 전부 ok(offscreen · 실제 화면 RESULT ok, 실제 화면 창 최소 폭 1527 → 1275). 빌드 새 경고 0. `asec_tests "~CoalescingWorker*"` 51325 통과. `--icon-sheet` EXIT 0. 캡처 `ui-screen/draw2.png` · `r3-chip.png`(문장 전체 + Enter Esc, 되돌리기 오른쪽) · `r3-corner.png`(둥근 틀) · `r3-sheet-right.png`(둥근 칩) · `kerf-shots/r3-home.png`(주 단추 하나 · 둥근 카드) 눈 확인.
+- **판정:** 장부 `Task R2` · `Task R3` Ruling(종이 위 도면은 둥글기 제외 · 한 변 선 제외 · QMenu 둥글기는 창 모서리 바탕색 · 「A」 글자색 #FF0000 유지 · 자동 맞춤(autoFit) · 창 최소 폭 강제는 B5 · dxfLineWeight 위치 유지 · QIconEngine 미룸).
+- **남은 문제:** E4(여러 장 SVG + `--sheet-batch`) · B5 · D2 · D3 · F · G · H · I. push 는 사용자 지시 때.
+
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.
-1. **E3** 도면 오른쪽 판 320(스펙 §8: 항목 타일 · 축척 격자 · 선 · 글자 pt 칸 · 형식 · 도면 점검 · 「n장 SVG 저장」) · 종이 아래 도구 줄 · 왼쪽 목록 348 — `--ui-audit` sheet 항목(not-checked) 채우기.
-2. **E4** 여러 장 SVG 저장 + `--sheet-batch`.
+1. ~~E3~~ 끝(`27ca154`). **E4** 여러 장 SVG 저장(고른 칸 · `sheetFileName` · `uniqueSheetFileName`) + `--sheet-batch` + 끝 상태 「n장 저장됨 · 폴더 열기」.
+2. 재검토(cpp · ui 3차) — 2차 지적 중 미룬 것은 장부 `Task R2` Ruling.
 3. **B5** 해상도 · DPI: 1280×800 · 1920×1040 · 3440×1440 · 3840×2160 × `QT_SCALE_FACTOR` 1 · 2 모두 `RESULT ok`(창 최소 폭은 1280 — `0f30c5a`), dpr 1.25 · 1.75 · 화면 옮김(`DevicePixelRatioChange`).
 4. **D2** 오른쪽 판 스펙 §4 · **D3** 단면 목록 줄(검토에서 미룬 것).
 5. **F** 잘린 돌 H · **G** 윤곽 O · **H** EPSG 매개변수 우선(5187) + 높이 의심 경고(시험 먼저) · **I** 문서 정리(v2 · v4 를 `desc/_old-design`, README, cpp-project.json).

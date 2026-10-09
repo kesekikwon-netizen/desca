@@ -26,6 +26,8 @@ public:
     void setReserveRight(int px) { reserveRight_ = px; place(); }
     QString title() const;
     QString hint() const;
+    bool titleShown() const;   // 감사용: 도구 이름(단계)이 보이는가
+    QString debugWidths() const;   // 감사용: 문장 라벨 폭/권장 · 칩 폭/권장
 
 protected:
     bool eventFilter(QObject* watched, QEvent* e) override;
@@ -35,6 +37,7 @@ private:
     QLabel* icon_ = nullptr;
     QLabel* title_ = nullptr;
     QLabel* hint_ = nullptr;
+    QFrame* rule_ = nullptr;   // 도구 이름 뒤 1×16 선(이름을 숨기면 같이 숨김)
     QWidget* keysBox_ = nullptr;
     QHBoxLayout* keysLay_ = nullptr;
     QList<QLabel*> keyLabels_;

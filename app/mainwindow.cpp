@@ -329,6 +329,7 @@ void MainWindow::applyScene(OpenedScene&& s) {
     info_->setText(streaming_ ? QStringLiteral("%1%2 · LOD 스트리밍").arg(kind_, s.layers > 1 ? QStringLiteral(" · 레이어 %1개").arg(s.layers) : QString())
                               : QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
     setWindowTitle(QStringLiteral("%1 — Kerf %2").arg(QFileInfo(path_).fileName(), QString::fromUtf8(kVersion)));
+    if (findBox_) findBox_->clear();   // 검토 M5
     showStart(false);
     addRecent(path_);
     restoreModelState();
@@ -356,6 +357,7 @@ void MainWindow::closeScene() {
     srsLabel_->style()->unpolish(srsLabel_); srsLabel_->style()->polish(srsLabel_);
     notice_->setVisible(false); srsReport_ = SrsReport();
     src_.reset(); path_.clear();
+    if (findBox_) findBox_->clear();   // 거르기 글은 모델과 함께 끝(검토 M5)
     sections_.clear(); thumbs_.clear(); current_ = -1; refreshSectionList();
     undo_->clear();
     setWindowTitle(QStringLiteral("Kerf %1").arg(QString::fromUtf8(kVersion)));
@@ -797,6 +799,7 @@ void MainWindow::dlgSectionDxf() {
     if (d->exec() != QDialog::Accepted) return;
     saveScale("dxf", sr); QSettings().setValue("dxf/mode", mode->currentIndex()); QSettings().setValue("dxf/image", img->isChecked());
     DxfParams p; p.world3d = mode->currentIndex() == 1; p.denom = sr.denom(); p.imageDpi = sr.dpi->value(); p.image = img->isChecked();
+    p.levelMinorPt = clampLineWeightPt(QSettings().value("sheet/levelMinorPt", 0.2).toDouble()); p.levelMajorPt = clampLineWeightPt(QSettings().value("sheet/levelMajorPt", 0.5).toDouble());   // 도면 판의 pt 와 같은 값(검토 M3)
     QString path = askSavePath("export", baseName(path_) + QStringLiteral("_단면.dxf"), QStringLiteral("DXF (*.dxf)"));
     if (path.isEmpty()) return;
     auto src = src_;
