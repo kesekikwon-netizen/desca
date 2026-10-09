@@ -10,11 +10,11 @@ base_sha: 308daac82e8e46189600488c209d43020e046cc2
 branch: factory/20261010-01-narrow-1280
 worktree: C:\dev\kerf-wt\20261010-01-narrow-1280
 build_dir: C:\dev\kerf-wt\20261010-01-narrow-1280-build
-head_sha:                 # verify.ps1 가 채운다(마지막 검증 때의 worktree HEAD)
-last_verify:              # verify.ps1 가 채운다: PASS|FAIL (시각)
+head_sha: 308daac82e8e46189600488c209d43020e046cc2  # +미커밋
+last_verify: FAIL (2026-10-10 01:47)
 human_review_required: 화면 · 감사(`app/mainwindow_ui.cpp` --ui-audit 판정 추가 · 리본 1280 기대값 32 → 20 · DESIGN_SPEC 기대값 변경, profile §8). CI · 좌표 · 파일 형식 해당 없음
 created: 2026-10-10 00:03
-updated: 2026-10-10 00:03
+updated: 2026-10-10 01:47
 ---
 # 20261010-01-narrow-1280 — 1280 좁은 창: 단면 머리 · 정보 줄 · 평면 눈금 · 리본 기대값 20 + B5 검토 should 7건
 
@@ -27,6 +27,7 @@ updated: 2026-10-10 00:03
 | 2026-10-10 00:03 | queued | factory | 작업 생성. 기준 feature/design-v2 @ 308daac82e8e46189600488c209d43020e046cc2 |
 | 2026-10-10 00:35 | spec | spec-writer | spec.md AC1–AC13(Task 1–10). 열린 질문 3(머리 줄이기 순서 · 정보 줄 숨기기 순서 · 세로 ×N 뒤 창 크기) → 사용자에게 물음. 사람 검토 필수(화면 · 감사) |
 | 2026-10-10 00:40 | build | factory | 사용자 답 Q1 A(글 → 크게 → 세로 아이콘만 → 토글 메뉴 하나) · Q2 A(레벨선 안내 → 입면 뒤 → 점 수 → …) · Q3 사용자 보기 유지(fitted_=false). spec.md §7 에 적음. builder 시작 |
+| 2026-10-10 05:30 | build(재개) | factory | 세션 재시작으로 builder 중단(worktree 미커밋 편집 4파일 +195, 커밋 0). 사용자 버그 보고(홈 겹침 · 「목록에서 지우기」 무효) → 원인 확정(`rebuildStartPage` 가 격자 안 위젯을 안 지움 + 두 번 그리기) · 재현 `home-dbg.png` → **spec §8 AC14 추가**(사용자 사전 허가 · 추천안: 새 작업 대신 #3c 에). builder 에게 재개 + AC14 메시지 |
 
 ## 참조
 - 명세 `spec.md` · 구현 요약 `build.md` · 검증 `verify.md` · 검토 `review.md` · 승인 `approval.md`
