@@ -84,7 +84,7 @@ argument-hint: <개발 요청> | status | next | rework <ID> | approve <ID>
 3. `factory.cmd verify <ID> -Full`(화면 변경이면 크기 · 배율 옵션도) 다시 → PASS 가 아니면 멈춘다. 점검표는 `superpowers:finishing-a-development-branch` 를 따르되 자동 병합 · 브랜치 삭제는 하지 않는다. `head_sha` 갱신, 승인 SHA 와 달라졌으니 사용자에게 **재승인**을 받는다(approval.md 「승인 뒤 변경」).
 4. 재승인 뒤 본 저장소에서 `git merge --no-ff factory/<ID>`(대상 브랜치가 체크아웃돼 있어야 함 — 아니면 멈추고 알린다). 병합 커밋 SHA 를 `approval.md` 「병합」에, `job.md` 상태 `merged`.
 5. push 는 하지 않는다(사용자가 말하면 DEV_PROGRESS §4 명령). worktree · 브랜치 삭제는 사용자 확인 뒤.
-6. **GitHub Actions 확인(push 뒤):** 사용자가 push 했으면 `ci-status.ps1 -Sha <병합 커밋> -Wait` 로 CI(Linux 코어·시험 · Windows 앱·시험·ui-audit)가 **success** 인지 확인하고 결과 줄(결론 · job 별 결론 · URL)을 `approval.md` 「병합」에 적는다. failure 면 `job.md` 상태 기록에 적고 사용자에게 알린다(되돌리기 = `git revert -m 1 <병합 커밋>`, 사용자 결정). `/factory status` 는 merged 작업의 CI 줄이 비어 있으면 「CI 미확인」으로 보여 준다.
+6. **GitHub Actions 확인(push 뒤):** 사용자가 push 했으면 `ci-status.ps1 -Sha <병합 커밋> -Wait` 로 CI(Windows 앱·시험·ui-audit — Linux 작업은 없음, R7.4)가 **success** 인지 확인하고 결과 줄(결론 · job 별 결론 · URL)을 `approval.md` 「병합」에 적는다. failure 면 `job.md` 상태 기록에 적고 사용자에게 알린다(되돌리기 = `git revert -m 1 <병합 커밋>`, 사용자 결정). `/factory status` 는 merged 작업의 CI 줄이 비어 있으면 「CI 미확인」으로 보여 준다.
 
 ## 6. 검증 규칙 (모든 단계)
 - 완료 기준마다 시험 이름 또는 확인 절차가 붙어야 한다. 없는 기준은 명세 미완.

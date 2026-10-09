@@ -17,8 +17,8 @@
 | 경로 | 상태 |
 | --- | --- |
 | **Windows, clang-cl + Ninja(이 PC, 개발 기준)** | `.claude/cpp-project.json` 계약. 본 저장소 빌드 폴더 `C:\dev\kerf-v4c`, 소스는 정션 `C:\dev\desca`(한글 경로에서 rc 멈춤). Qt 6.10.3 `C:\Qt\6.10.3\msvc2022_64`, vcpkg `C:\dev\vcpkg` |
-| Windows, MSVC(GitHub CI) | `.github/workflows/ci.yml`: Qt 6.8.3 + VS 2022 + 시험(`~CoalescingWorker*`) + offscreen `--ui-audit` |
-| Linux(core · 도구 · 시험만, CI) | `-DASEC_BUILD_APP=OFF`. 이 PC에서는 못 돈다 |
+| Windows, MSVC(GitHub CI) | `.github/workflows/ci.yml`: Qt 6.8.3 + VS 2022 + 시험(`~CoalescingWorker*`) + offscreen `--ui-audit`(1920×1040 ×1 · 3840×2160 ×2, `Start-Process` 로 기다려 판정 — B5 `8cc67fb`) |
+| Linux | **없음**(사용자 지시 2026-10-09 「윈도우만을 대상으로」, DEV_RULES R7.4). CI 의 Linux 작업은 B5 에서 삭제. CMake 옵션 `ASEC_BUILD_APP` 은 남아 있으나 쓰지 않는다 |
 | MinGW 교차(`build-win.sh`, `ASEC_QT_WIN_DIR`) | 이 PC에 도구 없음. `sheetexport.cpp`의 `QSvgGenerator` 때문에 지금 빌드되지 않을 가능성(미검증) |
 
 ## 4. 명령 (2026-10-09 실제로 돌려 확인)
@@ -38,7 +38,7 @@ C:/dev/kerf-v4c/asec-section.exe C:/dev/kerf-synth/Synthetic.3mx 200002 450006 2
 .\factory ci <sha> [-Wait]      # GitHub Actions 결과(gh, 읽기만). exit 0 success · 1 실패 · 3 실행 없음 · 4 진행 중
 ```
 - 화면(`app/`)을 바꾸는 작업은 **반드시** `-UiAudit on -UiSizes 1280x800,1920x1040,3440x1440,3840x2160 -UiScales 1,2`(와이드 · 4K · 200 % 배율)로 돈다 — 사용자 요구 「4K · 와이드 모니터 어디서나 안정」(backlog #1).
-- GitHub Actions(`.github/workflows/ci.yml`)는 push · PR 때만 돈다. 팩토리는 push 하지 않으므로 `verify.ps1` 의 `ci(base)` 줄은 **기준 커밋**의 결과(참고), 병합 커밋의 CI 는 사용자가 push 한 뒤 `ci-status.ps1 -Wait` 로 확인한다(SKILL §5-6). 2026-10-09 확인: `de14dc2` success(Linux · Windows 둘), 로컬 HEAD `4781e1d`는 아직 push 되지 않아 실행 없음.
+- GitHub Actions(`.github/workflows/ci.yml`)는 push · PR 때만 돈다. 팩토리는 push 하지 않으므로 `verify.ps1` 의 `ci(base)` 줄은 **기준 커밋**의 결과(참고), 병합 커밋의 CI 는 사용자가 push 한 뒤 `ci-status.ps1 -Wait` 로 확인한다(SKILL §5-6). 2026-10-09 확인: `de14dc2` success, 기준 `0f7fbfe` 는 **Windows 작업 failure**(원인 미조사 — B5 승인 보고서에 기록), B5 병합 `8cc67fb` 는 push 전이라 실행 없음.
 - `verify.ps1`는 configure(처음 한 번) → build → tests → asec-section 기준값 → ui-audit(app/ 바뀌면) 순서로 돌고 `factory/jobs/<ID>/verify.md`에 덧붙인다. Qt DLL 복사 없이 `PATH` · `QT_QPA_PLATFORM_PLUGIN_PATH`로 Qt 폴더를 쓴다. 첫 configure + 전체 빌드 시간은 아직 재지 않음(미검증).
 - 캡처(사람이 볼 때): `.claude/scripts/shot.ps1 -Scene work|draw|start -Out <png> -Exe <worktree-build>\app\SectionViewer.exe` — worktree 빌드의 exe 를 `-Exe`로 넘긴다(Qt DLL 은 PATH 에 `C:\Qt\6.10.3\msvc2022_64\bin`을 넣어야 뜬다).
 - 앱 자동 실행은 항상 `--settings DIR`로 설정 격리. GUI 실행 파일은 PowerShell `Start-Process -Wait -PassThru`.

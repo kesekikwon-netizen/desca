@@ -48,7 +48,7 @@ Remove-Item C:\dev\tmp\kerf-check -Recurse -Force -ErrorAction SilentlyContinue;
 - `[real]` 시험은 `ASEC_REAL_3MX`(실제 3MX 경로)가 없으면 건너뛴다(정상). 시험 대부분은 태그가 없어 이름으로 거른다.
 - 앱 자동 실행은 항상 `--settings DIR`로 설정을 격리한다. SectionViewer는 GUI 실행 파일이라 PowerShell `&`는 끝을 기다리지 않는다 → `Start-Process -PassThru` + `WaitForExit(ms)`, 멈추면 Kill(R7.2). 옵션 전체는 `app/main.cpp`의 인자 해석(`s == "--…"`)이 정본이다(머리 주석 · README에는 `--sheet-check` 등이 빠져 있다). 판정 옵션과 실패 종료 코드: `--ui-audit DIR` 9 · `--sheet-check DIR` 8 · `--icon-sheet f.png` 10(모델 없이 `--quit`과) · `--undo-test` 7 · `--export-*` 4 · 열기 2 · 단면 3 · `--start-shot` 6. 캡처는 `--shot`(작업) · `--ctx-shot`(그리는 중) · `--start-shot`(파일 없이 홈).
 - 포맷 · 린트 설정(.clang-format · .clang-tidy)은 없다. 바꾼 줄만 고치고 파일 전체를 다시 포맷하지 않는다.
-- CI(`.github/workflows/ci.yml`): Linux는 core · 도구 · 시험만(`-DASEC_BUILD_APP=OFF`), Windows는 Qt 6.8.3 + MSVC로 앱 전체 · 시험(`~CoalescingWorker*`). **Windows의 offscreen `--ui-audit` 단계는 지금 판정하지 않는다**(GUI exe를 `&`로 불러 기다리지 않음. 로그에 `ui-audit RESULT` 없이 6초 만에 통과, 2026-10-09 확인). CI 초록불을 화면 감사 통과로 보고하지 말고 로컬 감사 결과를 적는다. 이 PC는 Qt 6.10.3 + clang-cl.
+- CI(`.github/workflows/ci.yml`): **Windows 작업 하나뿐**(Qt 6.8.3 + MSVC로 앱 전체 · 시험 `~CoalescingWorker*` · offscreen `--ui-audit` 1920×1040 ×1 과 3840×2160 ×`QT_SCALE_FACTOR=2` 를 끝까지 기다려 판정). Linux 작업은 B5(`8cc67fb`)에서 뺐다 — 사용자 지시 「윈도우만을 대상으로」(DEV_RULES R7.4). CI 초록불만 보고 끝이라 하지 말고 로컬 감사(8조합)를 적는다. 이 PC는 Qt 6.10.3 + clang-cl.
 
 ## 구조 (여러 파일을 읽어야 보이는 큰 그림)
 - **두 층.** `core/`(정적 라이브러리 `archsection`, namespace `asec`)는 Qt 없는 C++17이다. 3MX 읽기 · LOD · 단면 자르기 · 레벨선 · 입면 영상 · 피킹 · 좌표계 · DXF/TIFF/LAS · 도면 배치 계산이 모두 여기 있다(MicroStation MDL 플러그인에서 다시 쓰려는 것). `app/`은 화면만 맡는다.
