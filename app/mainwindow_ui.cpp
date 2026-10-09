@@ -1190,7 +1190,8 @@ void MainWindow::rebuildStartPage() {
         rb->setFixedHeight(40); rb->setMenu(recentMenu_); rb->setPopupMode(QToolButton::InstantPopup); rb->setEnabled(!rf.isEmpty()); rb->setFocusPolicy(Qt::NoFocus);
         bt->addWidget(ob); bt->addWidget(rb); bt->addStretch();
         v->addLayout(bt);
-        v->addWidget(lab(QStringLiteral("파일을 창 어디에나 끌어다 놓아도 열립니다 · *.3mx(권장) · *.3sm · *.obj"), "lab"));
+        auto* drop = lab(QStringLiteral("파일을 창 어디에나 끌어다 놓아도 열립니다 · *.3mx(권장) · *.3sm · *.obj"), "lab"); drop->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // 한 줄 글이 창 최소 폭을 밀어내지 않게(B5)
+        v->addWidget(drop);
         v->addStretch(); }
     g->addWidget(hero, 0, 0);
 
@@ -1205,9 +1206,11 @@ void MainWindow::rebuildStartPage() {
             auto* cap = new QHBoxLayout; cap->addWidget(lab(QStringLiteral("이어서 작업"), "cap")); cap->addStretch(); cap->addWidget(lab(f0.isEmpty() ? QString() : (ok0 ? QStringLiteral("저장됨 · 이 PC") : QStringLiteral("원본 없음")), "cap"));
             tv->addLayout(cap);
             tv->addWidget(lab(f0.isEmpty() ? QStringLiteral("아직 연 모델이 없습니다") : QFileInfo(f0).completeBaseName(), f0.isEmpty() ? "ccEmpty" : "heroName"));   // 빈 상태는 20 Muted(검토 UI 1)
-            tv->addWidget(lab(f0.isEmpty() ? QStringLiteral("모델을 열면 마지막 단면선 · 뒤 깊이 · 화면이 여기 남습니다")
+            auto* ccSub = lab(f0.isEmpty() ? QStringLiteral("모델을 열면 마지막 단면선 · 뒤 깊이 · 화면이 여기 남습니다")
                                            : (cnt ? QStringLiteral("마지막 단면 %1 · 뒤 %2 m 그대로 열립니다").arg(meta(f0, "names").toString().section(QStringLiteral(" · "), 0, 0), QString::number(meta(f0, "back").toDouble(), 'f', 2))
-                                                  : QStringLiteral("단면선을 그으면 여기에 남습니다")), "lab")); }
+                                                  : QStringLiteral("단면선을 그으면 여기에 남습니다")), "lab");
+            ccSub->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // 한 줄 글이 창 최소 폭을 밀어내지 않게(B5)
+            tv->addWidget(ccSub); }
         bv->addWidget(top);
         bv->addStretch(1);   // 칸 줄은 카드 바닥에(스펙 §7: 칸 높이 48)
         auto* cells = new QWidget; cells->setObjectName("ccCells"); cells->setAttribute(Qt::WA_StyledBackground); cells->setFixedHeight(56); cells->setVisible(!f0.isEmpty());
@@ -1311,7 +1314,8 @@ void MainWindow::rebuildStartPage() {
         });
         tbl->setFixedHeight(28 + 48 * std::min(8, std::max(1, int(rf.size()))) + 2);   // 줄 수만큼(최대 8줄, 넘으면 스크롤) — 아래 선이 마지막 줄에 붙는다(검토 UI 2)
         rv->addWidget(tbl, 0);
-        rv->addWidget(lab(QStringLiteral("두 번 누르면 엶 · 오른쪽 클릭 = 폴더 열기 · 목록에서 지우기(모델 파일은 그대로)"), "lab"));
+        auto* help = lab(QStringLiteral("두 번 누르면 엶 · 오른쪽 클릭 = 폴더 열기 · 목록에서 지우기(모델 파일은 그대로)"), "lab"); help->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // 한 줄 글이 창 최소 폭을 밀어내지 않게(B5)
+        rv->addWidget(help);
         rv->addStretch(1); }
     g->addWidget(recent, 1, 0, 1, 2);
 
@@ -1347,6 +1351,7 @@ void MainWindow::rebuildStartPage() {
 
     // ---- 처음 쓰는 키(선 위): S · 1–5 · H · O · Ctrl+P · Ctrl+Z + 오른쪽 「모든 키 F1」
     auto* keys = new QWidget; keys->setObjectName("homeKeys"); keys->setAttribute(Qt::WA_StyledBackground);
+    keys->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // 키 줄이 창 최소 폭을 밀어내지 않게(B5): 홈이 보이는 채로 뜨면 이 줄(1495)이 창을 1591 로 넓혔다(실측, --size 1280x800)
     { auto* kh = new QHBoxLayout(keys); kh->setContentsMargins(0, 12, 0, 16); kh->setSpacing(32);
         kh->addWidget(lab(QStringLiteral("처음 쓰는 키"), "sectionHead"));
         const char* kk[][2] = {{"S", "단면선 긋기"}, {"1–5", "뒤 깊이 0.5 · 1 · 2 · 3 · 5 m"}, {"H", "잘린 돌 칠하기"}, {"O", "윤곽 따기"}, {"Ctrl+P", "도면"}, {"Ctrl+Z", "되돌리기 200단계"}};
