@@ -160,3 +160,31 @@ TEST_CASE("sheet: 같은 이름이면 _2 _3", "[sheet]") {
     CHECK(uniqueSheetFileName("a_1-20.svg", {"a_1-20.svg", "a_1-20_2.svg"}) == "a_1-20_3.svg");
     CHECK(uniqueSheetFileName("a_1-20.svg", {"b.svg"}) == "a_1-20.svg");
 }
+
+// ---- 단계 12: 위에서 본 범위 ----
+TEST_CASE("sheet: 위에서 본 범위", "[sheet]") {
+    TopDownRange r = topDownRange(100, 200, 0.05, 200, 100);
+    CHECK(r.x0 == Approx(95));
+    CHECK(r.x1 == Approx(105));
+    CHECK(r.yBot == Approx(197.5));
+    CHECK(r.yTop == Approx(202.5));
+}
+
+TEST_CASE("sheet: 위에서 본 범위 = 이동 없는 평면 배치의 보이는 범위", "[sheet]") {
+    SheetSpec s;
+    PlanPlace p = placePlan(s, 148074.0, 148100.9, 98103.4, 98119.5, 1, 0, 0);
+    TopDownRange r = topDownRange(p.cX, p.cY, p.mPerMm, p.plotW, p.plotH);
+    CHECK(r.x0 == Approx(p.visX0));
+    CHECK(r.x1 == Approx(p.visX1));
+    CHECK(r.yBot == Approx(p.visYBot));
+    CHECK(r.yTop == Approx(p.visYTop));
+}
+
+TEST_CASE("sheet: 위에서 본 범위 0 이하면 한 점", "[sheet]") {
+    TopDownRange r = topDownRange(100, 200, 0, 200, 100);
+    CHECK(r.x0 == Approx(100));
+    CHECK(r.x1 == Approx(100));
+    TopDownRange n = topDownRange(100, 200, -1, 200, 100);
+    CHECK(n.x0 == Approx(100));
+    CHECK(n.x1 == Approx(100));
+}

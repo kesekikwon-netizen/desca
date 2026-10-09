@@ -19,13 +19,13 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-09 · Muse Spark — 단계 14 core 완료(파일 이름 함수 + 시험 3개). 디자인 보완은 다른 계정(Max) |
+| 마지막 갱신 | 2026-10-09 · Muse Spark — 단계 12 core 완료(위에서 본 범위 + 시험 3개). 디자인 보완은 다른 계정(Max) |
 | 디자인 상태 | ⏸ 보완 대기 — Strata 일관성(C1–C7 미결정). 위 안내 · `docs/design-v4/STRATA_CONSISTENCY.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
 | 바뀐 파일(내용) | 커밋됨 — `f4c246e` 단계 0 고치기 + A1 core, `origin/feature/design-v2`에 푸시 · CI: `.github/workflows/ci.yml` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
-| 시험 | `asec_tests` 128 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 · `--ui-audit` RESULT ok · GitHub Actions(Linux · Windows) 통과 |
+| 시험 | `asec_tests` 131 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 · `--ui-audit` RESULT ok · GitHub Actions(Linux · Windows) 통과 |
 | 최근 캡처 | `C:\dev\tmp\kerf-shots\work-v4d.png` · `draw-v4.png` · `C:\dev\tmp\ui\` (이 PC에만) |
 
 ## 2. 이 PC에서 빌드 · 실행 (검증된 명령)
@@ -61,7 +61,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 | 9 | 홈 화면 | ⬜ ⏸ | |
 | 10 | 목록 하나 | 🟨 ⏸ | 조판 목록 머리 「단면 목록」으로. **남음:** 줄 모양 · 도면 상태 줄 · 고르기 칸 |
 | 11 | 조판: 고르는 곳 하나 · 모드 칩 · 리본 접기 | 🟨 ⏸ | 「작업으로」 단추 숨김, 문서 탭 줄 새 모양(조판 열릴 때만 보임). **남음:** 「도면 종류」 제거 · 모드 칩 · 리본 접기 |
-| 12 | 도면 점검 | ⬜ ⏸ | |
+| 12 | 도면 점검 | 🟨 (core만, UI는 ⏸) | core 위에서 본 범위 함수 + 시험 끝. 남음: 점검 상자 UI · 캡처(디자인 결정 뒤) |
 | 13 | 형식 · DXF 공간 | ⬜ ⏸ | |
 | 14 | 여러 장 저장 | 🟨 (core만, UI는 ⏸) | core 파일 이름 함수 + 시험 끝. 남음: 일괄 저장 UI · `--sheet-batch` · 캡처(디자인 결정 뒤) |
 | 15 | 빈 구간 표시 · E 키 | ⬜ ⏸ | |
@@ -139,6 +139,10 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **무엇을:** `sheet.hpp`에 선언, `sheet.cpp`에 구현. `sheetFileName(모델, 도면, 분모)` → `모델_도면_1-분모.svg`(–→`-`, ′ 유지, 금지 글자→`_`, 앞뒤 공백·점 제거, 분모 정수면 정수). `uniqueSheetFileName(이름, 있는 이름들)` → 겹치면 확장자 앞에 `_2`·`_3`…. `test_sheet.cpp`에 시험 3개(한글 · ′ · 금지 글자 · 겹침).
 - **확인:** 선언만 넣고 링크 실패 RED → 구현 뒤 `[sheet]` 92 assert 통과. 전체 `asec_tests` → 128 통과 · 1 실패(알려진 CoalescingWorker) · 1 건너뜀. 전체 빌드 새 경고 없음.
 
+### 2026-10-09 · Muse Spark — 단계 12 core(위에서 본 범위, UI는 ⏸)
+- **무엇을:** `sheet.hpp`에 `TopDownRange` + 선언, `sheet.cpp`에 구현. `topDownRange(중심X, 중심Y, m/px, 그림칸Wmm, 그림칸Hmm)` → 같은 중심 · 같은 m/px의 위에서 본 사각형. 도면은 3D 기울기를 쓰지 않으므로 pitch를 받지 않는다(판정 근거). `test_sheet.cpp`에 시험 3개(알려진 값 · 이동 없는 평면 배치의 보이는 범위와 일치 · 0 이하 입력은 한 점).
+- **확인:** 선언만 넣고 링크 실패 RED → 구현 뒤 `[sheet]` 104 assert 통과. 전체 `asec_tests` → 131 통과 · 1 실패(알려진 CoalescingWorker) · 1 건너뜀.
+
 ## 5. 다음 할 일 (위에서부터)
 **A. 디자인 세션(다른 계정, Max) — 먼저**
 1. `docs/design-v4/STRATA_CONSISTENCY.md`를 읽고 Strata 캡처(이 PC `C:\Users\권을\Documents\desc\design-v4\strata-ref\`)와 Strata 코드에서 공통 디자인 언어(토큰 · 리본 · 탭 · 판 치수)를 정리한다.
@@ -146,7 +150,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 3. 캔버스 화판과 `docs/design-v4/boards/` · `FINAL_PLAN.md` 결정표를 고치고, 이 파일의 ⏸를 풀 단계를 적는다.
 
 **B. 개발 — 디자인과 무관해서 지금 해도 되는 것(core, 시험 먼저)**
-1. 단계 0 완료. 2. A1 core 완료. 3. 단계 14 core 완료(§4 기록). 다음은 단계 12 core.
+1. 단계 0 완료. 2. A1 core 완료. 3. 단계 14 core 완료. 4. 단계 12 core 완료(§4 기록). 다음은 A3 core.
 2. A1 core — `hatchPolygon(다각형, 각도, 간격)` · `closeCutRegion(…)` (FINAL_PLAN §9).
 3. 단계 14 core — 도면 파일 이름 함수(금지 글자 · 겹침 `_2`).
 4. 단계 12 core — 3D 기울어진 평면에서 「위에서 본 범위」 계산.

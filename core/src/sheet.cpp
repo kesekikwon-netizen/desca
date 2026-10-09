@@ -331,4 +331,16 @@ std::string uniqueSheetFileName(const std::string& base, const std::vector<std::
         if (!has(c)) return c;
     }
 }
+
+// ---- 단계 12: 위에서 본 범위 ----
+TopDownRange topDownRange(double cX, double cY, double mPerMm, double plotWmm, double plotHmm) {
+    TopDownRange r;
+    double k = std::max(0.0, mPerMm) * 0.5;
+    double hw = std::max(0.0, plotWmm) * k, hh = std::max(0.0, plotHmm) * k;
+    r.x0 = cX - hw;
+    r.x1 = cX + hw;
+    r.yBot = cY - hh;
+    r.yTop = cY + hh;
+    return r;
+}
 }  // namespace asec

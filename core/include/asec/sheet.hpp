@@ -86,6 +86,11 @@ struct SectionPaperWindow {
 SectionPaperWindow sectionPaperWindow(double lenM, double heightM, double zTopAbs, double plotWmm, double plotHmm,
                                       double denom, double viewZoom, double dxMm, double dyMm, int col = 0, int row = 0, bool split = false);
 
+/// 위에서 본 범위(단계 12): 기울어진 3D 평면 화면과 같은 중심 · 같은 m/px로
+/// 위에서 본 사각형(로컬 m). 도면은 3D 기울기를 쓰지 않으므로 pitch를 받지 않는다.
+/// mPerMm·그림 칸이 0 이하면 중심 한 점. yBot <= yTop, x0 <= x1 로 둔다.
+struct TopDownRange { double x0 = 0, x1 = 0, yBot = 0, yTop = 0; };
+TopDownRange topDownRange(double cX, double cY, double mPerMm, double plotWmm, double plotHmm);
 /// 그림 칸 바깥 좌표 눈금. [lo, hi] 안에 최대 maxCount개(1·2·5×10ⁿ 간격).
 struct OutsideTicks {
     double step = 1;
