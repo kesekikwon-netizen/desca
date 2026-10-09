@@ -367,6 +367,7 @@ bool MainWindow::eventFilter(QObject* o, QEvent* e) {
             w->setMask(QRegion(pp.toFillPolygon().toPolygon()));
         }
         if (o == secTitleBar_) fitSectionHeader();   // 좁은 창: 단면 머리를 폭에 맞게 줄인다(스펙 §4 — 필터는 layout 의 doResize 보다 먼저 받는다)
+        if (o == infoStrip_) fitInfoStrip();         // 정보 줄도 같은 때
     }
     if (e && (e->type() == QEvent::FocusIn || e->type() == QEvent::FocusOut) && o && o->isWidgetType() && o->inherits("QAbstractButton")) {
         auto* b = static_cast<QWidget*>(o);
@@ -640,6 +641,52 @@ void MainWindow::setSecTitleText(const QString& full) {
     fitSectionHeader();
 }
 
+// 정보 줄(스펙 §4 · 사용자 답 Q2 A): 폭이 모자라면 ① 「레벨선 10 cm · 숫자 50 cm」 숨김 ② 「입면 뒤 0–3.00 m」 숨김 ③ 「잘린 선 …」을 점 수 뺀 짧은 글(툴팁 전체)
+// ④ 남은 글(계산 상태 · 잘린 선)을 넘치는 만큼 비례로 줄임표(바닥 40 px) + 툴팁. 계산 상태는 숨기지 않는다. 줄이지 않을 때 상태 글은 서식(RichText) 그대로(1920 모양 변화 없음)
+void MainWindow::fitInfoStrip() {
+    if (!infoStrip_ || !infoStrip_->layout() || !stripState_ || !stripCut_ || fittingStrip_) return;
+    fittingStrip_ = true;
+    QLayout* lay = infoStrip_->layout();
+    const int avail = infoStrip_->width();
+    static const QRegularExpression tags(QStringLiteral("<[^>]*>"));
+    const QString statePlain = QString(stripStateRich_).remove(tags);
+    auto apply = [&](int step) {
+        if (stripLevels_) stripLevels_->setVisible(step < 1);
+        if (stripBand_) stripBand_->setVisible(step < 2);
+        stripState_->setTextFormat(Qt::RichText); stripState_->setText(stripStateRich_); stripState_->setProperty("fullText", QVariant()); stripState_->setToolTip(QString());
+        if (step < 3) { stripCut_->setText(stripCutFull_); stripCut_->setProperty("fullText", QVariant()); stripCut_->setToolTip(QString()); }
+        else { stripCut_->setText(stripCutShort_); stripCut_->setProperty("fullText", stripCutFull_); stripCut_->setToolTip(stripCutShort_ == stripCutFull_ ? QString() : stripCutFull_); }
+    };
+    int step = 0;
+    for (; step < 4; ++step) { apply(step); lay->activate(); if (lay->minimumSize().width() <= avail) break; }
+    if (step == 4) {
+        apply(3);
+        stripState_->setTextFormat(Qt::PlainText);   // 줄인 글은 서식 없이(sizeHint 가 글 폭과 같게)
+        int tS = stripState_->fontMetrics().horizontalAdvance(statePlain), tC = stripCut_->fontMetrics().horizontalAdvance(stripCutShort_);
+        for (int pass = 0; pass < 6; ++pass) {
+            setElidedText(stripState_, statePlain, Qt::ElideRight, tS);
+            setElidedText(stripCut_, stripCutShort_, Qt::ElideRight, tC, stripCutFull_);
+            lay->activate();
+            const int over = lay->minimumSize().width() - avail;
+            if (over <= 0) break;
+            const int roomS = std::max(0, tS - 40), roomC = std::max(0, tC - 40);
+            if (roomS + roomC == 0) break;
+            int dS = std::min(roomS, (over * roomS + roomS + roomC - 1) / (roomS + roomC));
+            int dC = std::min(roomC, over - dS);
+            if (dS + dC < over) dS = std::min(roomS, over - dC);
+            tS -= dS; tC -= dC;
+        }
+    }
+    stripStep_ = step;
+    lay->activate();
+    fittingStrip_ = false;
+}
+
+void MainWindow::setStripTexts(const QString& stateRich, const QString& cutFull, const QString& cutShort) {
+    stripStateRich_ = stateRich; stripCutFull_ = cutFull; stripCutShort_ = cutShort;
+    fitInfoStrip();
+}
+
 QString MainWindow::windowTitleCheck() const {
     const QString t = windowTitle(), dn = QGuiApplication::applicationDisplayName();
     // Qt 는 제목이 표시 이름으로 끝나지 않으면 「 - 표시 이름」을 붙인다(Windows·X11) → 이름이 두 번 보이던 원인
@@ -661,11 +708,11 @@ void MainWindow::updateHeader() {
     const QString monoB = QStringLiteral("<b style='font-family:Consolas,\"DejaVu Sans Mono\",monospace'>%1</b>");
     setSecTitleText(has ? QStringLiteral("%1 단면").arg(sectionName()) : QStringLiteral("단면"));
     if (plan_->drawMode()) {   // 그리는 중 판 · 정보 줄은 updateCtx 가 주인(검토 I2) — 옛 단면 수치가 새 선 것처럼 읽히지 않게 잘린 선 · 입면 글도 비움
-        if (stripState_) stripState_->setText(QStringLiteral("단면선을 긋는 중 — 단면은 A′를 찍은 뒤 계산됩니다"));
-        if (stripCut_) stripCut_->clear();
         if (stripBand_) stripBand_->clear();
+        setStripTexts(QStringLiteral("단면선을 긋는 중 — 단면은 A′를 찍은 뒤 계산됩니다"), QString(), QString());
         return;
     }
+    QString stateRich;   // 계산 상태(서식 글) — 정보 줄 글은 맨 끝 setStripTexts 한 길로(좁으면 fitInfoStrip 이 줄인다)
     if (has) {
         const SectionLine& l = plan_->line();
         secFacing_->setText(qs8(facingKo(sectionAzimuthDeg(l))));
@@ -676,28 +723,31 @@ void MainWindow::updateHeader() {
         double d = section_->screenDenom();
         QString ds = (d >= 100 || std::fabs(d - std::round(d)) < 0.05) ? QString::number(std::round(d)) : QString::number(d, 'f', 1);
         stripScale_->setText(QStringLiteral("화면 축척 ") + monoB.arg(QStringLiteral("1:") + ds));
-        stripState_->setText(last_.previewLod || !lastFinal_ ? (last_.cutFromLeaf ? QStringLiteral("<span style='color:#7A5A00'>단면선 정확 · 배경 미리보기 → 최종 계산 중…</span>") : QStringLiteral("<span style='color:#7A5A00'>미리보기(거친) → 최종 계산 중…</span>"))
-                                                             : QStringLiteral("<span style='color:#3F6B31'>✓</span> 최종(잎)"));
+        stateRich = last_.previewLod || !lastFinal_ ? (last_.cutFromLeaf ? QStringLiteral("<span style='color:#7A5A00'>단면선 정확 · 배경 미리보기 → 최종 계산 중…</span>") : QStringLiteral("<span style='color:#7A5A00'>미리보기(거친) → 최종 계산 중…</span>"))
+                                                   : QStringLiteral("<span style='color:#3F6B31'>✓</span> 최종(잎)");
         LevelPlan lp = sectionLevelPlan(section_->xf().ppmZ(), 1.0, false);
         lvLine_->setText(QStringLiteral("%1 m").arg(lp.lineCm / 100.0, 0, 'f', 2));
         lvLabel_->setText(QStringLiteral("%1 m").arg(lp.labelCm / 100.0, 0, 'f', 2));
         if (scaleCombo_) { QSignalBlocker b(scaleCombo_); scaleCombo_->setEditText(QStringLiteral("1:") + ds); }
     } else {
-        stripScale_->setText(QStringLiteral("화면 축척 —")); stripState_->clear();
+        stripScale_->setText(QStringLiteral("화면 축척 —"));
         if (scaleCombo_) { QSignalBlocker b(scaleCombo_); scaleCombo_->setEditText(QStringLiteral("—")); }
     }
     if (secCount_) secCount_->setText(QString::number(sections_.size()));
     refreshSteps();
     if (stripBand_) stripBand_->setText(has ? QStringLiteral("입면 뒤 0–%1 m").arg(back_->value(), 0, 'f', 2) : QString());
-    if (stripCut_) {   // v4 단계 5 · 화판 2: 「잘린 선 n줄 · m점 · 빈 구간 없음 / k곳 x m」 — 빈 구간은 core profileGaps
+    {   // v4 단계 5 · 화판 2: 「잘린 선 n줄 · m점 · 빈 구간 없음 / k곳 x m」 — 빈 구간은 core profileGaps. 짧은 글(좁은 창 3단계)은 점 수만 뺀다 — 빈 구간 정보는 지킴
+        QString cutFull = QStringLiteral("잘린 선 —"), cutShort = cutFull;
         if (has && section_->hasResult()) {
             const auto& r = section_->result();
             size_t nv = 0; for (auto& pl : r.profile) nv += pl.size();
             const std::vector<SGap> gaps = profileGaps(r.profile, SectionFrame(r.line).L);   // 결과의 선 길이(끄는 중 · 늦게 온 결과에도 맞음, 검토 M1)
             double gl = 0; for (const SGap& g : gaps) gl += g.s1 - g.s0;
-            stripCut_->setText(gaps.empty() ? QStringLiteral("잘린 선 %1줄 · %2점 · 빈 구간 없음").arg(r.profile.size()).arg(nv)
-                                            : QStringLiteral("잘린 선 %1줄 · %2점 · 빈 구간 %3곳 %4 m").arg(r.profile.size()).arg(nv).arg(gaps.size()).arg(gl, 0, 'f', 2));
-        } else stripCut_->setText(QStringLiteral("잘린 선 —"));
+            const QString gapTxt = gaps.empty() ? QStringLiteral("빈 구간 없음") : QStringLiteral("빈 구간 %1곳 %2 m").arg(gaps.size()).arg(gl, 0, 'f', 2);
+            cutFull = QStringLiteral("잘린 선 %1줄 · %2점 · %3").arg(r.profile.size()).arg(nv).arg(gapTxt);
+            cutShort = QStringLiteral("잘린 선 %1줄 · %2").arg(r.profile.size()).arg(gapTxt);
+        }
+        setStripTexts(stateRich, cutFull, cutShort);
     }
     if (!inspName_) return;
     inspName_->setText(has ? sectionName() : QStringLiteral("고른 단면이 없습니다"));
@@ -2279,9 +2329,9 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         measure(QStringLiteral("1280L"), false);
         updateHeader();
     }
-    if (stripState_ && stripCut_) {   // 1280p: 가장 긴 정보 줄 글(계산 중 + 빈 구간 있음)
-        stripState_->setText(QStringLiteral("<span style='color:#7A5A00'>단면선 정확 · 배경 미리보기 → 최종 계산 중…</span>"));
-        stripCut_->setText(QStringLiteral("잘린 선 12줄 · 1234점 · 빈 구간 12곳 10.25 m"));
+    if (stripState_ && stripCut_) {   // 1280p: 가장 긴 정보 줄 글(계산 중 + 빈 구간 있음) — updateHeader 와 같은 길(setStripTexts)
+        setStripTexts(QStringLiteral("<span style='color:#7A5A00'>단면선 정확 · 배경 미리보기 → 최종 계산 중…</span>"),
+                      QStringLiteral("잘린 선 12줄 · 1234점 · 빈 구간 12곳 10.25 m"), QStringLiteral("잘린 선 12줄 · 빈 구간 12곳 10.25 m"));
         measure(QStringLiteral("1280p"), false);
         updateHeader();
     }

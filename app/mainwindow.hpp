@@ -249,6 +249,10 @@ private:
     bool fittingHeader_ = false;
     void fitSectionHeader();                   // 스펙 §4 · Q1 A: 북쪽을 봄 → 크게 → 세로 아이콘만 → 토글을 메뉴로 → 제목 줄임표
     void setSecTitleText(const QString& full); // 제목은 이 길로만(updateHeader · 감사 1280L)
+    QString stripStateRich_, stripCutFull_, stripCutShort_;   // 정보 줄 글(상태는 서식 글, 잘린 선은 전체 · 점 수 뺀 짧은 글)
+    bool fittingStrip_ = false;
+    void fitInfoStrip();                       // 스펙 §4 · Q2 A: 레벨선 안내 → 입면 뒤 → 점 수 → 줄임표 + 툴팁(계산 상태는 숨기지 않음)
+    void setStripTexts(const QString& stateRich, const QString& cutFull, const QString& cutShort);   // 정보 줄 글은 이 길로만(updateHeader · 감사 1280p)
     QComboBox* scaleCombo_ = nullptr;
     QLabel *lvLine_ = nullptr, *lvLabel_ = nullptr;
     QToolButton* depthChip_[5] = {};
