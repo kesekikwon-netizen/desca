@@ -22,11 +22,11 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-09 · Claude Code — `.claude/` 개발 환경 계약(cpp-project.json · verify · shot.ps1) + CLAUDE.md 명령을 Windows 기준으로. core 전부 끝. 디자인 보완은 다른 계정(Max) |
+| 마지막 갱신 | 2026-10-09 · Claude Code — 디자인 v5 A단계(아이콘 SVG) 끝(`35be58d`). B단계(리본 · 문서 탭) 진행 중. 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
-| 바뀐 파일(내용) | **커밋 대기(2026-10-09 설정):** `CLAUDE.md` · `.claude/cpp-project.json` · `.claude/skills/verify/SKILL.md` · `.claude/scripts/shot.ps1` · 이 파일. 그 밖은 단계별 커밋됨 — `git log --oneline 4422b4e..HEAD` · `origin/feature/design-v2`에 푸시 · CI: `.github/workflows/ci.yml` |
+| 바뀐 파일(내용) | **커밋 대기(2026-10-09 팩토리):** `CLAUDE.md`(「소프트웨어 팩토리」 절) · `factory/`(profile · backlog · jobs 양식 · scripts 4개) · `.claude/agents/correctness-reviewer.md` · `security-reviewer.md` · `kerf-ui-reviewer.md` · `builder.md` · `spec-writer.md`(v5 문구) · `.claude/skills/factory/SKILL.md`(v5 · CI 절) · 이 파일. 로컬 HEAD `4781e1d`(디자인 v5 확정)는 **아직 push 안 됨**(`origin`은 `de14dc2`). 그 밖은 단계별 커밋됨 — `git log --oneline 4422b4e..HEAD` · CI: `.github/workflows/ci.yml` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
 | 시험 | `asec_tests` 135 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 · `--ui-audit` RESULT ok · GitHub Actions(Linux · Windows) 통과 |
 | 최근 캡처 | `C:\dev\tmp\kerf-shots\work-v4d.png` · `draw-v4.png` · `work-step0-fixed.png`(빨간선 전체 0–12, offscreen이라 평면은 빈 화면·한글 깨짐) · `C:\dev\tmp\ui\` (이 PC에만) |
@@ -161,6 +161,30 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **무엇을:** `/init`(전역 C++ 지시서 §6.7 「프로젝트 계약」 기준)으로 `.claude/cpp-project.json`(빌드 · 시험 · 빠른 시험 · 실행 · 캡처 명령의 단일 계약, `formatOnEdit:false` · `verifyOnStop:true`), `.claude/skills/verify/SKILL.md`(끝났다고 말하기 전 · 커밋 전 검증 절차), `.claude/scripts/shot.ps1`(장면 `work` · `draw` · `start` 캡처, `ui-visual-check`용)을 만듦. `CLAUDE.md` 「명령」 절을 WSL 기준에서 Windows(데스크톱 앱 · 터미널 `claude`) 기준으로 고침 — `cmake --build C:/dev/kerf-v4c` · `C:/dev/kerf-v4c/asec_tests.exe …`처럼 PowerShell · Git Bash 공통 명령. 터미널용 Claude Code 2.1.295를 이 PC에 설치(`~\.local\bin\claude.exe`).
 - **확인:** `cmake --build C:/dev/kerf-v4c`(TEMP · PATH 그대로인 cmd.exe) → exit 0. `asec_tests "~CoalescingWorker*"` → 132 통과 · 1 건너뜀(Bash · PowerShell 모두, 2초). `asec-section` → polylines=1 vertices=54. `--ui-audit` → EXIT=0 `RESULT ok`. `shot.ps1` work · draw · start → PNG 3장(실제 화면 확인). 전역 `ui-visual-check`의 `visual.py capture --scenes work,start --themes light --scales 1` → OK 2장. 전역 세션 시작 훅이 계약 요약을 출력함.
 - **판정:** `.clang-format` · `.clang-tidy`는 넣지 않음 — 저장소 규칙(바꾼 줄만 고침)과 전체 재포맷 위험 — 잘못이면: 자동 정렬 없이 손으로 모양을 맞춰야 함. 전역 디자인 토큰 감시 훅은 `ui/` · `gui/` 같은 폴더 이름만 보므로 `app/`에는 걸리지 않음(계약의 `ui.framework`는 기록용). 커밋하지 않음 — 사용자 지시 대기.
+
+### 2026-10-09 · Claude Code — 소프트웨어 팩토리(`/factory`) 개발 설정 구축(설정만, 제품 변경 없음)
+- **무엇을(사용자 지시 「개발설정만 담당하라」 · 「깃 액션까지 확인해줘」):** `.claude/skills/factory/SKILL.md`(입력 `/factory <요청>|status|next|rework <ID>|approve <ID>` 해석, 상태 흐름 queued→spec→build→verify→review→rework|needs-human→approved→merged, 수정 루프 2회, 사람 검토 필수 영역, 승인 보고서 양식, 병합 뒤 GitHub Actions 확인) · 에이전트 7개 `.claude/agents/`(spec-writer · builder(유일한 쓰기) · test-runner · code-reviewer · correctness-reviewer · security-reviewer · kerf-ui-reviewer — 도구 권한을 역할별로 제한) · `factory/project-profile.md`(확인된 사실 · 명령 · 시험 지도 · 허용오차 표 · 위험 모듈 · 기존 실패) · `factory/backlog.md` · `factory/jobs/`(README + `_template/` job · spec · build · verify · review · approval) · `factory/scripts/`(`new-job.ps1` worktree `C:\dev\kerf-wt\<ID>` + 브랜치 `factory/<ID>` + 기록 폴더, `verify.ps1` configure→build→tests→asec-section 기준값→ui-audit→ci(base) 를 `verify.md`에 기록, `status.ps1`, `ci-status.ps1` gh로 Actions 결과) · `CLAUDE.md` 끝에 10줄. 기준 브랜치 `feature/design-v2`.
+- **확인:** `status.ps1` → exit 0. `new-job.ps1 -Slug smoke` → worktree `C:\dev\kerf-wt\20261009-01-smoke`(`4781e1d`) 생성, job.md 한글 정상(UTF-8). `verify.ps1 -Full -UiAudit on` → configure 6 s · 전체 빌드 14 s(새 경고 0, 기존 CRT deprecated만) · 시험 51314 assertions 통과 · `asec-section` polylines=1 vertices=54 · ui-audit RESULT ok(62 s) → **RESULT PASS exit 0**. `ci-status.ps1 -Sha de14dc2` → `completed success`(Windows 앱 · Linux 코어 둘 다), `-Sha 4781e1d` → `none`(push 안 됨, exit 3). 연기 시험 worktree · 브랜치 · 기록은 확인 뒤 삭제(아래).
+- **판정:**
+  - 시연 작업(README 보강 등)은 하지 않음 — 사용자 지시 「개발설정만」 — 잘못이면: spec-writer~reviewer 에이전트 브리프가 실전에서 한 번도 안 돌아 첫 작업 때 다듬어야 할 수 있음.
+  - `CLAUDE.md`를 다시 쓰지 않고 끝에 절만 덧붙임 — 다른 세션(디자인 v5)이 같은 파일을 쓰고 있어 — 잘못이면: 「간결한 CLAUDE.md」 요구와 다름(원하면 따로 정리).
+  - UI 검토자 이름을 `kerf-ui-reviewer`로 — 전역 `ui-reviewer`를 가리지 않으려고 — 잘못이면: 전역 `ui-visual-check` 스킬은 여전히 전역 검토자를 부름.
+  - `.ps1`에 UTF-8 **BOM** 필수(PS 5.1은 BOM 없으면 CP949로 읽어 한글 리터럴이 깨짐, 실측). `gh run list --commit`은 전체 SHA만 받고, PS 5.1은 `"[]"`를 `$null`로 풀며 jq 식의 큰따옴표를 벗김 — 셋 다 스크립트에서 처리.
+  - 전역 Stop 훅은 본 저장소(`kerf-v4c`)만 빌드하므로 worktree 검증은 `verify.ps1`만 믿는다.
+- **추가(같은 날, 사용자 지시 셋 — 「적는 게 아니라 실제 개발에 쓸 수 있게」 · 「4K · 와이드 어디서나 안정」 · 「superpowers 스킬과 context7을 안정적으로」):**
+  - 사용자가 `desc` 폴더에서 상대 경로 명령을 돌려 실패(`-File 'factory/scripts/status.ps1' 없음`) → **실행기 `factory.cmd`**(저장소 루트 + `desc\factory.cmd` 전달기, `factory\factory.ps1`이 명령 분배) — `factory status | new … | verify <ID> | ci <sha>`. `desc` · `desca` · `C:\`에서 PowerShell · cmd 모두 exit 0 확인. 모든 문서 · 에이전트 명령을 실행기로 통일.
+  - `ci-status.ps1`(gh로 Actions 결과) + `verify.ps1`에 `ci(base)` 줄. `de14dc2` → success(Windows · Linux), 로컬 HEAD는 none(push 전). SKILL §5-6: push 뒤 병합 커밋 CI 확인.
+  - `verify.ps1`에 `-UiSizes` · `-UiScales`(QT_SCALE_FACTOR) — 화면 변경은 1280x800 · 1920x1040 · 3440x1440 · 3840x2160 × 배율 1 · 2 모두 `RESULT ok`가 고정 완료 기준(디자인 v5 세션이 CLAUDE.md에 적은 크기와 같음). backlog #1에 사용자 말 그대로.
+  - `project-profile.md` §11 superpowers 단계 배정표(brainstorming · writing-plans · TDD · systematic-debugging · verification-before-completion · requesting/receiving-code-review · finishing-a-development-branch) + context7 규칙(Qt 6 ID `/websites/doc_qt_io_qt-6_8`, resolve → query 실제 응답 확인). builder · spec-writer에 Skill + context7 도구 열고 test-runner에 Skill.
+  - 고친 버그: `.ps1` BOM, `Start-Process` 빈 인자, PS 5.1의 1원소 배열 풀림 · `"[]"`→`$null` · jq 큰따옴표 벗김, `gh --commit` 전체 SHA, gh는 저장소 폴더 안에서만, `$ErrorActionPreference='Stop'`이 gh stderr를 종료 오류로.
+  - **`C:\dev\kerf-v4c`는 기준선이 아님:** 17:43 빌드(다른 세션의 아이콘 교체 미커밋 변경 포함)는 1920x1040에서도 `icons-missing=33 → fail`. 해상도 기준선은 깨끗한 HEAD `bc0aa32` worktree로 잼 → `factory verify … -UiAudit on -UiSizes 1280x800,1920x1040,3440x1440,3840x2160 -UiScales 1,2` **RESULT PASS**: 8가지 모두 `ui-audit RESULT ok`(각 62–66 s), 빌드 새 경고 0, 빠른 시험 51300 통과, asec-section 기준값 일치. 측정 뒤 시험용 worktree · 브랜치 · 기록 삭제.
+- **남은 문제:** ezdxf 없음(`dxf_audit.py` 못 돔) — 설치는 사용자 허락 뒤. 로컬 HEAD(`bc0aa32`)는 push 전이라 Actions 결과 없음. 커밋은 사용자 지시 대기.
+
+### 2026-10-09 · Claude Code — 디자인 v5 A단계: 아이콘을 SVG로(C7) — 커밋 `bc0aa32` · `35be58d`
+- **무엇을:** `app/icons/lucide/*.svg` 24개(Strata와 같은 Lucide, ISC 라이선스 동봉) + `app/icons/kerf/*.svg` 38개(Kerf 전용, 화판 7 그림 그대로, `make_kerf_svgs.py`). `app/icons/icons.cmake`가 손으로 적은 목록을 configure 때 `generated/kerf_icons.hpp`로 굽는다(rcc · moc 없이, 두 빌드 분기 공통). `app/icons.{hpp,cpp}`: `kerf::icon(이름, px, 먹색)` · `chipIcon(타일 · 아이콘 · 종류 · 색)`(상태 Normal · Active · Disabled × Off · On, dpr 1 · 1.5 · 2 · 3) · `hasIcon` · `iconNames`. `theme.hpp`의 코드 아이콘 150줄을 없애고 `iconName(Ico)` 이름 표 + `kerf::icon` 호출로. 토큰 `ActionHover` · `ChipPressed`(Strata tokens.json 값). `main.cpp --icon-sheet f.png`(모델 없이 돎, 빠진 이름 있으면 종료 코드 10).
+- **확인:** 빈 구현으로 `--icon-sheet` → `EXIT=10 missing=31`(RED) → 구현 뒤 `EXIT=0 n=62 missing=0`(GREEN), `C:\dev\tmp\ui\icons.png`에서 타일 62개 확인. `cmake --build` exit 0(새 경고 0, 기존 `_wfopen` · `mirrored`만). `asec_tests "~CoalescingWorker*"` 51300 assertions 통과. `--ui-audit` RESULT ok. 실제 화면 캡처 `C:\dev\tmp\kerf-shots\v5-a2-icons.png`에서 리본 · 머리 · 배지 아이콘이 SVG로 바뀐 것 확인.
+- **판정:** A2(그리기)와 A3(`--icon-sheet`)를 한 커밋으로 — `--icon-sheet`가 A2의 RED→GREEN 시험 장치라 — 잘못이면: 되돌릴 때 둘이 같이 돌아감. `CLAUDE.md` · 이 파일은 팩토리 세션(다른 창)의 미커밋 변경과 섞여 있어 코드 커밋에서 뺌 — 사용자 지시 때 한꺼번에 커밋. 사용자 추가 지시 둘을 기록함: ① 「superpowers 스킬 · context7을 안정적으로」 → `CLAUDE.md` 「먼저 할 일」 개발 방식 절 ② 「4K · 와이드 어디서나 안정」 → `DESIGN_SPEC §2.1` · 계획 Task B5.
+- **남은 문제:** 리본은 아직 v4 모양(18 px 아이콘 옆 글자) — B단계에서 타일 리본으로. offscreen 캡처는 글꼴이 없어 글자가 □로 보임(앱 정상).
 
 ## 5. 다음 할 일 (위에서부터)
 **A. 디자인 세션(다른 계정, Max) — 먼저**

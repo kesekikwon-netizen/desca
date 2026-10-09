@@ -9,6 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **단계 하나를 마칠 때마다 `docs/DEV_PROGRESS.md`를 고친다**(상태 표 · 기록 · 다음 할 일). 기록 없이 다음 단계로 가지 않는다.
 - 지시서는 `docs/design-v4/FINAL_PLAN.md`, 단추 하나하나의 계약은 `docs/design-v4/boards/Buttons1.dc.html` · `Buttons2.dc.html`(HTML을 글로 읽는다).
 - 끝났다고 말하기 전 · 커밋 전에 `/verify`(`.claude/skills/verify`)를 돌리고 그 결과를 보고한다.
+- **개발 방식(사용자 지시 2026-10-09, 모든 세션 공통):** 모든 작업에 **superpowers 스킬을 고정으로** 쓴다 — 새 기능 `brainstorming → writing-plans → executing-plans`, 코드 수정 `test-driven-development`, 버그 `systematic-debugging`, 끝나기 전 `verification-before-completion`, 기능 하나 끝나면 `requesting-code-review`(cpp-reviewer). Qt · C++ API가 확실치 않으면 **context7**(`resolve-library-id` → `query-docs`, Qt는 `/websites/doc_qt_io_qt-6_8`)로 확인한 뒤 쓴다 — 지어내지 않는다. 목적에 맞는 다른 skills · MCP · hooks(ui-visual-check · cpp-build-fix · /verify …)는 사용자 요청 없이도 쓴다. 지금 기준 디자인은 `docs/design/DESIGN_SPEC.md`(v5), 진행 계획은 `docs/superpowers/plans/2026-10-09-design-v5.md`.
+- **해상도 · DPI(사용자 지시 2026-10-09):** 4K · 와이드 · 100–200 % 배율 어디서나 안정이어야 한다. 치수는 논리 픽셀, 아이콘은 dpr별로 굽고, `--ui-audit`는 1280×800 · 1920×1040 · 3440×1440 · 3840×2160과 `QT_SCALE_FACTOR=2`에서 모두 ok여야 한다(계획 Task B5).
 
 @docs/DEV_PROGRESS.md
 
@@ -63,3 +65,9 @@ Remove-Item C:\dev\tmp\kerf-check -Recurse -Force -ErrorAction SilentlyContinue;
 - **Linux · WSL git으로 보면 줄바꿈 탓에 거의 모든 파일이 수정됨(M)으로 보인다.** 이 PC의 Windows git(`core.autocrlf=true`)으로는 깨끗하다. 실제 변경은 `git diff HEAD --ignore-cr-at-eol --stat`로 보고, 그런 환경에서 `git add -A` 하지 않는다. 푸시 명령은 DEV_PROGRESS §4 「푸시 해결」.
 - offscreen 실행에는 앱 옆 `platforms\qoffscreen.dll`이 있어야 한다. windeployqt는 넣지 않는다(`C:\dev\kerf-v4c\app\platforms`에는 이미 있음).
 - 저장소는 **공개**다. 실좌표가 보이는 캡처 · 실제 모델 · 다른 앱(Strata) 캡처를 커밋하지 않는다.
+
+## 소프트웨어 팩토리 (`/factory`)
+- 개발 요청은 `/factory <요청>` · `status` · `next` · `rework <ID>` · `approve <ID>`로 받는다(스킬이 글로 해석하는 인터페이스). 절차 전체는 `.claude/skills/factory/SKILL.md`, 사실 · 명령 · 시험 지도 · 허용오차는 `factory/project-profile.md`, 작업 기록은 `factory/jobs/<ID>/`(형식은 그 폴더 `README.md`).
+- 역할 분리: `spec-writer` → `builder`(유일한 쓰기 역할) → `test-runner` → `code-reviewer` · `correctness-reviewer` · `security-reviewer`(· UI 변경 때 `kerf-ui-reviewer`). 검토자는 제품 코드를 고치지 않는다.
+- 구현은 브랜치 `factory/<ID>` + worktree `C:\dev\kerf-wt\<ID>`(빌드 `C:\dev\kerf-wt\<ID>-build`)에서, 기준은 `feature/design-v2`. 동시 작업 1개. 커밋은 그 브랜치에만(승인 대상 SHA가 필요해서) — 본 저장소 커밋 · push · 병합 · main 변경 · 배포는 사용자가 말할 때만.
+- 실행기 `factory.cmd`(저장소 루트, 한 단계 위 `desc\factory.cmd`도 같은 것) — 어느 폴더에서든 `factory status | new … | verify <ID> | ci <sha>`. 검증은 `factory verify <ID>`(실제 명령 · 종료 코드 · 요약을 `verify.md`에 기록, 화면 변경은 `-UiAudit on -UiSizes 1280x800,1920x1040,3440x1440,3840x2160 -UiScales 1,2`). 미실행 검증을 통과로 쓰지 않는다. 수정 루프 최대 2회, 그 뒤는 needs-human. 모든 작업은 사용자 승인 대기에서 멈춘다. 단계별 superpowers 스킬 · context7 사용 규칙은 `factory/project-profile.md` §11.

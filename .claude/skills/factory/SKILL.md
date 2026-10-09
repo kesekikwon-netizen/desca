@@ -10,9 +10,9 @@ argument-hint: <개발 요청> | status | next | rework <ID> | approve <ID>
 
 ## 0. 먼저 읽는다 (매번)
 1. `factory/project-profile.md` — 명령 · 시험 지도 · 허용오차 · 위험 모듈 · 환경 부족.
-2. `factory/backlog.md` · `powershell -NoProfile -ExecutionPolicy Bypass -File factory/scripts/status.ps1` — 진행 중 작업.
+2. `factory/backlog.md` · `C:\Users\권을\Documents\desc\desca\factory.cmd status`(실행기 — 어느 폴더에서든 됨. 아래 명령은 모두 이 실행기로) — 진행 중 작업.
 3. 작업이 있으면 그 `factory/jobs/<ID>/job.md`(상태 · SHA) 와 단계 파일.
-4. 디자인 v4 ⏸ 단계에 해당하는 요청이면(`docs/DEV_PROGRESS.md` §3) 시작하지 않고 보류로 적고 사용자에게 알린다.
+4. 화면(`app/`)을 바꾸는 요청이면 기준은 **디자인 v5 `docs/design/DESIGN_SPEC.md`**(BINDING)이다. v5 구현 계획 `docs/superpowers/plans/2026-10-09-design-v5.md`(A–I 단계)와 겹치는 요청은 그 계획이 본 저장소에서 진행 중일 수 있으니, 어느 쪽에서 할지 사용자에게 먼저 묻는다(같은 파일을 두 곳에서 고치지 않는다).
 
 ## 1. 입력 해석
 | 입력 | 하는 일 |
@@ -34,7 +34,8 @@ argument-hint: <개발 요청> | status | next | rework <ID> | approve <ID>
 ### queued
 1. 요청을 `factory/backlog.md` 표에 **사용자 말 그대로** 적는다.
 2. `status.ps1` 로 진행 중 작업 확인. 있으면 「대기」로 두고 사용자에게 알리고 끝.
-3. 없으면 `new-job.ps1 -Slug <영문-slug> -Title "<짧은 제목>" -Request "<사용자 말>"`. 출력의 ID · 기준 SHA · worktree 를 확인하고 backlog 의 그 줄에 작업 ID 를 적는다. 상태 `spec`.
+3. 없으면 `factory.cmd new -Slug <영문-slug> -Title "<짧은 제목>" -Request "<사용자 말>"`. 출력의 ID · 기준 SHA · worktree 를 확인하고 backlog 의 그 줄에 작업 ID 를 적는다. 상태 `spec`.
+4. 요청이 모호하거나 설계가 갈리면(어느 층에 둘지 · 화면 자리 · 형식) spec 전에 Skill 도구로 `superpowers:brainstorming` 을 부르고 사용자와 닫는다(AskUserQuestion, 추천 먼저).
 
 ### spec — `spec-writer` 에이전트
 - Agent 도구로 `spec-writer` 를 부른다. 브리프에 넣을 것: 작업 ID · `factory/jobs/<ID>/` 경로 · worktree 경로 · 요청 원문 · 관련 파일 추정 · 「`factory/project-profile.md` §6–§8 을 읽고 완료 기준마다 시험 이름이나 확인 절차를 연결하라」.
@@ -42,28 +43,28 @@ argument-hint: <개발 요청> | status | next | rework <ID> | approve <ID>
 - 상태 `build`.
 
 ### build — `builder` 에이전트(유일한 쓰기 역할)
-- 브리프: 작업 ID · worktree 경로(**여기서만 편집 · 커밋**) · `spec.md` 전문 · 「시험 먼저(실패 확인) → 최소 구현 → `verify.ps1 -Id <ID>` 로 빌드 · 시험 → `build.md` 작성 → `factory/<ID>` 브랜치에 커밋」. 본 저장소(`C:\Users\권을\Documents\desc\desca`)는 읽기만.
+- 브리프: 작업 ID · worktree 경로(**여기서만 편집 · 커밋**) · `spec.md` 전문 · 「`superpowers:test-driven-development` 로 시험 먼저(실패 확인) → 최소 구현(외부 API 는 context7 확인) → `factory.cmd verify <ID>` 로 빌드 · 시험(화면 변경이면 `-UiAudit on -UiSizes 1280x800,1920x1040,3440x1440,3840x2160 -UiScales 1,2`) → `build.md` 작성 → `factory/<ID>` 브랜치에 커밋」. 본 저장소(`C:\Users\권을\Documents\desc\desca`)는 읽기만.
 - builder 가 명세와 다르게 한 것은 `build.md` 「판정」에 있어야 한다. 시험 기대값을 바꿨으면 근거가 있어야 하고, 근거가 「통과시키려고」면 rework 사유.
 - 상태 `verify`.
 
 ### verify — `test-runner` 에이전트
-- 브리프: 작업 ID · 「`verify.ps1 -Id <ID>` 를 돌리고(core/tests 변경이면 `-Full`, app/ 변경이면 ui-audit 포함) `verify.md` 의 완료 기준 표를 채우라. 실패는 기존 실패(profile §9)와 이번 변경의 실패로 나눠 적으라. 제품 코드는 고치지 말라」.
+- 브리프: 작업 ID · 「`superpowers:verification-before-completion` 을 부른 뒤 `factory.cmd verify <ID>` 를 돌리고(core/tests 변경이면 `-Full`, app/ 변경이면 `-UiAudit on -UiSizes 1280x800,1920x1040,3440x1440,3840x2160 -UiScales 1,2`) `verify.md` 의 완료 기준 표를 채우라. 실패는 기존 실패(profile §9)와 이번 변경의 실패로 나눠 적으라. 제품 코드는 고치지 말라」.
 - PASS 이고 완료 기준이 모두 「통과」 또는 「수동(사용자 확인 예정)」 → 상태 `review`. FAIL → `rework`. 환경 부족으로 못 돈 기준이 있으면 그 기준은 「미실행(이유)」로 남기고 승인 보고서에 올린다 — 통과로 쓰지 않는다.
 
 ### review — 검토자 넷(읽기 전용, 병렬)
-- 한 메시지에서 Agent 도구로 `code-reviewer` · `correctness-reviewer` · `security-reviewer` 를 동시에 부른다. `app/` 의 보이는 화면이 바뀌었으면 `kerf-ui-reviewer` 도(캡처는 먼저 `shot.ps1 -Exe <worktree-build>\app\SectionViewer.exe` 로 만들어 경로를 준다).
+- 먼저 Skill 도구로 `superpowers:requesting-code-review` 를 부르고 그 브리프 규칙(결론을 주지 말고 코드 · 명세 · 검증 기록을 준다)을 따른다. 한 메시지에서 Agent 도구로 `code-reviewer` · `correctness-reviewer` · `security-reviewer` 를 동시에 부른다. `app/` 의 보이는 화면이 바뀌었으면 `kerf-ui-reviewer` 도(캡처는 먼저 `shot.ps1 -Exe <worktree-build>\app\SectionViewer.exe` 로 만들어 경로를 준다).
 - 브리프: 작업 ID · worktree 경로 · `git -C <worktree> diff <base_sha>` 범위 · `spec.md` · `verify.md` · 「제품 코드를 고치지 말고 `review.md` 의 자기 절만 채우라. blocking/should/note 로 나누라」.
 - 결과를 `review.md` 「종합」에 적는다: blocking 하나라도 → `rework`(builder 에게 blocking 목록을 그대로). 검토자끼리 결론이 다르면 → `needs-human`. 모두 pass → `ai_review: pass`, **승인 보고서**(§4 양식)를 `approval.md` 에 쓰고 사용자에게 보여 준다. 상태는 `review` 로 두고 **사용자 승인 대기**로 끝낸다.
 
 ### rework
 - `rework_count` 를 1 올린다. 2를 넘으면 `needs-human`(요약: 시도한 가설 · 배운 것 · 선택지).
-- builder 에게 실패 · blocking 목록을 그대로 넘긴다(검토자의 수정 제안을 그대로 받아쓰지 말고 근거를 확인하라고 적는다). 그 뒤 `verify` → `review` 를 다시 돈다.
+- builder 에게 실패 · blocking 목록을 그대로 넘긴다(`superpowers:receiving-code-review` 로 지적을 먼저 검증하고, 맞는 것만 반영 · 틀린 것은 근거를 적어 반론하라고 적는다). 같은 실패가 반복되면 `superpowers:systematic-debugging`. 그 뒤 `verify` → `review` 를 다시 돈다.
 
 ### needs-human
 - `job.md` 상태 기록에 「무엇이 막혔나 · 선택지」를 적고 사용자에게 AskUserQuestion(2–4 선택지, 추천 먼저). 답이 오기 전에는 아무것도 바꾸지 않는다.
 
 ## 4. 승인 (`/factory approve <ID>`)
-전제: `ai_review: pass` 이고, `job.md` 의 `head_sha` 가 worktree 의 지금 HEAD 와 같고 미커밋 변경이 없다(`git -C <worktree> status --porcelain` 비어 있음). 다르면 먼저 `verify.ps1` 를 다시 돌리고 검토를 다시 받은 뒤 재승인을 요청한다.
+전제: `ai_review: pass` 이고, `job.md` 의 `head_sha` 가 worktree 의 지금 HEAD 와 같고 미커밋 변경이 없다(`git -C <worktree> status --porcelain` 비어 있음). 다르면 먼저 `factory.cmd verify <ID>` 를 다시 돌리고 검토를 다시 받은 뒤 재승인을 요청한다.
 1. 승인 보고서를 다시 보여 주고 사용자의 승인 말을 받는다(이 스킬 입력 자체가 승인 말이면 그 글).
 2. `approval.md` 「사용자 승인」 표에 때 · 사용자 말 그대로 · 승인 SHA · 결과. `job.md` `user_approval: approved`, 상태 `approved`.
 3. **여기서 멈춘다.** 병합 · push 는 하지 않는다. 사용자에게 「병합하려면 따로 말해 달라」고 한 줄.
@@ -74,14 +75,16 @@ argument-hint: <개발 요청> | status | next | rework <ID> | approve <ID>
 - 실패 · 미실행 항목과 이유
 - 독립 검토 결과(검토자별 pass/fail · 받아들인 should/note)와 남은 위험
 - 승인 대상 커밋 SHA(기준 → 변경)
+- GitHub Actions: 기준 커밋의 CI 결과(`verify.md` 의 `ci(base)` 줄 — `ci-status.ps1 -Sha <base_sha>`). 기준 커밋이 push 되지 않아 「none」이면 그대로 적는다(통과로 쓰지 않음)
 - 되돌리기 방법(병합 전: 브랜치 미병합 · 병합 뒤: `git revert -m 1 <병합 커밋>`)
 
 ## 5. 병합 (사용자가 approve 뒤 따로 「병합」을 말했을 때만)
 1. 전제 확인: 상태 `approved`, 다른 작업이 `merged` 진행 중이 아님(직렬), 본 저장소 `git status` 에 대상 브랜치 파일과 겹치는 미커밋 변경이 없음. 하나라도 어긋나면 멈추고 알린다.
 2. worktree 에서 최신 대상 브랜치를 **merge**(rebase 금지 — 공유 가능 브랜치 역사 안 바꿈): `git -C <worktree> merge <base_branch>`. 충돌이면 `needs-human`.
-3. `verify.ps1 -Id <ID> -Full` 다시 → PASS 가 아니면 멈춘다. `head_sha` 갱신, 승인 SHA 와 달라졌으니 사용자에게 **재승인**을 받는다(approval.md 「승인 뒤 변경」).
+3. `factory.cmd verify <ID> -Full`(화면 변경이면 크기 · 배율 옵션도) 다시 → PASS 가 아니면 멈춘다. 점검표는 `superpowers:finishing-a-development-branch` 를 따르되 자동 병합 · 브랜치 삭제는 하지 않는다. `head_sha` 갱신, 승인 SHA 와 달라졌으니 사용자에게 **재승인**을 받는다(approval.md 「승인 뒤 변경」).
 4. 재승인 뒤 본 저장소에서 `git merge --no-ff factory/<ID>`(대상 브랜치가 체크아웃돼 있어야 함 — 아니면 멈추고 알린다). 병합 커밋 SHA 를 `approval.md` 「병합」에, `job.md` 상태 `merged`.
 5. push 는 하지 않는다(사용자가 말하면 DEV_PROGRESS §4 명령). worktree · 브랜치 삭제는 사용자 확인 뒤.
+6. **GitHub Actions 확인(push 뒤):** 사용자가 push 했으면 `ci-status.ps1 -Sha <병합 커밋> -Wait` 로 CI(Linux 코어·시험 · Windows 앱·시험·ui-audit)가 **success** 인지 확인하고 결과 줄(결론 · job 별 결론 · URL)을 `approval.md` 「병합」에 적는다. failure 면 `job.md` 상태 기록에 적고 사용자에게 알린다(되돌리기 = `git revert -m 1 <병합 커밋>`, 사용자 결정). `/factory status` 는 merged 작업의 CI 줄이 비어 있으면 「CI 미확인」으로 보여 준다.
 
 ## 6. 검증 규칙 (모든 단계)
 - 완료 기준마다 시험 이름 또는 확인 절차가 붙어야 한다. 없는 기준은 명세 미완.
@@ -92,13 +95,21 @@ argument-hint: <개발 요청> | status | next | rework <ID> | approve <ID>
 - 시험을 통과시키기 위해 기대값 · 단언 · 경고 설정을 바꾸지 않는다. 바꿔야 한다면 근거(계산 · 문서 · 사용자 확인)를 `build.md` 에.
 - 수정 루프 최대 2회. 그 뒤는 `needs-human`.
 
+### 화면(app/) 변경의 고정 완료 기준 (사용자 요구 2026-10-09 「4K · 와이드 모니터 어디서나 안정」)
+- `--ui-audit` 이 **1280x800 · 1920x1040 · 3440x1440 · 3840x2160 × 배율 1 · 2**(`QT_SCALE_FACTOR=2`) 에서 모두 `RESULT ok` — `factory.cmd verify <ID> -UiAudit on -UiSizes 1280x800,1920x1040,3440x1440,3840x2160 -UiScales 1,2` 가 PASS.
+- 캡처(`shot.ps1`)에서 글자 잘림 · 겹침 없음(kerf-ui-reviewer). 치수는 논리 픽셀(Qt 장치 독립 픽셀, context7 `/websites/doc_qt_io_qt-6_8` highdpi), 아이콘은 배율별로 선명.
+- spec-writer 가 이 기준을 빼먹으면 명세 미완으로 돌려보낸다.
+
+### superpowers 스킬 · context7 (사용자 지시: 안정적으로 쓴다)
+단계별 배정은 `factory/project-profile.md` §11 표가 기준이다. 스킬은 Skill 도구로 **실제로 부른다**(이름만 적고 넘어가지 않는다). 부를 수 없으면 `job.md` 상태 기록에 「스킬 X 못 부름 — 절차를 손으로 따름」을 적는다. 외부 API 는 context7 로 확인하고 출처를 `spec.md` · `build.md` 에 남긴다. 도구가 안 보이면 ToolSearch 로 `query-docs` 를 찾는다.
+
 ## 7. 사람 검토 필수 영역 (자동으로 approved 로 가지 않음 — 보고서 맨 위에 표시)
 좌표계 · 단위 · 수직 기준 · 수치 알고리즘(`core/src/engine.cpp` `section.cpp` `srs.cpp` `vdatum.cpp` `raster.cpp`) / 파일 형식 · 기존 데이터 호환(`dxf.cpp` `tiff.cpp` `pointcloud.cpp` `export.cpp` `sheet.cpp` `sheetexport.cpp`, QSettings 키) / 원본 파일 덮어쓰기 · 삭제 / 공통 빌드 설정 · 의존성 · 패키징 · CI(`CMakeLists.txt` `app/CMakeLists.txt` `.github/` `build-*.sh` `packaging/`) / 비밀정보 · 권한 설정(`.claude/settings*.json`, 훅).
 
 ## 8. 하지 않는 것
 - push · main 직접 변경 · 자동 병합 · 배포 · 설치(`winget` `pip` 등) · 시스템 설정 변경.
 - 본 저장소의 사용자 변경을 정리 · 삭제 · 리셋 · stash. `stash@{0}` 건드리지 않음. `git add -A` 금지(줄바꿈만 바뀐 파일).
-- `third_party/` · `docs/design-v4/boards/` 수정. 디자인 v4 ⏸ UI 단계 착수.
+- `third_party/` · `docs/design-v4/boards/` · `docs/design/boards/` 수정. 디자인 v5 스펙과 어긋나는 화면 변경.
 - 사용자가 요청하지 않은 제품 기능 구현. 검토자가 제품 코드를 고치는 것.
 - 실제 모델 · 실좌표 캡처를 저장소에 넣는 것(공개 저장소).
 
