@@ -37,6 +37,7 @@
 
 ## 승인 뒤 변경
 - 승인 뒤 코드가 바뀌면 여기 적고 다시 검증 · 다시 승인(위 표에 새 줄).
+- 2026-10-10 00:00 — SKILL §5-2: worktree 에 최신 `feature/design-v2`(`51269e9`, 본 저장소의 팩토리 기록 · 문서 커밋 7개)를 merge → `b378b3f`(충돌 없음, 제품 코드 변화 없음 — `66737c5` 와 app/ · ci.yml · DESIGN_SPEC diff 동일). §5-3 전체 검증 `factory verify … -Full -UiAudit on -UiSizes 1280x800,1920x1040,3440x1440,3840x2160 -UiScales 1,2` → **RESULT PASS**(build 새 경고 0 · tests(full) 51339 assertions 통과 · asec-section polylines=1 vertices=54 · ui-audit 8× RESULT ok · ci(base) WARN 그대로). 승인 SHA 가 `66737c5` → `b378b3f` 로 바뀌므로 재승인 요청.
 
 ## 병합 (사용자가 따로 「병합」을 말한 뒤에만)
 - 최신 대상 브랜치와 통합한 커밋 · 다시 돈 검증(verify.md 블록 시각):

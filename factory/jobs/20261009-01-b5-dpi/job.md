@@ -10,11 +10,11 @@ base_sha: 0f7fbfed7455c0c6db308af386ae935b27d6f77e
 branch: factory/20261009-01-b5-dpi
 worktree: C:\dev\kerf-wt\20261009-01-b5-dpi
 build_dir: C:\dev\kerf-wt\20261009-01-b5-dpi-build
-head_sha: 66737c515c4deac0b4ba08fbc4ff75af9f0252eb
-last_verify: PASS (2026-10-09 23:14)
+head_sha: b378b3f38811375d08fc6fa19f7f75992c7e6184
+last_verify: PASS (2026-10-09 23:54)
 human_review_required: CI(`.github/workflows/ci.yml` Linux 작업 삭제 + 감사 판정 방식 변경, SKILL §7) · 화면/감사(`app/main.cpp` `app/mainwindow_ui.cpp` --ui-audit 기대값 추가, profile §8)
 created: 2026-10-09 21:37
-updated: 2026-10-09 23:14
+updated: 2026-10-09 23:54
 ---
 # 20261009-01-b5-dpi — 디자인 v5 B5 해상도 · DPI 안정성(4K · 와이드 · 배율, Windows만)
 
