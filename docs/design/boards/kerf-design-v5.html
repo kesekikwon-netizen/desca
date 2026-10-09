@@ -1,0 +1,676 @@
+<meta charset="utf-8">
+<title>Kerf 디자인 v5</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&family=Noto+Serif+KR:wght@500&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+/* 레이아웃: 설명 글 한 줄 폭(최대 1480px) 안에 1920×1040 화판을 축소해 차례로 놓는다. 화판 자체는 Strata 「조용한 도판」 토큰(빛 테마 고정), 바깥 페이지만 어둡게도 된다. */
+:root{
+  --bg:#F3F1EA; --fg:#141413; --muted:#5E5D59; --line:#D9D6CA; --card:#FBFAF6; --accent:#B5573A; --accent-ink:#8F4229;
+  --sans:"Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+  --serif:"Noto Serif KR",Batang,serif;
+  --mono:"IBM Plex Mono",Consolas,"Cascadia Mono",monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#1C1B18; --fg:#EDEAE1; --muted:#A8A49A; --line:#3A3833; --card:#262521; --accent:#D97757; --accent-ink:#E8A58A; color-scheme:dark } }
+:root[data-theme="dark"]{ --bg:#1C1B18; --fg:#EDEAE1; --muted:#A8A49A; --line:#3A3833; --card:#262521; --accent:#D97757; --accent-ink:#E8A58A; color-scheme:dark }
+body{ background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:14px; line-height:1.6; }
+.page{ max-width:1480px; margin:0 auto; padding-inline:16px; padding-block:32px 64px; }
+h1{ font-family:var(--serif); font-weight:500; font-size:40px; line-height:1.2; margin:0; text-wrap:balance; }
+h2{ font-family:var(--serif); font-weight:500; font-size:24px; margin:0; text-wrap:balance; }
+h3{ font-size:14px; font-weight:700; margin:0; }
+p{ margin:0; max-width:72ch; }
+.lead{ color:var(--muted); font-size:15px; margin-top:8px; }
+.eyebrow{ font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.sect{ margin-top:48px; display:grid; gap:16px; }
+.rule{ border:0; border-top:1px solid var(--line); margin:0; }
+table.t{ border-collapse:collapse; width:100%; font-size:13px; }
+table.t th,table.t td{ text-align:left; padding:8px 10px; vertical-align:top; border-bottom:1px solid var(--line); }
+table.t th{ color:var(--muted); font-weight:400; font-size:12px; border-top:1px solid var(--fg); }
+table.t tr:last-child td{ border-bottom:1px solid var(--fg); }
+.twrap{ overflow-x:auto; min-width:0; }
+.mono{ font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.chips{ display:flex; flex-wrap:wrap; gap:8px; }
+.chip{ font-size:12px; border:1px solid var(--line); border-radius:8px; padding:2px 10px; background:var(--card); }
+.chip b{ color:var(--accent-ink); }
+.boardwrap{ display:grid; gap:12px; }
+.bhead{ display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 16px; }
+.bhead .num{ font-family:var(--mono); color:var(--muted); font-size:13px; }
+.bhead p{ color:var(--muted); font-size:13px; flex-basis:100%; }
+.btools{ margin-left:auto; display:flex; gap:8px; }
+.btools button{ font:inherit; font-size:12px; border:1px solid var(--line); background:var(--card); color:var(--fg); border-radius:8px; padding:3px 10px; cursor:pointer; }
+.btools button:focus-visible{ outline:2px solid var(--fg); outline-offset:1px; }
+.frame{ width:100%; aspect-ratio:1920/1040; position:relative; overflow:hidden; border:1px solid var(--line); background:#FAF9F5; max-width:100%; }
+.frame.full{ aspect-ratio:auto; height:1060px; overflow:auto; }
+.frame.full .b{ transform:none !important; }
+.b{ position:absolute; left:0; top:0; width:1920px; height:1040px; transform-origin:0 0; transform:scale(var(--s,1));
+  --ground:#FAF9F5; --surface:#FFFFFF; --wash:#F5F4ED; --desk:#F0EEE6; --press:#E8E6DC; --oat:#E3DACC; --hand:#30302E; --ink:#141413; --ink2:#3D3D3A; --mu:#5E5D59; --faint:#73726C; --ln:#DEDCD1; --edge:#C2C0B6; --ring:#B0AEA5; --cedge:#87867F; --action:#B5573A; --clay:#D97757; --claytext:#9C4A2F; --block:#A33B3B; --blockwash:#F3DEDA; --caution:#7A5A00; --done:#3F6B31; --red:#FF0000; --tan:#C9A77C;
+  background:var(--ground); color:var(--ink); font-family:var(--sans); font-size:13px; line-height:20px; display:flex; flex-direction:column; overflow:hidden; color-scheme:light; }
+.b *{ box-sizing:border-box; }
+.b .ser{ font-family:var(--serif); font-weight:500; }
+.b .mo{ font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.b .mu{ color:var(--mu); } .b .fa{ color:var(--faint); } .b .cap{ font-size:11px; line-height:16px; color:var(--mu); } .b .lab{ font-size:12px; line-height:18px; color:var(--mu); }
+.b svg{ display:block; }
+/* 창 머리 */
+.capbar{ height:32px; display:flex; align-items:center; gap:8px; padding:0 12px; font-size:12px; color:var(--ink2); background:var(--ground); }
+.capbar .appico{ width:16px; height:16px; border-radius:3px; background:var(--action); display:grid; place-items:center; }
+.capbar .win{ margin-left:auto; display:flex; gap:28px; color:var(--mu); font-size:12px; }
+/* 리본 */
+.ribbon{ display:flex; align-items:flex-start; padding:0 12px 0 8px; background:var(--ground); border-bottom:1px solid var(--ln); position:relative; }
+.rg{ display:flex; flex-direction:column; padding:8px 4px 0; }
+.rcap{ font-size:11px; line-height:16px; font-weight:700; color:var(--mu); padding-left:4px; height:16px; }
+.rcap.dim{ color:var(--edge); }
+.rrow{ display:flex; align-items:flex-start; gap:0; }
+.rsep{ width:1px; background:var(--ln); align-self:stretch; margin:8px 2px 10px; }
+.chipb{ display:flex; flex-direction:column; align-items:center; gap:4px; padding:0 4px; }
+.tile{ border-radius:12.5px; background:var(--desk); display:grid; place-items:center; color:var(--hand); border:1px solid transparent; }
+.chipb.on .tile{ background:var(--hand); color:var(--ground); border-color:var(--hand); }
+.chipb.shown .tile{ background:var(--oat); border-color:var(--ring); color:var(--ink); }
+.chipb.clay .tile{ background:var(--action); color:#fff; border-color:var(--action); }
+.chipb.dis .tile{ background:var(--wash); color:var(--ring); }
+.chipb.dis .tl{ color:#9C9A92; }
+.chipb.on .tl,.chipb.shown .tl,.chipb.clay .tl{ font-weight:700; }
+.tl{ font-size:13px; line-height:18px; white-space:nowrap; color:var(--ink); }
+.rright{ margin-left:auto; display:flex; gap:8px; align-items:center; align-self:center; }
+.rbtn{ height:40px; padding:0 12px; border:1px solid var(--edge); border-radius:8px; background:var(--surface); display:flex; align-items:center; gap:6px; font-size:13px; }
+.rsearch{ width:150px; height:32px; border:1px solid var(--edge); border-radius:8px; background:var(--surface); display:flex; align-items:center; gap:6px; padding:0 10px; color:var(--faint); font-size:12px; }
+.rwidget{ display:flex; align-items:center; gap:6px; height:50px; padding:0 6px; }
+.seg{ display:inline-flex; }
+.seg span{ height:24px; padding:0 7px; border:1px solid var(--edge); border-left-width:0; display:grid; place-items:center; font-family:var(--mono); font-size:12px; background:var(--surface); }
+.seg span:first-child{ border-left-width:1px; border-radius:6px 0 0 6px; } .seg span:last-child{ border-radius:0 6px 6px 0; }
+.seg span.sel{ background:var(--oat); border-color:var(--ink); border-left-width:1px; }
+.num{ height:32px; min-width:72px; border:1px solid var(--edge); border-radius:8px; background:var(--surface); display:flex; align-items:center; justify-content:flex-end; gap:4px; padding:0 8px; font-family:var(--mono); font-size:13px; }
+.num .u{ color:var(--faint); font-family:var(--sans); font-size:12px; }
+/* 문서 탭 */
+.tabs{ height:36px; background:var(--desk); border-bottom:1px solid var(--ln); display:flex; align-items:flex-end; padding:0 8px; }
+.tab{ height:30px; margin:0 2px 0 0; padding:0 14px; display:flex; align-items:center; gap:6px; color:var(--ink2); border:1px solid transparent; border-bottom:none; }
+.tab.cur{ background:var(--ground); color:var(--ink); font-weight:700; border-color:var(--ln); border-radius:4px 4px 0 0; height:36px; margin-bottom:-1px; }
+.tabcorner{ margin-left:auto; align-self:center; font-size:13px; color:var(--mu); padding-right:8px; }
+/* 작업 영역 */
+.pagearea{ flex:1; display:flex; min-height:0; }
+.panel{ background:var(--ground); padding:16px; display:flex; flex-direction:column; gap:0; }
+.split{ width:7px; background:var(--ground); position:relative; }
+.split::after{ content:""; position:absolute; left:3px; top:0; bottom:0; width:1px; background:var(--ln); }
+.ph{ height:32px; display:flex; align-items:center; gap:8px; }
+.ph .t{ font-weight:400; font-size:13px; color:var(--ink); }
+.ph .n{ color:var(--mu); }
+.quiet{ height:24px; padding:0 8px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--ink); }
+.quiet.on{ background:var(--oat); box-shadow:inset 0 0 0 1px var(--ring); }
+.scap{ display:flex; align-items:center; gap:8px; margin:16px 0 8px; }
+.scap::after{ content:""; flex:1; height:1px; background:var(--ln); }
+.row{ display:flex; align-items:center; gap:8px; height:48px; padding:0 8px; margin:0 -8px; border-radius:0; }
+.row.sel{ background:var(--oat); }
+.row .th{ width:56px; height:32px; border:1px solid var(--ln); background:var(--surface); flex:none; }
+.row .nm{ font-size:13px; } .row .sub{ font-size:11px; line-height:16px; color:var(--mu); font-family:var(--mono); }
+.row .st{ margin-left:auto; font-size:11px; color:var(--mu); white-space:nowrap; }
+.cb{ width:14px; height:14px; border:1px solid var(--cedge); border-radius:4px; background:var(--surface); flex:none; display:grid; place-items:center; }
+.cb.on{ background:var(--ink); border-color:var(--ink); color:#fff; }
+.view{ flex:1; display:flex; flex-direction:column; min-width:0; background:var(--surface); }
+.vh{ height:32px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--ln); background:var(--ground); }
+.vh.act{ border-bottom:2px solid var(--ink); }
+.vh .t{ font-weight:700; }
+.vh .mu{ font-size:12px; }
+.tg{ display:inline-flex; border:1px solid var(--ln); border-radius:6px; padding:1px; background:var(--surface); gap:1px; }
+.tg span{ width:24px; height:22px; display:grid; place-items:center; border-radius:4px; background:var(--wash); color:var(--ink2); }
+.tg span.on{ background:var(--surface); box-shadow:inset 0 0 0 1px var(--ring); color:var(--ink); }
+.vbtn{ height:24px; padding:0 8px; border-radius:6px; border:1px solid transparent; display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--ink2); }
+.vbtn.box{ border-color:var(--edge); background:var(--surface); }
+.vb{ width:24px; height:24px; display:grid; place-items:center; border-radius:6px; color:var(--ink2); }
+.vspace{ flex:1; }
+.info{ height:24px; display:flex; align-items:center; gap:12px; padding:0 12px; background:var(--wash); border-bottom:1px solid var(--ln); font-size:12px; color:var(--ink2); }
+.canvas{ flex:1; position:relative; min-height:0; overflow:hidden; }
+.canvas svg{ width:100%; height:100%; }
+/* 떠 있는 요소 */
+.ov{ position:absolute; background:var(--surface); border:1px solid var(--edge); border-radius:8px; box-shadow:0 2px 12px rgba(20,20,19,.12); }
+.guide{ top:12px; left:12px; height:36px; display:flex; align-items:center; gap:12px; padding:0 12px; }
+.guide .tool{ display:flex; align-items:center; gap:6px; font-size:13px; }
+.guide .r{ width:1px; height:16px; background:var(--ln); }
+.guide .s{ font-size:12px; color:var(--mu); }
+.guide .k{ font-family:var(--mono); font-size:11px; color:var(--ink2); background:var(--wash); border:1px solid var(--edge); border-radius:4px; padding:0 5px; line-height:16px; }
+.undo{ top:12px; display:flex; height:36px; }
+.undo span{ width:36px; display:grid; place-items:center; color:var(--ink2); }
+.undo span+span{ border-left:1px solid var(--ln); }
+.zoomcol{ top:12px; right:12px; width:36px; display:flex; flex-direction:column; }
+.zoomcol span{ height:36px; display:grid; place-items:center; color:var(--ink2); }
+.zoomcol span+span{ border-top:1px solid var(--ln); }
+.sbar{ position:absolute; left:12px; bottom:12px; display:flex; align-items:flex-end; gap:12px; font-family:var(--mono); font-size:11px; }
+.compass{ position:absolute; right:12px; bottom:12px; width:40px; display:flex; flex-direction:column; align-items:center; gap:2px; font-size:11px; color:var(--ink2); }
+.toolstrip{ bottom:16px; left:50%; transform:translateX(-50%); display:flex; }
+.toolstrip div{ width:64px; height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:11px; line-height:14px; color:var(--ink2); }
+.toolstrip div+div{ border-left:1px solid var(--ln); }
+.toolstrip div.on{ background:var(--hand); color:var(--ground); }
+/* 오른쪽 판 */
+.insp .hd{ display:flex; align-items:center; gap:8px; height:32px; }
+.insp .hd .t{ font-size:13px; }
+.insp .hd .c{ color:var(--mu); font-size:12px; }
+.insp .hd .x{ margin-left:auto; width:24px; height:24px; border:1px solid var(--edge); border-radius:6px; display:grid; place-items:center; color:var(--ink2); }
+.insp .name{ font-family:var(--serif); font-weight:500; font-size:20px; line-height:28px; margin-top:8px; }
+.ledger{ border-top:1px solid var(--ink); border-bottom:1px solid var(--ln); margin:8px 0; }
+.ledger .lr{ height:36px; display:flex; align-items:baseline; justify-content:space-between; }
+.ledger .lr .v{ font-family:var(--mono); font-size:20px; }
+.ledger .lr .v i{ font-style:normal; font-family:var(--sans); font-size:12px; color:var(--faint); margin-left:4px; }
+.spec{ display:flex; align-items:baseline; gap:8px; height:24px; font-size:12px; }
+.spec .l{ color:var(--mu); white-space:nowrap; } .spec .d{ flex:1; border-bottom:1px dotted var(--edge); transform:translateY(-4px); } .spec .v{ font-family:var(--mono); font-size:12px; white-space:nowrap; } .spec .v i{ font-style:normal; color:var(--faint); font-family:var(--sans); }
+.btn{ height:32px; padding:0 16px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; gap:6px; font-size:13px; border:1px solid var(--edge); background:var(--surface); color:var(--ink); min-width:88px; white-space:nowrap; }
+.btn.pri{ background:var(--action); border-color:var(--action); color:#fff; font-weight:700; }
+.btn.dis{ background:var(--press); color:var(--faint); border-color:var(--press); }
+.btn.lg{ height:40px; font-size:15px; padding:0 20px; }
+.frow{ display:flex; align-items:center; gap:8px; min-height:32px; }
+.frow .fl{ width:64px; font-size:12px; color:var(--mu); flex:none; }
+.inp{ height:32px; flex:1; border:1px solid var(--edge); border-radius:8px; background:var(--surface); display:flex; align-items:center; padding:0 10px; font-size:13px; min-width:0; }
+.inp.ro{ background:var(--wash); color:var(--ink2); }
+.panel > .inp{ flex:0 0 auto; }
+.mark{ display:inline-flex; align-items:center; gap:6px; font-size:12px; }
+.dot{ width:6px; height:6px; border-radius:50%; background:var(--clay); display:inline-block; }
+/* 상태줄 */
+.status{ height:32px; border-top:1px solid var(--ln); background:var(--ground); display:flex; align-items:center; padding:0 16px; font-size:12px; }
+.status .msg{ color:var(--mu); }
+.status .cells{ margin-left:auto; display:flex; align-items:center; }
+.status .cell{ display:flex; align-items:center; gap:6px; padding:0 12px; border-left:1px solid var(--ln); height:16px; }
+.status .cell .k{ color:var(--mu); font-size:11px; }
+.status .cell .v{ font-family:var(--mono); min-width:96px; text-align:right; }
+.badge{ height:24px; border:1px solid var(--action); color:var(--claytext); font-weight:700; border-radius:8px; padding:0 8px; display:inline-flex; align-items:center; gap:4px; font-size:12px; background:var(--surface); }
+.badge.warn{ border-color:var(--caution); color:var(--caution); }
+/* 홈 */
+.home{ flex:1; padding:24px 48px 0; display:grid; grid-template-columns:420px 1fr; grid-template-rows:auto auto 1fr auto; gap:24px 48px; min-height:0; }
+.hero{ grid-row:1; display:flex; flex-direction:column; gap:12px; padding-top:40px; }
+.hero .nm{ display:flex; align-items:center; gap:14px; }
+.hero .big{ font-family:var(--serif); font-weight:500; font-size:40px; line-height:48px; }
+.hero .sub{ font-size:15px; color:var(--mu); border-left:1px solid var(--edge); padding-left:14px; }
+.ccard{ grid-row:1; border:1px solid var(--ink); background:var(--surface); display:grid; grid-template-columns:1fr 280px; }
+.ccard .in{ padding:16px 20px; }
+.ccard .cells{ display:grid; grid-template-columns:repeat(6,1fr); border-top:1px solid var(--ln); }
+.ccard .cells div{ padding:8px 12px; border-left:1px solid var(--ln); min-height:48px; }
+.ccard .cells div:first-child{ border-left:none; }
+.ccard .cells .k{ font-size:11px; color:var(--mu); line-height:16px; } .ccard .cells .v{ font-size:13px; }
+.ccard .side{ border-left:1px solid var(--ln); padding:16px 20px; display:flex; flex-direction:column; gap:12px; }
+.recent{ grid-column:1 / 2; grid-row:2 / 4; display:flex; flex-direction:column; min-height:0; }
+.recent.wide{ grid-column:1 / 3; }
+.ttab{ width:100%; border-collapse:collapse; font-size:13px; border-top:1px solid var(--ink); }
+.ttab th{ height:28px; text-align:left; font-weight:400; font-size:11px; color:var(--mu); border-bottom:1px solid var(--ln); padding:0 8px; }
+.ttab td{ height:48px; padding:0 8px; border-bottom:1px solid var(--press); vertical-align:middle; }
+.ttab tr:last-child td{ border-bottom:1px solid var(--ink); }
+.ttab .r{ text-align:right; }
+.steps{ grid-column:2; grid-row:2; display:flex; flex-direction:column; gap:14px; }
+.step{ display:flex; gap:12px; }
+.step .m{ width:22px; height:22px; border-radius:50%; border:1px solid var(--cedge); display:grid; place-items:center; font-size:11px; flex:none; }
+.step .m.ok{ background:var(--ink); border-color:var(--ink); color:#fff; }
+.step .m.now{ border-color:var(--clay); color:var(--claytext); }
+.step .tt{ font-size:13px; } .step .tt b{ font-weight:700; } .step .ds{ font-size:12px; color:var(--mu); line-height:18px; max-width:40ch; }
+.keys{ grid-column:1 / 3; grid-row:4; border-top:1px solid var(--ln); padding:12px 0 16px; display:flex; gap:32px; align-items:center; flex-wrap:wrap; }
+.kbd{ font-family:var(--mono); font-size:11px; color:var(--ink2); background:var(--surface); border:1px solid var(--edge); border-bottom-width:2px; border-radius:4px; padding:0 6px; line-height:18px; }
+.keys .kk{ display:flex; gap:8px; align-items:center; font-size:12px; color:var(--ink2); }
+/* 도면 */
+.desk{ flex:1; background:var(--desk); position:relative; display:grid; place-items:center; min-width:0; }
+.paper{ background:var(--surface); border:1px solid var(--edge); position:relative; }
+.paper svg{ position:absolute; inset:0; width:100%; height:100%; }
+.tiles{ display:flex; gap:8px; flex-wrap:wrap; }
+.tilei{ width:72px; height:56px; border:1px solid var(--edge); border-radius:8px; background:var(--surface); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; font-size:11px; color:var(--ink2); }
+.tilei.on{ background:var(--oat); box-shadow:inset 0 0 0 1px var(--ring); color:var(--ink); }
+.tilei.dis{ color:var(--ring); }
+.scales{ display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
+.scales span{ height:24px; border:1px solid var(--edge); border-radius:6px; display:grid; place-items:center; font-family:var(--mono); font-size:12px; background:var(--surface); }
+.scales span.sel{ background:var(--oat); border-color:var(--ink); }
+.chk{ background:var(--surface); border:1px solid var(--ln); padding:12px; display:flex; flex-direction:column; gap:6px; font-size:12px; }
+.chk .it{ display:flex; gap:8px; align-items:flex-start; line-height:18px; }
+.chk .it a{ color:var(--claytext); text-decoration:underline; }
+.foot{ margin-top:auto; border-top:1px solid var(--ln); padding-top:12px; display:flex; gap:8px; align-items:center; }
+/* 대화 창 · 부품 */
+.dlg{ background:var(--ground); border:1px solid var(--edge); box-shadow:0 8px 24px rgba(20,20,19,.14); display:flex; flex-direction:column; }
+.dlg .dcap{ height:32px; background:var(--ground); display:flex; align-items:center; padding:0 12px; font-size:12px; color:var(--ink2); border-bottom:1px solid var(--ln); }
+.dlg .dbody{ padding:24px; display:flex; flex-direction:column; gap:12px; }
+.dlg .dfoot{ display:flex; gap:8px; align-items:center; margin-top:12px; }
+.sw{ display:flex; flex-direction:column; gap:4px; font-size:11px; }
+.sw i{ display:block; width:88px; height:44px; border:1px solid var(--ln); }
+.swgrid{ display:flex; gap:12px; flex-wrap:wrap; }
+.ico{ display:flex; flex-direction:column; align-items:center; gap:4px; width:76px; font-size:10px; color:var(--mu); text-align:center; }
+.ico .tile{ width:50px; height:50px; }
+.flow{ flex:1; padding:48px; display:flex; flex-direction:column; gap:32px; }
+.frow2{ display:flex; align-items:stretch; gap:0; }
+.fbox{ width:220px; border:1px solid var(--ink); background:var(--surface); padding:12px 14px; display:flex; flex-direction:column; gap:4px; }
+.fbox .h{ font-weight:700; } .fbox .d{ font-size:12px; color:var(--mu); line-height:18px; }
+.fbox.ext{ border-style:dashed; border-color:var(--cedge); background:var(--ground); }
+.farrow{ width:56px; display:grid; place-items:center; color:var(--mu); font-size:20px; }
+.layers{ border:1px solid var(--ln); background:var(--surface); display:grid; grid-template-columns:200px 1fr 120px 90px; font-size:12px; }
+.layers div{ padding:6px 12px; border-bottom:1px solid var(--press); }
+.layers .h{ color:var(--mu); font-size:11px; border-bottom:1px solid var(--ln); }
+@media (max-width:640px){ h1{ font-size:30px } .frame.full{ height:640px } }
+@media (prefers-reduced-motion: no-preference){ .frame{ transition:none } }
+</style>
+
+<div class="page">
+  <div class="eyebrow">Kerf · 발굴 평·단면 · 디자인 보완 2026-10-09</div>
+  <h1 style="margin-top:8px">Kerf 디자인 v5</h1>
+  <p class="lead">GIS 앱 Strata(hgis)와 같은 손이 만든 것으로 보이도록, 리본 · 문서 탭 · 판 · 상태줄 · 아이콘을 Strata 「조용한 도판」 사양의 치수 그대로 옮긴 화판 8장. 색 · 글꼴 토큰은 두 앱이 이미 같다. 모든 수치는 합성 시험 모델(EPSG:5186 · X 200,002–200,014 · Y 450,006)의 값이다.</p>
+  <div class="chips" style="margin-top:16px">
+    <span class="chip">C1 리본 <b>Strata와 동일</b></span><span class="chip">C2 탭 <b>홈 · 단면 · 도면 상시</b></span><span class="chip">C3 홈 <b>Strata 뼈대</b></span><span class="chip">C4 안내 <b>떠 있는 칩</b></span><span class="chip">C5 도면 판 <b>Strata 부품 + 도면 점검</b></span><span class="chip">C6 상태줄 <b>배지 둘</b></span><span class="chip">C7 아이콘 <b>Lucide SVG</b></span><span class="chip">선 굵기 <b>10 cm 0.2 pt · 50 cm 0.5 pt</b></span>
+  </div>
+
+  <div class="sect">
+    <h2>공통 디자인 언어 — Strata 값을 그대로</h2>
+    <div class="twrap"><table class="t">
+      <tr><th style="width:120px">요소</th><th>Strata(hgis) 사양</th><th>Kerf v5</th></tr>
+      <tr><td>창 쌓기</td><td>창 머리 32 · 리본 118 · 문서 탭 36 · 작업 영역 · 상태줄 32 (1920×1040 기준)</td><td>같음. 1040 − 32 − 118 − 36 − 32 = 작업 영역 822 px</td></tr>
+      <tr><td>리본</td><td>탭 없음. 묶음 이름 11 px/700 위, 타일 50 px(둥글기 12.5) 안 아이콘 28 px, 글자 13 px 아래, 칩 폭 58. 창이 좁으면 타일 56 → 34 → 글자 숨김 → 32 · 24 · 20</td><td>묶음 7: 모델 · 단면 · 입면 · 보기 · 자료 · 내보내기 · 기타. 오른쪽 끝 「좌표 입력」 40 px 단추 + 「단면 찾기」 158×32 칸</td></tr>
+      <tr><td>타일 상태</td><td>도구 켜짐 = 먹색 채움 + 미색 아이콘 · 보기 켜짐 = 귀리색 + 테 · 저장 안 됨 = 흙색</td><td>같음. 흙색 타일은 한 화면에 하나: 단면 탭 「도면」, 홈 「이어서 열기」, 도면 탭 「SVG 저장」</td></tr>
+      <tr><td>문서 탭</td><td>36 px 줄, 아이콘 16 + 글자, 고른 탭 = 미색 바탕 + 테. 오른쪽 구석에 조사 이름 · 저장 상태</td><td>홈 · 단면 · 도면(×). 늘 보임. 구석 「Production_2 · 저장됨」</td></tr>
+      <tr><td>판</td><td>왼쪽 348 · 오른쪽 272 · 도면 오른쪽 320 · 분할선 7(가운데 1 px 선) · 안쪽 여백 16</td><td>같은 값. 왼쪽 「단면 목록」, 오른쪽 「선택한 단면」(읽기 전용), 도면 오른쪽 「고른 도면」</td></tr>
+      <tr><td>안내</td><td>화면 왼쪽 위 떠 있는 띠 36 px(아이콘 + 도구 이름 + 선 + 문장) + 되돌리기 · 다시 73×36</td><td>평면 화면 왼쪽 위 「단면선 긋기 › A′ 찾는 중 · 끝점 A′를 클릭하세요 Esc」. 리본 아래 도구 줄 없앰</td></tr>
+      <tr><td>상태줄</td><td>왼쪽 다음 할 일 한 문장 · 오른쪽 셀(1×16 선으로 나눔): X · Y 모노 96 px · 축척 · 「작업 5186 · 중부원점 ▾」 흙색 테 배지 · → 제출 5179</td><td>한 문장 · X · Y · Z · 「수평 5186 · 중부원점 ▾」 · 「높이 KVD1964 ▾」 (높이가 확인 전이면 노란 테 ▲)</td></tr>
+      <tr><td>아이콘</td><td>Lucide SVG, 24 격자 · 선 2. 탭 · 메뉴 16, 떠 있는 단추 20, 리본 28</td><td>같은 규격. Strata에 있는 것은 파일 재사용(열기 · 최근 · 닫기 · 목록 · 검색 · 인쇄 · 되돌리기 …), Kerf 전용 14개를 같은 격자로 새로 그림(화판 7)</td></tr>
+      <tr><td>글꼴 · 색</td><td>이름은 명조(20 px 이상에서만) · 잰 값은 모노 · 나머지 고딕. 종이 #FAF9F5 · 먹 #141413 · 흙색 #B5573A</td><td>그대로. 단면선 · 잘린 선 #FF0000는 자료 색이라 그대로</td></tr>
+    </table></div>
+  </div>
+
+  <div id="boards" class="sect" style="gap:48px"></div>
+
+  <div class="sect">
+    <h2>이 디자인이 바꾸는 코드</h2>
+    <div class="twrap"><table class="t">
+      <tr><th style="width:200px">화판</th><th>바뀌는 곳</th><th>잠그는 시험</th></tr>
+      <tr><td>2 · 3 리본 · 탭 · 안내 · 상태줄</td><td><span class="mono">app/mainwindow_ui.cpp</span> buildRibbon() 재작성(Strata KaBeginnerRibbon 방식, Q_OBJECT 없이 크기 단계 6개) · buildCtxBar() → 떠 있는 칩 · 문서 탭 상시 · 상태줄 배지 둘</td><td><span class="mono">--ui-audit</span> 기대값: tabs=3(home·section·sheet), ribbon rows=1 groups=7, chip-sizes=6, clay=1</td></tr>
+      <tr><td>1 홈</td><td>시작 화면 재배치(작업 순서 세 걸음 · 처음 쓰는 키 줄)</td><td><span class="mono">--start-shot</span> 캡처 비교</td></tr>
+      <tr><td>4 · 5 도면 판</td><td><span class="mono">app/sheetexport.cpp</span> 오른쪽 판 · 종이 아래 도구 줄 · 축척 격자 · 레벨선 굵기 pt</td><td><span class="mono">core</span> 레벨선 계획에 pt→mm 변환 시험(0.2 pt = 0.0706 mm · 0.5 pt = 0.1764 mm), SVG stroke-width 검사</td></tr>
+      <tr><td>7 아이콘</td><td><span class="mono">app/theme.hpp</span> icon() → Qt Svg로 <span class="mono">app/icons/*.svg</span> 읽기(Strata 파일 복사 + Kerf 14개)</td><td><span class="mono">--icon-sheet</span> 캡처 · 아이콘 없는 단추 0</td></tr>
+      <tr><td>3 잘린 돌 칠하기</td><td>H 도구 · 리본 타일 · 조판 빗금 줄(core hatchPolygon · closeCutRegion은 이미 있음)</td><td>합성 모델 영역 2개 → 화면 · SVG · DXF 캡처, 층 SECTION_CUT_FILL · SECTION_CUT_OUTLINE</td></tr>
+    </table></div>
+    <p class="lead">승인되면 이 페이지의 화판 HTML을 저장소 <span class="mono">desca/docs/design/</span>에 넣고 스펙 문서를 쓴 뒤, 구현 계획(writing-plans)으로 넘어간다. 그 뒤 design-v2 · design-v4 · 옛 PNG는 확인을 받고 지운다.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+// ---------- 아이콘 (Lucide 규격: 24 격자 · 선 2 · 둥근 끝)
+const P = {
+  open:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  recent:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  close:'<path d="M18 6 6 18M6 6l12 12"/>',
+  draw:'<circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M6.5 17.5 17.5 6.5M9 11l2 2M13 7l2 2"/>',
+  add:'<path d="M12 5v14M5 12h14"/>',
+  flip:'<path d="M8 3 4 7l4 4M4 7h16M16 21l4-4-4-4M20 17H4"/>',
+  move:'<path d="M3 6h18M3 18h18M12 9v6M9 12l3 3 3-3"/>',
+  hatch:'<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 12l8-8M4 20 20 4M12 20l8-8"/>',
+  outline:'<path d="M5 9l4-5 9 2 2 8-6 6-8-2z"/><circle cx="5" cy="9" r="1.5" fill="currentColor"/><circle cx="20" cy="14" r="1.5" fill="currentColor"/>',
+  list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  plan:'<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>',
+  section:'<path d="M3 9h5l2 8h4l2-8h5"/>',
+  contrast:'<circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor"/>',
+  csv:'<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h8"/>',
+  geotiff:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+  xyz:'<circle cx="7" cy="16" r="1.5"/><circle cx="11" cy="9" r="1.5"/><circle cx="16" cy="13" r="1.5"/><circle cx="19" cy="6" r="1.5"/><path d="M3 21V3M3 21h18"/>',
+  las:'<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
+  sections:'<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 2h6v4H9zM9 12h6M9 16h6"/>',
+  sheet:'<rect x="4" y="3" width="16" height="18" rx="1"/><rect x="7" y="6" width="10" height="8"/><path d="M7 17h10"/>',
+  keys:'<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',
+  more:'<circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/>',
+  home:'<path d="M3 11 12 3l9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  undo:'<path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 1 3 6.7"/>',
+  redo:'<path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 0-3 6.7"/>',
+  zoomin:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8 11h6M11 8v6"/>',
+  zoomout:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8 11h6"/>',
+  fit:'<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  chev:'<path d="m6 9 6 6 6-6"/>',
+  check:'<path d="m5 12 5 5L20 7"/>',
+  warn:'<path d="m12 3 10 18H2z"/><path d="M12 10v4M12 17h.01"/>',
+  height:'<path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/>',
+  xy:'<circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
+  image:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/>',
+  line:'<path d="M3 15c3 0 4-6 7-6s4 6 7 6 3-4 4-4"/>',
+  levels:'<path d="M3 7h18M3 12h18M3 17h18"/>',
+  fade:'<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/>',
+  vex:'<path d="M4 20h16M12 16V4M8 8l4-4 4 4"/>',
+  top:'<path d="M12 3 4 7l8 4 8-4z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/>',
+  paper:'<rect x="4" y="6" width="16" height="12" rx="1"/><path d="M14 2l3 3-3 3"/>',
+  edit:'<path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>',
+  print:'<path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7"/>',
+  save:'<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>',
+  north:'<path d="m12 2 5 18-5-4-5 4z"/>',
+  legend:'<rect x="3" y="4" width="6" height="5"/><path d="M12 6h9M12 12h9M12 18h9"/><rect x="3" y="15" width="6" height="5"/>',
+  titleb:'<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 14h18M11 14v6"/>',
+  scalebar:'<path d="M3 12h18M3 9v6M9 9v6M15 9v6M21 9v6"/><rect x="3" y="10" width="6" height="4" fill="currentColor"/>',
+  copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  pencil:'<path d="M3 21l4-1L19 8l-3-3L4 17z"/>',
+  esc:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 12h8"/>',
+  enter:'<path d="M20 5v6a2 2 0 0 1-2 2H5M9 9l-4 4 4 4"/>',
+  gap:'<path d="M3 12h5M16 12h5"/><path d="M10 9l-1 6M15 9l-1 6"/>',
+  star:'<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
+  menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
+};
+const ic = (n, s=24, c='currentColor') => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n]||''}</svg>`;
+
+// ---------- 공통 틀
+const capbar = t => `<div class="capbar"><span class="appico">${ic('section',12,'#fff')}</span><span>${t}</span><span class="win">—<span>☐</span><span>✕</span></span></div>`;
+
+const GROUPS = [
+  {id:'model', cap:'모델', items:[['open','열기','모델 열기 (Ctrl+O)'],['recent','최근','최근 모델'],['close','닫기','모델 닫기']]},
+  {id:'sec', cap:'단면', items:[['draw','긋기','단면선 긋기 (S)'],['add','새 단면','새 단면 (N)'],['flip','반전','방향 반전'],['move','이동','평행 이동 ±0.1 · ±1 m'],['hatch','잘린 돌','잘린 돌 칠하기 (H)'],['outline','윤곽','윤곽 따기 (O)']]},
+  {id:'elev', cap:'입면', widget:true},
+  {id:'view', cap:'보기', items:[['list','목록','단면 목록 판'],['plan','평면','평면 보기'],['section','단면','단면 보기'],['contrast','고대비','고대비']]},
+  {id:'data', cap:'자료', items:[['csv','CSV','단면선 CSV'],['geotiff','GeoTIFF','평면 · 단면 GeoTIFF'],['xyz','XYZ','점군 XYZ'],['las','LAS','점군 LAS'],['sections','목록','단면 목록 내보내기 · 가져오기']]},
+  {id:'out', cap:'내보내기', items:[['sheet','도면','도면 (Ctrl+P)']]},
+  {id:'etc', cap:'기타', items:[['keys','단축키','모든 키 (F1)'],['more','더보기','정보 · 영상 불투명도 · 단면선 굵기 · 매끈하게 · 영어 병기']]},
+];
+// o = {look:'L'|'M'|'S', on:[], shown:[], dis:[], clay:'', dimCaps:[], back:'3.00'}
+function ribbon(o){
+  o = Object.assign({look:'L', on:[], shown:[], dis:[], clay:'', dimCaps:[], back:'3.00', front:'0.00', chip:3}, o);
+  const tile = o.look==='S'?32:o.look==='M'?40:50;
+  const glyph = Math.round(tile*18/32);
+  const labels = o.look!=='S';
+  const h = 24 + tile + (labels?26:0) + 18;
+  const chip = (id,label,full) => {
+    const cls = ['chipb', o.on.includes(id)?'on':'', o.shown.includes(id)?'shown':'', o.dis.includes(id)?'dis':'', o.clay===id?'clay':''].join(' ');
+    return `<div class="${cls}" title="${full||label}"><div class="tile" style="width:${tile}px;height:${tile}px">${ic(id,glyph)}</div>${labels?`<div class="tl">${label}</div>`:''}</div>`;
+  };
+  const depth = `<div class="rwidget" style="height:${tile}px" title="뒤 깊이(입면 배경) 숫자키 1–5 · 앞 두께"><span class="seg">${[0.5,1,2,3,5].map((v,i)=>`<span class="${i===o.chip?'sel':''}">${v}</span>`).join('')}</span><span class="lab">뒤</span><span class="num" style="height:24px;min-width:58px;padding:0 6px">${o.back}<span class="u">m</span></span><span class="lab">앞</span><span class="num" style="height:24px;min-width:58px;padding:0 6px">${o.front}<span class="u">m</span></span></div>`;
+  const groups = GROUPS.map(g => `<div class="rg"><div class="rcap ${o.dimCaps.includes(g.id)?'dim':''}">${g.cap}</div><div class="rrow">${g.widget?depth:g.items.map(it=>chip(it[0],it[1],it[2])).join('')}</div></div>`).join('<div class="rsep"></div>');
+  const next = o.look==='L'?'M':o.look==='M'?'S':'';
+  const ro = o.auto!==false && next ? ` data-ro="${encodeURIComponent(JSON.stringify(Object.assign({},o,{look:next})))}"` : '';
+  return `<div class="ribbon" style="height:${h}px"${ro}>${groups}<div class="rright"><span class="rbtn">${ic('xy',16)}좌표 입력</span><span class="rsearch">${ic('search',14)}단면 찾기  Ctrl+F</span></div></div>`;
+}
+function tabs(cur, corner){
+  const t = (id,n,x) => `<div class="tab ${cur===id?'cur':''}">${ic(id==='home'?'home':id==='section'?'section':'sheet',16)}${n}${x?`<span style="margin-left:6px;color:var(--mu)">${ic('close',14)}</span>`:''}</div>`;
+  return `<div class="tabs">${t('home','홈')}${t('section','단면')}${cur==='sheet'?t('sheet','도면',true):''}<div class="tabcorner">${corner}</div></div>`;
+}
+function status(o){
+  o = Object.assign({msg:'', x:'200,008.000', y:'450,006.000', z:'45.39', hwarn:false, cells:true}, o);
+  const cells = o.cells ? `<span class="cell"><span class="k">X</span><span class="v">${o.x}</span></span><span class="cell"><span class="k">Y</span><span class="v">${o.y}</span></span><span class="cell"><span class="k">Z</span><span class="v" style="min-width:64px">${o.z}</span></span>` : '';
+  return `<div class="status"><span class="msg">${o.msg}</span><div class="cells">${cells}<span class="cell" style="gap:8px"><span class="badge">수평 5186 · 중부원점 ${ic('chev',12)}</span><span class="badge ${o.hwarn?'warn':''}">${o.hwarn?ic('warn',12):''}높이 KVD1964 ${ic('chev',12)}</span></span></div></div>`;
+}
+const quiet = (n, on, icn) => `<span class="quiet ${on?'on':''}">${icn?ic(icn,14):''}${n}</span>`;
+const scap = t => `<div class="scap"><span class="cap">${t}</span></div>`;
+
+// ---------- 단면 목록 판 (왼쪽 348)
+function listPanel(o){
+  o = Object.assign({sheet:false, sel:'A', checks:false}, o);
+  const rows = [
+    {k:'A', nm:'A–A′', sub:'12.00 m · 뒤 3.00 m', st: o.sheet?'1:20 · A4 가로 · 저장 안 됨':'최종 · 54점'},
+    {k:'B', nm:'B–B′', sub:'4.00 m · 뒤 3.00 m', st: o.sheet?'1:20 · A4 가로 · 10/09 15:10':'최종 · 17점'},
+    {k:'C', nm:'C–C′', sub:'6.40 m · 뒤 0.50 m', st: o.sheet?'맞춤 1:40 · A3 가로':'빈 구간 1곳 0.45 m'},
+  ];
+  const thumb = k => `<svg class="th" viewBox="0 0 56 32"><rect width="56" height="32" fill="#fff"/><path d="M4 12h10l4 10h14l4-10h16" fill="none" stroke="#FF0000" stroke-width="1.5"/>${k==='C'?'<path d="M30 22h6" stroke="#B5573A" stroke-width="2" stroke-dasharray="2 2"/>':''}</svg>`;
+  const row = r => `<div class="row ${o.sel===r.k?'sel':''}">${o.checks?`<span class="cb ${r.k==='A'?'on':''}">${r.k==='A'?ic('check',10):''}</span>`:''}${thumb(r.k)}<div><div class="nm">${r.nm}</div><div class="sub">${r.sub}</div></div><span class="st">${r.st}</span></div>`;
+  const planRow = o.sheet ? `<div class="row"><span class="cb"></span><svg class="th" viewBox="0 0 56 32"><rect width="56" height="32" fill="#D9B98C"/><circle cx="28" cy="16" r="9" fill="#9C6F44"/></svg><div><div class="nm">평면도</div><div class="sub">1:110 · A4 가로</div></div><span class="st">저장 안 됨</span></div>` : '';
+  return `<div class="panel" style="width:348px"><div class="ph"><span class="t">단면 목록</span><span class="n">3</span><span style="margin-left:auto"></span>${o.sheet?quiet('모두',false,'check'):quiet('찾기',false,'search')}${quiet('내보내기',false,'sections')}</div>
+  <div class="inp" style="margin:4px 0 8px;color:var(--faint);gap:6px">${ic('search',14)}단면 이름으로 찾기</div>
+  ${o.sheet?scap('평면')+planRow+scap('단면'):''}
+  ${rows.map(row).join('')}
+  <div style="margin-top:auto;font-size:12px;color:var(--mu);line-height:18px">${o.sheet?'칸 = 저장할 도면 · 줄을 누르면 미리 봄<br>축척 · 용지는 도면마다 자기 값':'누르면 그 단면 · 두 번 = 이름 바꾸기<br>Del = 지우기 · 오른쪽 클릭 = 복제 · 방향 반전'}</div></div>`;
+}
+
+// ---------- 평면 · 단면 그림
+function planSVG(o){
+  o = Object.assign({drawing:false, gap:false}, o);
+  // 639×~740 영역. 격자 1 m = 44 px. A(200002) → x 90, A′(200014) → x 618
+  const g = []; for(let i=0;i<=14;i++){ g.push(`<line x1="${46+i*44}" y1="120" x2="${46+i*44}" y2="648" stroke="#B08A5E" stroke-width=".6"/>`); } for(let j=0;j<=12;j++){ g.push(`<line x1="46" y1="${120+j*44}" x2="662" y2="${120+j*44}" stroke="#B08A5E" stroke-width=".6"/>`); }
+  const ticks = []; for(let i=1;i<12;i++){ ticks.push(`<line x1="${90+i*44}" y1="380" x2="${90+i*44}" y2="392" stroke="#FF0000" stroke-width="1.2"/><text x="${90+i*44}" y="406" font-size="10" fill="#FFFFFF" text-anchor="middle" font-family="IBM Plex Mono,Consolas,monospace">${i} m</text>`); }
+  const line = o.drawing
+    ? `<line x1="90" y1="384" x2="470" y2="384" stroke="#FF0000" stroke-width="2"/><circle cx="90" cy="384" r="5" fill="#fff" stroke="#FF0000" stroke-width="2"/><circle cx="470" cy="384" r="5" fill="#fff" stroke="#FF0000" stroke-width="2" stroke-dasharray="3 2"/><text x="78" y="372" font-size="13" font-weight="700" fill="#FF0000" font-family="Noto Sans KR,sans-serif">A</text><text x="478" y="372" font-size="11" fill="#9C4A2F" font-family="Noto Sans KR,sans-serif">A′ 찾는 중 · 8.64 m</text>`
+    : `<rect x="90" y="252" width="528" height="132" fill="#B5573A" fill-opacity=".10" stroke="#FF0000" stroke-width=".8" stroke-dasharray="4 3"/><text x="354" y="246" font-size="11" fill="#141413" text-anchor="middle" font-family="IBM Plex Mono,Consolas,monospace">뒤 3.00 m</text>
+       <line x1="90" y1="384" x2="618" y2="384" stroke="#fff" stroke-width="5"/><line x1="90" y1="384" x2="618" y2="384" stroke="#FF0000" stroke-width="2"/>${ticks.join('')}
+       ${o.gap?`<line x1="310" y1="384" x2="330" y2="384" stroke="#fff" stroke-width="5"/><line x1="310" y1="384" x2="330" y2="384" stroke="#B5573A" stroke-width="2.5" stroke-dasharray="3 3"/>`:''}
+       <circle cx="90" cy="384" r="5" fill="#fff" stroke="#FF0000" stroke-width="2"/><circle cx="618" cy="384" r="5" fill="#fff" stroke="#FF0000" stroke-width="2"/><text x="66" y="389" font-size="13" font-weight="700" fill="#FF0000" font-family="Noto Sans KR,sans-serif">A</text><text x="630" y="389" font-size="13" font-weight="700" fill="#FF0000" font-family="Noto Sans KR,sans-serif">A′</text>`;
+  return `<svg viewBox="0 0 639 760" preserveAspectRatio="xMidYMid meet"><rect width="639" height="760" fill="#FFFFFF"/><rect x="46" y="120" width="616" height="528" fill="#C9A77C"/>${g.join('')}
+  <circle cx="354" cy="384" r="118" fill="#7A5236" fill-opacity=".75"/><circle cx="354" cy="384" r="70" fill="#5A3B26" fill-opacity=".6"/>
+  <circle cx="300" cy="330" r="7" fill="#C7B9A6"/><circle cx="398" cy="420" r="9" fill="#C7B9A6"/><circle cx="330" cy="430" r="5" fill="#C7B9A6"/><circle cx="392" cy="340" r="6" fill="#C7B9A6"/>
+  <circle cx="150" cy="200" r="26" fill="#4E7D3A"/><circle cx="560" cy="190" r="30" fill="#4E7D3A"/><circle cx="590" cy="560" r="28" fill="#4E7D3A"/>
+  ${line}</svg>`;
+}
+function sectionSVG(o){
+  o = Object.assign({hatch:false, drawing:false, gap:false, w:640, h:700}, o);
+  // s 0–12 m → x 60..580 (43.33 px/m), z 44.5–46.5 → y 620..60 (280 px/m)
+  const X = s => 60 + s*43.33, Y = z => 620 - (z-44.5)*280;
+  const lv = [];
+  for(let z=44.5; z<=46.5+1e-9; z+=0.1){ const major = Math.abs(z*2 - Math.round(z*2)) < 1e-6; lv.push(`<line x1="60" y1="${Y(z).toFixed(1)}" x2="580" y2="${Y(z).toFixed(1)}" stroke="${major?'#9C9A92':'#DEDCD1'}" stroke-width="${major?1.2:0.6}"/>`); if(major){ lv.push(`<text x="54" y="${(Y(z)+4).toFixed(1)}" font-size="11" text-anchor="end" fill="#3D3D3A" font-family="IBM Plex Mono,Consolas,monospace">${z.toFixed(1)}</text><text x="586" y="${(Y(z)+4).toFixed(1)}" font-size="11" fill="#3D3D3A" font-family="IBM Plex Mono,Consolas,monospace">${z.toFixed(1)}</text>`); } }
+  // 입면 영상(배경 띠)
+  const img = `<path d="M${X(0)} ${Y(45.68)} L${X(3.4)} ${Y(45.62)} L${X(4.1)} ${Y(45.2)} L${X(4.5)} ${Y(45.17)} L${X(7.6)} ${Y(45.2)} L${X(8.1)} ${Y(45.6)} L${X(12)} ${Y(45.74)} L${X(12)} ${Y(45.95)} L${X(8.3)} ${Y(45.92)} L${X(7.9)} ${Y(45.5)} L${X(4.3)} ${Y(45.5)} L${X(3.9)} ${Y(45.9)} L${X(0)} ${Y(45.88)} Z" fill="#B59A7A" fill-opacity=".75"/><path d="M${X(0)} ${Y(45.88)} L${X(3.9)} ${Y(45.9)} L${X(4.3)} ${Y(45.5)} L${X(7.9)} ${Y(45.5)} L${X(8.3)} ${Y(45.92)} L${X(12)} ${Y(45.95)} L${X(12)} ${Y(46.05)} L${X(0)} ${Y(46.0)} Z" fill="#8F7357" fill-opacity=".55"/>`;
+  const prof = o.drawing ? '' : `<path d="M${X(0)} ${Y(45.62)} L${X(1)} ${Y(45.64)} L${X(2.2)} ${Y(45.66)} L${X(3.4)} ${Y(45.62)} L${X(3.9)} ${Y(45.4)} L${X(4.2)} ${Y(45.18)} L${X(4.6)} ${Y(45.16)} ${o.gap?`L${X(5.2)} ${Y(45.17)} M${X(5.65)} ${Y(45.17)}`:`L${X(5.4)} ${Y(45.17)}`} L${X(6.0)} ${Y(45.16)} L${X(6.4)} ${Y(45.05)} L${X(6.9)} ${Y(45.04)} L${X(7.2)} ${Y(45.17)} L${X(7.6)} ${Y(45.19)} L${X(8.0)} ${Y(45.5)} L${X(8.3)} ${Y(45.62)} L${X(10)} ${Y(45.68)} L${X(12)} ${Y(45.72)}" fill="none" stroke="#fff" stroke-width="4"/><path d="M${X(0)} ${Y(45.62)} L${X(1)} ${Y(45.64)} L${X(2.2)} ${Y(45.66)} L${X(3.4)} ${Y(45.62)} L${X(3.9)} ${Y(45.4)} L${X(4.2)} ${Y(45.18)} L${X(4.6)} ${Y(45.16)} ${o.gap?`L${X(5.2)} ${Y(45.17)} M${X(5.65)} ${Y(45.17)}`:`L${X(5.4)} ${Y(45.17)}`} L${X(6.0)} ${Y(45.16)} L${X(6.4)} ${Y(45.05)} L${X(6.9)} ${Y(45.04)} L${X(7.2)} ${Y(45.17)} L${X(7.6)} ${Y(45.19)} L${X(8.0)} ${Y(45.5)} L${X(8.3)} ${Y(45.62)} L${X(10)} ${Y(45.68)} L${X(12)} ${Y(45.72)}" fill="none" stroke="#FF0000" stroke-width="2"/>`;
+  const gapBand = o.gap ? `<rect x="${X(5.2)}" y="${Y(44.6)}" width="${X(5.65)-X(5.2)}" height="12" fill="url(#hg)"/><text x="${(X(5.2)+X(5.65))/2}" y="${Y(44.6)-4}" font-size="10" text-anchor="middle" fill="#9C4A2F" font-family="IBM Plex Mono,Consolas,monospace">빈 구간 0.45 m</text>` : '';
+  // 잘린 돌 — 윗경계는 잘린 선을 따름, 아래 경계는 사람이 찍음
+  let stone = '';
+  if(o.hatch){
+    const top = `M${X(6.0)} ${Y(45.16)} L${X(6.4)} ${Y(45.05)} L${X(6.9)} ${Y(45.04)} L${X(7.2)} ${Y(45.17)}`;
+    const bot = `L${X(7.25)} ${Y(44.98)} L${X(7.0)} ${Y(44.86)} L${X(6.4)} ${Y(44.84)} L${X(6.05)} ${Y(44.98)} Z`;
+    stone = `<defs><pattern id="hp" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#141413" stroke-width="1"/></pattern></defs><path d="${top} ${bot}" fill="url(#hp)" stroke="#141413" stroke-width="1"/>` +
+      [[6.05,44.98],[6.4,44.84],[7.0,44.86],[7.25,44.98]].map(p=>`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="4" fill="#fff" stroke="#141413" stroke-width="1.5"/>`).join('') +
+      `<circle cx="${X(7.25)}" cy="${Y(44.98)}" r="4" fill="#B5573A" stroke="#141413" stroke-width="1.5"/>` +
+      `<text x="${X(6.6)}" y="${Y(44.72)}" font-size="11" text-anchor="middle" fill="#141413" font-family="Noto Sans KR,sans-serif">돌 1 · 아래 경계 4점</text>`;
+  }
+  const marks = `<line x1="${X(0)}" y1="40" x2="${X(0)}" y2="650" stroke="#FF0000" stroke-width=".8" stroke-dasharray="4 3"/><line x1="${X(12)}" y1="40" x2="${X(12)}" y2="650" stroke="#FF0000" stroke-width=".8" stroke-dasharray="4 3"/><text x="${X(0)}" y="30" font-size="13" font-weight="700" fill="#FF0000" text-anchor="middle" font-family="Noto Sans KR,sans-serif">A</text><text x="${X(12)}" y="30" font-size="13" font-weight="700" fill="#FF0000" text-anchor="middle" font-family="Noto Sans KR,sans-serif">A′</text>`;
+  const xs = [0,2,4,6,8,10,12].map(s=>`<text x="${X(s)}" y="668" font-size="11" text-anchor="middle" fill="#3D3D3A" font-family="IBM Plex Mono,Consolas,monospace">${s}</text>`).join('') + `<text x="580" y="690" font-size="11" text-anchor="end" fill="#5E5D59" font-family="Noto Sans KR,sans-serif">A로부터 거리 (m)</text>`;
+  const bar = `<g transform="translate(470,600)"><rect x="0" y="0" width="43" height="5" fill="#141413"/><rect x="43" y="0" width="43" height="5" fill="#fff" stroke="#141413" stroke-width=".8"/><text x="43" y="-4" font-size="10" text-anchor="middle" fill="#141413" font-family="IBM Plex Mono,Consolas,monospace">2 m</text></g>`;
+  const drawingNote = o.drawing ? `<text x="320" y="340" font-size="13" text-anchor="middle" fill="#73726C" font-family="Noto Sans KR,sans-serif">A′를 찍으면 단면이 여기에 나옵니다</text>` : '';
+  return `<svg viewBox="0 0 ${o.w} ${o.h}" preserveAspectRatio="xMidYMid meet"><defs><pattern id="hg" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#B5573A" stroke-width="1.2"/></pattern></defs><rect width="${o.w}" height="${o.h}" fill="#fff"/>${lv.join('')}${o.drawing?'':img}${stone}${prof}${gapBand}${marks}${xs}${bar}${drawingNote}</svg>`;
+}
+
+// ---------- 화면 머리
+function planHead(){ return `<div class="vh"><span class="t">평면</span><span class="mu">위에서 · 기울기 0°</span><span class="vspace"></span><span class="vbtn box">${ic('top',14)}위에서</span><span class="vb">${ic('fit',16)}</span><span class="vb">${ic('zoomin',16)}</span><span class="vb">${ic('zoomout',16)}</span></div>`; }
+function secHead(o){ o=Object.assign({act:true,scale:'1:72.3'},o); return `<div class="vh ${o.act?'act':''}"><span class="t">A–A′ 단면</span><span class="mu">북쪽을 봄</span><span class="vspace"></span><span class="tg"><span class="on">${ic('image',14)}</span><span class="on">${ic('line',14)}</span><span class="on">${ic('levels',14)}</span><span>${ic('fade',14)}</span></span><span class="vbtn">${ic('vex',14)}세로 ×1 ${ic('chev',12)}</span><span class="vbtn box mo">${o.scale} ${ic('chev',12)}</span><span class="vb">${ic('fit',16)}</span><span class="vb">${ic('zoomin',16)}</span><span class="vb">${ic('zoomout',16)}</span></div>`; }
+
+// ---------- 오른쪽 판 (선택한 단면)
+function inspector(o){
+  o = Object.assign({drawing:false, hatch:false}, o);
+  if(o.drawing){
+    return `<div class="panel insp" style="width:272px"><div class="hd"><span class="t">선택한 단면</span><span class="c">그리는 중</span><span class="x">${ic('chev',12)}</span></div>
+    <div class="name">새 단면</div><div class="lab">A 찍음 · A′ 대기</div>
+    <div class="ledger"><div class="lr"><span class="cap">지금 길이</span><span class="v">8.64<i>m</i></span></div><div class="lr"><span class="cap">방위</span><span class="v">N 90.0° E</span></div></div>
+    ${spec('A','200,002.000 · 450,006.000')}${spec('커서','200,010.640 · 450,006.000')}${spec('뒤 깊이','3.00 m')}
+    <div class="chk" style="margin-top:16px;background:var(--wash);border:none"><div class="it">${ic('info',14)}<span>Shift를 누르면 동서 · 남북에 맞춥니다. 숫자를 치면 길이를 입력합니다.</span></div></div>
+    <div style="margin-top:auto" class="lab">이 판은 읽기만 합니다. 값을 바꾸는 곳은 리본과 평면입니다.</div></div>`;
+  }
+  return `<div class="panel insp" style="width:272px"><div class="hd"><span class="t">선택한 단면</span><span class="c">1 / 3</span><span class="x">${ic('chev',12)}</span></div>
+  <div class="name">A–A′</div><div class="lab">북쪽을 봄 · 뒤 3.00 m · 앞 0.00 m</div>
+  <div class="ledger"><div class="lr"><span class="cap">길이</span><span class="v">12.00<i>m</i></span></div><div class="lr"><span class="cap">깊이 (지표 → 바닥)</span><span class="v">0.57<i>m</i></span></div></div>
+  ${spec('방위','N 90.0° E')}${spec('지표 EL.','45.16 – 45.72 m')}${spec('바닥 EL.','45.16 m')}${spec('잘린 선','1줄 · 54점')}${spec('빈 구간','없음')}${o.hatch?spec('잘린 돌','1곳 · 확인됨'):''}
+  ${scap('끝점 · 수평 EPSG:5186')}
+  ${spec('A','200,002.000  450,006.000')}${spec('A′','200,014.000  450,006.000')}
+  <div style="display:flex;gap:8px;margin-top:16px"><span class="btn" style="flex:1">${ic('xy',14)}좌표 입력… <span class="kbd">Enter</span></span><span class="btn" style="min-width:0">${ic('copy',14)}복사</span></div>
+  <div style="margin-top:auto" class="lab">이 판은 읽기만 합니다. 값을 바꾸는 곳은 리본과 평면입니다.</div></div>`;
+}
+const spec = (l,v) => `<div class="spec"><span class="l">${l}</span><span class="d"></span><span class="v">${v}</span></div>`;
+
+// ---------- 화판 2 · 3: 단면 탭
+function workBoard(o){
+  o = Object.assign({drawing:false, hatch:false}, o);
+  const guide = o.drawing
+    ? `<div class="ov guide"><span class="tool">${ic('draw',16)}단면선 긋기 › A′ 찾는 중</span><span class="r"></span><span class="s">끝점 A′를 클릭하세요 · Shift = 축 맞춤</span><span class="k">Esc</span></div>`
+    : o.hatch
+    ? `<div class="ov guide"><span class="tool">${ic('hatch',16)}잘린 돌 칠하기 › 아래 경계 찍는 중</span><span class="r"></span><span class="s">흙 속 아래 경계를 클릭 · Enter로 닫으면 빗금</span><span class="k">Enter</span><span class="k">Esc</span></div>`
+    : '';
+  const guideLeft = o.hatch ? 'left:12px' : 'left:12px';
+  const undo = `<div class="ov undo" style="left:${o.drawing?'430px':o.hatch?'470px':'12px'}"><span>${ic('undo',18)}</span><span>${ic('redo',18)}</span></div>`;
+  const planCanvas = `<div class="canvas">${planSVG({drawing:o.drawing})}${o.drawing?guide:''}${o.drawing?undo:''}<div class="ov zoomcol"><span>${ic('zoomin',18)}</span><span>${ic('zoomout',18)}</span><span>${ic('fit',18)}</span></div><div class="sbar"><svg width="88" height="14"><rect x="0" y="4" width="22" height="5" fill="#141413"/><rect x="22" y="4" width="22" height="5" fill="#fff" stroke="#141413" stroke-width=".8"/><rect x="44" y="4" width="44" height="5" fill="#141413"/><text x="0" y="3" font-size="9" font-family="IBM Plex Mono,Consolas,monospace">0</text><text x="42" y="3" font-size="9" font-family="IBM Plex Mono,Consolas,monospace">1</text><text x="80" y="3" font-size="9" font-family="IBM Plex Mono,Consolas,monospace">2 m</text></svg></div><div class="compass">${ic('north',22)}<span>진북</span></div></div>`;
+  const secCanvas = `<div class="canvas">${sectionSVG({hatch:o.hatch, drawing:o.drawing})}${o.hatch?guide:''}${o.hatch?undo:''}</div>`;
+  const info = o.drawing ? `<div class="info"><span>${ic('draw',14)} 단면선을 긋는 중 — 단면은 A′를 찍은 뒤 계산됩니다</span></div>`
+    : `<div class="info"><span style="color:var(--done)">${ic('check',14)}</span><span>최종(잎) · 0.4 s</span><span class="r" style="width:1px;height:14px;background:var(--ln)"></span><span>잘린 선 1줄 · 54점 · 빈 구간 없음</span><span class="r" style="width:1px;height:14px;background:var(--ln)"></span><span>레벨선 10 cm · 숫자 50 cm</span>${o.hatch?`<span class="r" style="width:1px;height:14px;background:var(--ln)"></span><span>잘린 돌 1곳 · 빗금 45° 1.0 mm</span>`:''}</div>`;
+  const msg = o.drawing ? '끝점 A′를 클릭하세요. 숫자를 치면 길이, Shift는 축 맞춤, Esc는 취소.'
+    : o.hatch ? '아래 경계를 찍고 Enter. 종류는 오른쪽 클릭(돌 · 기와 · 유물 · 기타), Del = 지우기.'
+    : 'A–A′ 최종 12.00 m — 다음: 리본의 「도면」(Ctrl+P)으로 종이에 옮기세요.';
+  const z = o.drawing ? '45.41' : '45.17';
+  return capbar('Production_2 - Kerf') + ribbon({on:o.drawing?['draw']:o.hatch?['hatch']:[], shown:['list','plan','section'], clay:'sheet', dis:o.drawing?['sheet','csv','geotiff','xyz','las']:[] }) + tabs('section','Production_2 · 저장됨')
+  + `<div class="pagearea">${listPanel({sel:o.drawing?'':'A'})}<div class="split"></div><div class="view">${planHead()}${planCanvas}</div><div class="split"></div><div class="view">${secHead({act:!o.drawing})}${info}${secCanvas}</div><div class="split"></div>${inspector({drawing:o.drawing, hatch:o.hatch})}</div>`
+  + status({msg, z, x:o.drawing?'200,010.640':'200,008.000'});
+}
+
+// ---------- 화판 1: 홈
+function homeBoard(){
+  const cell = (k,v) => `<div><div class="k">${k}</div><div class="v">${v}</div></div>`;
+  const step = (m,cls,t,d) => `<div class="step"><span class="m ${cls}">${m}</span><div><div class="tt">${t}</div><div class="ds">${d}</div></div></div>`;
+  const kk = (k,t) => `<span class="kk"><span class="kbd">${k}</span>${t}</span>`;
+  return capbar('Kerf') + ribbon({dis:['close','draw','add','flip','move','hatch','outline','list','plan','section','contrast','csv','geotiff','xyz','las','sections','sheet'], dimCaps:['sec','elev','view','data','out']}) + tabs('home','')
+  + `<div class="home">
+    <div class="hero"><div class="nm"><svg width="56" height="56" viewBox="0 0 56 56"><rect width="56" height="56" rx="12" fill="#B5573A"/><path d="M10 22h10l5 14h6l5-14h10" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg><span class="big">Kerf</span><span class="sub">발굴 평·단면</span></div>
+      <div style="font-size:15px;color:var(--mu);max-width:40ch">3MX · 3SM · OBJ 실사 메시에서 평면도 · 단면도를 잘라 보고서 도면 밑그림(SVG · DXF)까지 만듭니다.</div>
+      <div style="display:flex;gap:8px;margin-top:4px"><span class="btn lg">${ic('open',16)}모델 열기 <span class="kbd">Ctrl+O</span></span><span class="btn lg">${ic('recent',16)}최근 ${ic('chev',14)}</span></div>
+      <div class="lab">파일을 창 어디에나 끌어다 놓아도 열립니다 · *.3mx(권장) · *.3sm · *.obj</div></div>
+    <div class="ccard"><div><div class="in"><div style="display:flex;justify-content:space-between"><span class="cap">이어서 작업</span><span class="cap">저장됨 · 이 PC</span></div><div class="ser" style="font-size:40px;line-height:48px">Production_2</div><div class="lab">마지막 단면 A–A′ · 뒤 3.00 m · 화면 1:72.3 그대로 열립니다</div></div>
+      <div class="cells">${cell('폴더','E: › jeju › Scene')}${cell('마지막 열림','오늘 15:12')}${cell('수평 좌표계','5186 중부원점')}${cell('높이','KVD1964')}${cell('단면','3개')}${cell('도면','1장 저장 · 2장 안 됨')}</div></div>
+      <div class="side"><span class="btn pri lg" style="width:100%">이어서 열기 →</span><div class="lab">썸네일을 누르면 그 단면으로 엽니다</div><div style="display:flex;gap:8px">${['A–A′','B–B′','C–C′'].map(n=>`<div style="flex:1"><svg width="100%" height="40" viewBox="0 0 72 40"><rect width="72" height="40" fill="#fff" stroke="#DEDCD1"/><path d="M6 14h12l5 14h26l5-14h12" fill="none" stroke="#FF0000" stroke-width="1.5"/></svg><div class="ser" style="font-size:12px;text-align:center">${n}</div></div>`).join('')}</div></div></div>
+    <div class="recent"><div class="ph"><span class="t">최근 모델</span><span class="n">3</span><span class="inp" style="margin-left:auto;max-width:260px;color:var(--faint);gap:6px">${ic('search',14)}이름 · 폴더로 찾기</span></div>
+      <table class="ttab"><tr><th>모델</th><th>상태</th><th>수평</th><th>높이</th><th class="r">단면</th><th class="r">마지막 열림</th></tr>
+      <tr><td><div>광령리_유구배치.3sm</div><div class="cap">C:\\Users\\…\\Desktop</div></td><td>열 수 있음</td><td>5186 중부원점</td><td><span class="mark" style="color:var(--caution)">${ic('warn',12)}타원체고 표기</span></td><td class="r mo">1</td><td class="r mo">어제 17:10</td></tr>
+      <tr><td><div>북벽토층.obj</div><div class="cap">D:\\발굴\\2026\\북벽</div></td><td>열 수 있음</td><td><span class="mark" style="color:var(--block)">${ic('warn',12)}좌표계 없음</span></td><td>—</td><td class="r mo">0</td><td class="r mo">9월 30일</td></tr>
+      <tr><td><div class="fa">Production_old.3mx</div><div class="cap">F:\\USB\\Production_old\\Scene</div></td><td><span class="mark" style="color:var(--block)">원본 없음</span></td><td>—</td><td>—</td><td class="r mo">2</td><td class="r mo">9월 12일</td></tr></table>
+      <div class="lab" style="margin-top:8px">두 번 누르면 엶 · 오른쪽 클릭 = 폴더 열기 · 목록에서 지우기(모델 파일은 그대로)</div></div>
+    <div class="steps"><div class="ph" style="height:auto;margin-bottom:4px"><span class="t">작업 순서</span><span class="cap" style="margin-left:auto">Production_2 기준</span></div>
+      ${step(ic('check',12),'ok','모델 열기','3MX 폴더의 .3mx 파일을 열면 평면이 위에서 본 모양으로 나옵니다.')}
+      ${step('●','now','<b>단면선 긋기</b> <span style="color:var(--claytext);font-size:12px">● 다음</span>','평면에서 A, A′를 찍으면 오른쪽에 단면이 바로 나옵니다. 잘린 돌은 H로 빗금.')}
+      ${step('3','','도면 · 저장','「도면」 탭에서 축척 · 용지를 정하고 SVG로 저장해 일러스트레이터에서 엽니다.')}</div>
+    <div class="keys"><span class="t" style="font-weight:700">처음 쓰는 키</span>${kk('S','단면선 긋기')}${kk('1–5','뒤 깊이 0.5 · 1 · 2 · 3 · 5 m')}${kk('H','잘린 돌 칠하기')}${kk('O','윤곽 따기')}${kk('Ctrl+P','도면')}${kk('Ctrl+Z','되돌리기 200단계')}<span class="quiet" style="margin-left:auto;color:var(--claytext);text-decoration:underline">모든 키 F1</span></div>
+  </div>` + status({msg:'먼저 모델을 열거나, 파일을 창에 끌어다 놓으세요.', cells:false});
+}
+
+// ---------- 화판 4 · 5: 도면 탭
+function sheetSVG(kind){
+  // 종이 1000×707 = A4 가로 297×210 mm → 3.367 px/mm
+  const k = 1000/297;
+  const mm = v => (v*k).toFixed(1);
+  const frame = `<rect x="${mm(12)}" y="${mm(12)}" width="${mm(273)}" height="${mm(186)}" fill="none" stroke="#141413" stroke-width="1.2"/>`;
+  let fig = '';
+  if(kind==='section'){
+    // B–B′ 4.00 m · 1:20 → 200 mm 폭. 레벨 45.0–46.0 → 50 mm
+    const x0 = 40, y0 = 40, X = s => mm(x0 + s*50), Y = z => mm(y0 + (46.0-z)*50);
+    const lv = [];
+    for(let z=45.0; z<=46.0+1e-9; z+=0.1){ const major = Math.abs(z*2-Math.round(z*2))<1e-6; lv.push(`<line x1="${X(-0.3)}" y1="${Y(z)}" x2="${X(4.3)}" y2="${Y(z)}" stroke="#141413" stroke-width="${major?0.59:0.24}"/>`); if(major){ lv.push(`<text x="${X(-0.4)}" y="${Y(z)}" dy="3" font-size="8" text-anchor="end" font-family="IBM Plex Mono,Consolas,monospace" fill="#141413">${z.toFixed(1)}</text><text x="${X(4.4)}" y="${Y(z)}" dy="3" font-size="8" font-family="IBM Plex Mono,Consolas,monospace" fill="#141413">${z.toFixed(1)}</text>`);} }
+    const img = `<path d="M${X(0)} ${Y(45.7)} L${X(1.2)} ${Y(45.68)} L${X(1.5)} ${Y(45.3)} L${X(2.5)} ${Y(45.28)} L${X(2.8)} ${Y(45.66)} L${X(4)} ${Y(45.72)} L${X(4)} ${Y(45.95)} L${X(0)} ${Y(45.92)} Z" fill="#C9B8A0" fill-opacity=".7"/>`;
+    const prof = `<path d="M${X(0)} ${Y(45.7)} L${X(1.2)} ${Y(45.68)} L${X(1.5)} ${Y(45.3)} L${X(1.9)} ${Y(45.2)} L${X(2.5)} ${Y(45.22)} L${X(2.8)} ${Y(45.66)} L${X(4)} ${Y(45.72)}" fill="none" stroke="#FF0000" stroke-width="1.2"/>`;
+    const stone = `<defs><pattern id="hs" width="3.4" height="3.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="3.4" stroke="#141413" stroke-width=".44"/></pattern></defs><path d="M${X(1.9)} ${Y(45.2)} L${X(2.5)} ${Y(45.22)} L${X(2.45)} ${Y(45.08)} L${X(2.1)} ${Y(45.02)} L${X(1.95)} ${Y(45.1)} Z" fill="url(#hs)" stroke="#141413" stroke-width=".4"/>`;
+    const ab = `<text x="${X(0)}" y="${Y(46.1)}" font-size="10" font-weight="700" text-anchor="middle" fill="#FF0000" font-family="Noto Sans KR,sans-serif">B</text><text x="${X(4)}" y="${Y(46.1)}" font-size="10" font-weight="700" text-anchor="middle" fill="#FF0000" font-family="Noto Sans KR,sans-serif">B′</text>`;
+    const dist = [0,1,2,3,4].map(s=>`<line x1="${X(s)}" y1="${Y(44.98)}" x2="${X(s)}" y2="${Y(44.94)}" stroke="#141413" stroke-width=".4"/><text x="${X(s)}" y="${Y(44.86)}" font-size="7" text-anchor="middle" font-family="IBM Plex Mono,Consolas,monospace" fill="#141413">${s}</text>`).join('');
+    fig = lv.join('') + img + stone + prof + ab + dist + `<text x="${X(4.3)}" y="${Y(44.8)}" font-size="7" text-anchor="end" fill="#5E5D59" font-family="Noto Sans KR,sans-serif">B로부터 거리 (m)</text>`;
+  } else {
+    // 평면도 1:110 — 12 × 12 m → 109 mm. 정사영상만, 단면선 없음
+    const x0 = 60, y0 = 36, s = 1000/110, X = m => mm(x0 + m*s), Y = m => mm(y0 + (12-m)*s);
+    const ticks = [];
+    for(let i=0;i<=12;i+=4){ ticks.push(`<line x1="${X(i)}" y1="${Y(0)}" x2="${X(i)}" y2="${Y(-0.35)}" stroke="#141413" stroke-width=".4"/><text x="${X(i)}" y="${Y(-0.9)}" font-size="7" text-anchor="middle" font-family="IBM Plex Mono,Consolas,monospace" fill="#3D3D3A">${(200002+i).toLocaleString()}</text>`); ticks.push(`<line x1="${X(0)}" y1="${Y(i)}" x2="${X(-0.35)}" y2="${Y(i)}" stroke="#141413" stroke-width=".4"/><text x="${X(-0.5)}" y="${Y(i)}" dy="2.5" font-size="7" text-anchor="end" font-family="IBM Plex Mono,Consolas,monospace" fill="#3D3D3A">${(450000+i).toLocaleString()}</text>`); }
+    fig = `<rect x="${X(0)}" y="${Y(12)}" width="${(12*s*k).toFixed(1)}" height="${(12*s*k).toFixed(1)}" fill="#C9A77C"/><circle cx="${X(6)}" cy="${Y(6)}" r="${(2.7*s*k).toFixed(1)}" fill="#7A5236" fill-opacity=".75"/><circle cx="${X(6)}" cy="${Y(6)}" r="${(1.6*s*k).toFixed(1)}" fill="#5A3B26" fill-opacity=".6"/><circle cx="${X(2.4)}" cy="${Y(10.2)}" r="${(0.6*s*k).toFixed(1)}" fill="#4E7D3A"/><circle cx="${X(11.6)}" cy="${Y(10.4)}" r="${(0.7*s*k).toFixed(1)}" fill="#4E7D3A"/><rect x="${X(0)}" y="${Y(12)}" width="${(12*s*k).toFixed(1)}" height="${(12*s*k).toFixed(1)}" fill="none" stroke="#141413" stroke-width=".8"/>${ticks.join('')}<text x="${X(12)}" y="${Y(-1.8)}" font-size="7" text-anchor="end" fill="#5E5D59" font-family="Noto Sans KR,sans-serif">X (동) · 1 칸 4 m</text><text x="${X(-0.5)}" y="${Y(12.6)}" font-size="7" text-anchor="end" fill="#5E5D59" font-family="Noto Sans KR,sans-serif">Y (북)</text>` +
+      `<g transform="translate(${mm(270)},${mm(28)})"><path d="M0 -14 L5 8 L0 4 L-5 8 Z" fill="#141413"/><text x="0" y="22" font-size="8" text-anchor="middle" fill="#141413" font-family="Noto Sans KR,sans-serif">진북</text></g>`;
+  }
+  const title = kind==='section' ? 'B–B′ 단면도' : '평면도';
+  const scale = kind==='section' ? '1 : 20' : '1 : 110';
+  const legend = `<g transform="translate(${mm(150)},${mm(170)})"><rect width="${mm(60)}" height="${mm(26)}" fill="#fff" stroke="#141413" stroke-width=".8"/><text x="4" y="12" font-size="8" font-family="Noto Sans KR,sans-serif" fill="#141413">범례 · ${title}</text><text x="4" y="26" font-size="7" font-family="IBM Plex Mono,Consolas,monospace" fill="#141413">축척 ${scale}   수평 EPSG:5186</text><text x="4" y="38" font-size="7" font-family="IBM Plex Mono,Consolas,monospace" fill="#141413">높이 KVD1964   레벨선 10 cm 0.2 pt · 50 cm 0.5 pt</text>${kind==='section'?`<line x1="4" y1="52" x2="34" y2="52" stroke="#FF0000" stroke-width="1.2"/><text x="40" y="55" font-size="7" font-family="Noto Sans KR,sans-serif" fill="#141413">잘린 면</text><rect x="90" y="46" width="22" height="10" fill="url(#hs)" stroke="#141413" stroke-width=".4"/><text x="118" y="55" font-size="7" font-family="Noto Sans KR,sans-serif" fill="#141413">잘린 돌(빗금 45° · 1.0 mm)</text>`:''}</g>`;
+  const tb = `<g transform="translate(${mm(215)},${mm(170)})"><rect width="${mm(70)}" height="${mm(26)}" fill="#fff" stroke="#141413" stroke-width=".8"/><line x1="0" y1="${mm(9)}" x2="${mm(70)}" y2="${mm(9)}" stroke="#141413" stroke-width=".6"/><text x="6" y="22" font-size="11" font-family="Noto Serif KR,Batang,serif" fill="#141413">Production_2 ${title}</text><text x="6" y="44" font-size="7" font-family="Noto Sans KR,sans-serif" fill="#141413">축척 ${scale} · A4 가로 · ${kind==='section'?'북쪽을 봄':'북이 위'} · 2026-10-09</text><text x="6" y="58" font-size="7" font-family="IBM Plex Mono,Consolas,monospace" fill="#141413">EPSG:5186 중부원점 · KVD1964</text><text x="6" y="72" font-size="7" font-family="Noto Sans KR,sans-serif" fill="#5E5D59">Kerf · 3MX Production_2 · 단면 ${kind==='section'?'B–B′':'—'}</text></g>`;
+  const bar = `<g transform="translate(${mm(14)},${mm(188)})"><rect x="0" y="0" width="${mm(kind==='section'?50:36.4)}" height="4" fill="#141413"/><rect x="${mm(kind==='section'?50:36.4)}" y="0" width="${mm(kind==='section'?50:36.4)}" height="4" fill="#fff" stroke="#141413" stroke-width=".5"/><text x="0" y="-3" font-size="7" font-family="IBM Plex Mono,Consolas,monospace" fill="#141413">0</text><text x="${mm(kind==='section'?50:36.4)}" y="-3" font-size="7" text-anchor="middle" font-family="IBM Plex Mono,Consolas,monospace" fill="#141413">${kind==='section'?'1':'4'}</text><text x="${mm(kind==='section'?100:72.8)}" y="-3" font-size="7" text-anchor="end" font-family="IBM Plex Mono,Consolas,monospace" fill="#141413">${kind==='section'?'2 m':'8 m'}</text><text x="${mm(104)}" y="3" font-size="7" font-family="IBM Plex Mono,Consolas,monospace" fill="#141413">축척 ${scale}</text></g>`;
+  return `<svg viewBox="0 0 1000 707">${fig}${frame}${legend}${tb}${bar}</svg>`;
+}
+function sheetBoard(kind){
+  const isSec = kind==='section';
+  const tile = (icn,n,on,dis) => `<div class="tilei ${on?'on':''} ${dis?'dis':''}">${ic(icn,22)}${n}</div>`;
+  const right = `<div class="panel insp" style="width:320px;overflow:hidden"><div class="hd"><span class="t">고른 도면</span><span class="c">${isSec?'단면 1 / 3':'평면도'}</span></div>
+    <div class="name">${isSec?'B–B′ 단면도':'평면도'}</div><div class="lab">${isSec?'B–B′ 4.00 m · 북쪽을 봄':'위에서 · 12 × 12 m · 정사영상만'}</div>
+    ${scap('도면 항목')}<div class="tiles">${tile('legend','범례',true)}${tile('titleb','표제란',true)}${tile('scalebar','축척 막대',true)}${tile('north','진북',!isSec,isSec)}</div>
+    ${scap('도면 정보')}
+    <div class="frow"><span class="fl">도면명</span><span class="inp">Production_2 ${isSec?'B–B′ 단면도':'평면도'}</span></div>
+    <div class="frow"><span class="fl">용지</span><span class="seg"><span class="sel">A4</span><span>A3</span></span><span class="seg"><span class="sel">가로</span><span>세로</span></span></div>
+    <div class="frow"><span class="fl">축척 1 :</span><span class="num" style="min-width:88px">${isSec?'20':'110'}</span><span class="quiet" style="color:var(--claytext);text-decoration:underline">맞춤 ${isSec?'1:26':'1:110'}</span><span class="btn" style="min-width:0;height:24px;padding:0 10px;font-size:12px">적용</span></div>
+    <div class="scales">${['10','20','30','40','50','100','200','500'].map(v=>`<span class="${(isSec?'20':'100')===v?'sel':''}">${v}</span>`).join('')}</div>
+    ${scap('선 · 글자')}
+    ${isSec?`<div class="frow"><span class="fl">레벨선</span><span class="lab">10 cm</span><span class="num" style="min-width:72px">0.2<span class="u">pt</span></span><span class="lab">50 cm</span><span class="num" style="min-width:72px">0.5<span class="u">pt</span></span></div>
+    <div class="frow"><span class="fl">숫자</span><span class="lab">50 cm마다 · 해발 EL.</span></div>
+    <div class="frow"><span class="fl">빗금</span><span class="seg"><span class="sel">45°</span><span>검은 칠</span><span>점묘</span></span><span class="num" style="min-width:72px">1.0<span class="u">mm</span></span></div>`
+    :`<div class="frow"><span class="fl">좌표 숫자</span><span class="lab">그림 칸 밖 · 4 m마다 · 모노</span></div><div class="frow"><span class="fl">진북</span><span class="num" style="min-width:72px">28<span class="u">mm</span></span><span class="lab">글자는 「진북」만</span></div>`}
+    <div class="frow"><span class="fl">형식</span><span class="seg"><span class="sel">SVG</span><span>DXF</span><span>PDF</span><span>PNG</span><span>TIFF</span></span></div>
+    <div class="frow" style="min-height:24px"><span class="fl"></span><span class="cb on">${ic('check',10)}</span><span class="lab">그리기용 빈 층 2 · 밑그림 잠금</span></div>
+    ${scap('도면 점검 · 고른 1장 · 저장을 막지 않음')}
+    <div class="chk">
+      <div class="it"><span style="color:var(--done)">${ic('check',14)}</span><span>축척 ${isSec?'1:20 직접':'1:110 직접'} · A4 가로에 들어갑니다</span></div>
+      <div class="it"><span style="color:var(--caution)">${ic('warn',14)}</span><span>높이 KVD1964 — 표제란 · 범례에 이 이름이 들어갑니다. <a>높이 기준…</a></span></div>
+      ${isSec?`<div class="it"><span style="color:var(--done)">${ic('check',14)}</span><span>빈 구간 없음 · 잘린 돌 1곳 확인됨</span></div>`:`<div class="it"><span style="color:var(--done)">${ic('check',14)}</span><span>그림 칸에 단면선 없음 · 진북 있음</span></div>`}
+      <div class="it"><span style="color:var(--done)">${ic('check',14)}</span><span>파일 이름 Production_2_${isSec?'B-B′':'평면도'}_1-${isSec?'20':'110'}.svg · 같은 이름 없음</span></div>
+    </div>
+    <div class="foot"><span class="quiet">${ic('star',14)}이 설정을 기본으로</span><span style="flex:1"></span><span class="btn pri">${ic('save',14)}1장 SVG 저장</span><span class="btn" style="min-width:0">PDF</span></div></div>`;
+  const desk = `<div class="desk"><div class="paper" style="width:1000px;height:707px">${sheetSVG(kind)}</div>
+    <div class="ov guide"><span class="tool">${ic('sheet',16)}도면 보기</span><span class="r"></span><span class="s">휠 = 종이 확대 · 왼쪽 끌기 = 종이 옮기기 · 두 번 누르면 처음 크기</span></div>
+    <div class="ov toolstrip"><div>${ic('fit',22)}맞춤</div><div>${ic('zoomin',22)}확대</div><div>${ic('zoomout',22)}축소</div><div>${ic('edit',22)}조판편집</div><div>${ic('paper',22)}용지/방향</div><div>${ic('list',22)}도면 목록</div></div></div>`;
+  return capbar('Production_2 - Kerf') + ribbon({shown:['sheet','list'], dis:['draw','add','flip','move','hatch','outline','plan','section','contrast'], dimCaps:['sec','elev']}) + tabs('sheet','Production_2 · 저장됨')
+  + `<div class="pagearea">${listPanel({sheet:true, sel:isSec?'B':'', checks:true})}<div class="split"></div>${desk}<div class="split"></div>${right}</div>`
+  + status({msg:`도면 — 고른 1장 · 다 되면 「SVG 저장」 · 돌아가기는 「단면」 탭 또는 Esc`, cells:false});
+}
+
+// ---------- 화판 6: 리본 크기 단계 · 대화 창
+function ribbonBoard(){
+  const row = (w, look, cap) => `<div style="display:flex;flex-direction:column;gap:4px"><span class="cap">${cap}</span><div style="width:${w}px;border:1px solid var(--ln);overflow:hidden;background:var(--ground)">${ribbon({look, shown:['list','plan','section'], clay:'sheet', auto:false})}</div></div>`;
+  const dlg = (w, cap, body, foot) => `<div class="dlg" style="width:${w}px"><div class="dcap">${cap}</div><div class="dbody">${body}<div class="dfoot">${foot}</div></div></div>`;
+  const coord = dlg(440,'좌표 입력 - Kerf',
+    `<div class="frow"><span class="fl" style="width:96px">A</span><span class="num" style="flex:1;justify-content:flex-start">200,002.000</span><span class="num" style="flex:1;justify-content:flex-start">450,006.000</span></div>
+     <div class="frow"><span class="fl" style="width:96px">A′</span><span class="num" style="flex:1;justify-content:flex-start">200,014.000</span><span class="num" style="flex:1;justify-content:flex-start">450,006.000</span></div>
+     <div class="frow"><span class="fl" style="width:96px">좌표계</span><span class="lab">수평 EPSG:5186 중부원점 · 모델과 같음</span></div>
+     <div class="frow"><span class="fl" style="width:96px"></span><span class="lab">길이 12.00 m · 방위 N 90.0° E · 붙여 넣으면 X Y 두 칸에 나뉩니다</span></div>`,
+    `<span class="quiet">${ic('copy',14)}복사</span><span style="flex:1"></span><span class="btn pri">새 단면 만들기</span><span class="btn">취소</span>`);
+  const hd = dlg(560,'높이 기준 - Kerf',
+    `<div class="ser" style="font-size:20px;line-height:28px">이 모델의 높이는 어느 기준입니까?</div><div class="lab">파일의 높이 값은 바꾸지 않습니다. 표제란 · 범례 · 상태줄의 이름표만 달라집니다.</div>
+     <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${[['KVD1964 (인천 평균해면) — 권장','3MX 메타데이터 EPSG:5193',true],['타원체고 (GRS80)','SRS 그대로',false],['EGM2008 지오이드고','',false],['모름 · 나중에','표제란에 「확인 전」',false]].map(r=>`<div class="frow" style="gap:10px;border:1px solid ${r[2]?'var(--ink)':'var(--edge)'};border-radius:8px;padding:0 12px;background:${r[2]?'var(--oat)':'var(--surface)'}"><span class="cb ${r[2]?'on':''}" style="border-radius:50%">${r[2]?ic('check',10):''}</span><span>${r[0]}</span><span class="lab" style="margin-left:auto">${r[1]}</span></div>`).join('')}</div>`,
+    `<span style="flex:1"></span><span class="btn pri">이 기준으로</span><span class="btn">취소</span>`);
+  return capbar('리본 크기 단계 · 대화 창 — 설계도') + `<div style="flex:1;padding:24px 48px;display:flex;flex-direction:column;gap:24px;overflow:hidden">
+    ${row(1824,'L','1920 px 이상 — 타일 50 · 글자 보임 (Strata 기본과 같은 값)')}
+    ${row(1440,'M','1440 px — 타일 40 · 글자 보임')}
+    ${row(1100,'S','1280 px 이하 — 글자 숨기고 타일 32 · 이름은 툴팁에만 · 더 좁으면 24 · 20')}
+    <div style="display:flex;gap:48px;align-items:flex-start;margin-top:8px"><div><span class="cap">대화 창 S 440 · 폼은 칸부터, 주 단추 → 취소</span><div style="height:4px"></div>${coord}</div><div><span class="cap">대화 창 M 560 · 물음은 명조 20</span><div style="height:4px"></div>${hd}</div></div></div>`;
+}
+
+// ---------- 화판 7: 부품 · 아이콘 · 토큰
+function partsBoard(){
+  const colors = [['ground','#FAF9F5','종이'],['surface','#FFFFFF','입력 · 떠 있는 것'],['wash','#F5F4ED','띠'],['desk','#F0EEE6','책상 · 타일'],['press','#E8E6DC','누름'],['oat','#E3DACC','켜짐'],['line','#DEDCD1','구조 선'],['edge','#C2C0B6','부품 테'],['ring','#B0AEA5','켜짐 테'],['hand','#30302E','도구 켜짐 · 아이콘'],['ink','#141413','먹'],['ink2','#3D3D3A',''],['muted','#5E5D59','보조 글'],['faint','#73726C','흐린 글'],['action','#B5573A','주 단추 · 한 화면 하나'],['clay','#D97757','다음 · 변경 점'],['block','#A33B3B','막힘'],['caution','#7A5A00','주의'],['done','#3F6B31','끝'],['red','#FF0000','단면선 · 잘린 선(자료 색)']];
+  const sw = c => `<div class="sw"><i style="background:${c[1]}"></i><span class="mo">${c[1]}</span><span class="mu">${c[0]}${c[2]?' · '+c[2]:''}</span></div>`;
+  const kerfOnly = ['draw','hatch','outline','section','plan','xyz','las','geotiff','csv','sections','vex','top','height','xy'];
+  const icons = Object.keys(P).map(n=>`<div class="ico"><div class="tile" style="${kerfOnly.includes(n)?'box-shadow:inset 0 0 0 1px var(--action)':''}">${ic(n,28)}</div><span>${n}${kerfOnly.includes(n)?' ·새':''}</span></div>`).join('');
+  return capbar('부품 · 아이콘 · 토큰 — 설계도') + `<div style="flex:1;padding:24px 48px;display:grid;grid-template-columns:1fr 1fr;gap:24px 48px;overflow:hidden;min-height:0">
+    <div><div class="scap"><span class="cap">색 토큰 — Strata tokens.json 그대로 · app/theme.hpp와 같음</span></div><div class="swgrid">${colors.map(sw).join('')}</div>
+      <div class="scap" style="margin-top:24px"><span class="cap">글자 — 이름은 명조(20 이상) · 잰 값은 모노 · 나머지 고딕</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><div class="ser" style="font-size:40px;line-height:48px">Production_2 <span class="cap">display 40</span></div><div class="ser" style="font-size:20px;line-height:28px">A–A′ 단면 <span class="cap">heading 20</span></div><div style="font-size:15px">오른쪽 단면이 바로 나옵니다 <span class="cap">lead 15</span></div><div>단면선 긋기 · 새 단면 · 방향 반전 <span class="cap">body 13</span></div><div class="lab">보조 글 · 판 이름표 <span class="cap">label 12</span></div><div class="mo" style="font-size:20px">45.17 m <span class="cap">figure 20</span></div><div class="mo">200,002.000 450,006.000 <span class="cap">mono 12</span></div></div>
+      <div class="scap" style="margin-top:24px"><span class="cap">부품 — 높이 24 · 32 · 40, 둥글기 8, 테 1 px</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="btn pri">SVG 저장</span><span class="btn">PDF</span><span class="quiet">조용한 단추</span><span class="btn dis">꺼진 단추</span><span class="inp" style="flex:0 0 160px;color:var(--faint)">입력 칸</span><span class="num">3.00<span class="u">m</span></span><span class="seg"><span>A4</span><span class="sel">A3</span></span><span class="badge">수평 5186 · 중부원점 ${ic('chev',12)}</span><span class="badge warn">${ic('warn',12)}높이 확인 전</span><span class="mark"><span class="dot"></span>저장 안 됨 2건</span><span class="kbd">Ctrl+P</span></div>
+      <div style="display:flex;gap:12px;margin-top:12px;align-items:flex-start"><div class="ov guide" style="position:static">${`<span class="tool">${ic('draw',16)}단면선 긋기 › A′ 찾는 중</span><span class="r"></span><span class="s">끝점 A′를 클릭하세요</span><span class="k">Esc</span>`}</div><div class="ov undo" style="position:static"><span>${ic('undo',18)}</span><span>${ic('redo',18)}</span></div><div class="tg"><span class="on">${ic('image',14)}</span><span class="on">${ic('line',14)}</span><span>${ic('levels',14)}</span></div></div></div>
+    <div style="min-height:0;overflow:hidden"><div class="scap"><span class="cap">아이콘 — Lucide 24 격자 · 선 2 · 리본 28 px. 흙색 테 = Kerf 전용으로 새로 그림(나머지는 Strata 파일)</span></div><div style="display:flex;flex-wrap:wrap;gap:8px 2px">${icons}</div></div></div>`;
+}
+
+// ---------- 화판 8: 흐름도
+function flowBoard(){
+  const box = (h,d,ext) => `<div class="fbox ${ext?'ext':''}"><span class="h">${h}</span><span class="d">${d}</span></div>`;
+  const ar = '<div class="farrow">→</div>';
+  return capbar('흐름도 — 열기부터 일러스트레이터까지') + `<div class="flow">
+    <div class="frow2">${box('① 모델 열기','홈 · Ctrl+O · 끌어 놓기. 3MX · 3SM · OBJ. 수평 좌표계는 파일에서, 높이 기준은 한 번 묻고 상태줄 배지에.')}${ar}${box('② 단면선 긋기 S','평면에서 A, A′. 떠 있는 칩이 다음 클릭을 말해 줌. 뒤 깊이 1–5로 입면 배경.')}${ar}${box('③ 단면 확인','오른쪽 단면: 레벨선 10 cm · 숫자 50 cm · 잘린 선 빨강. 빈 구간은 평면 점선 + 정보 줄. 잘린 돌은 H로 윗경계 자동 · 아래 경계 손으로 · 빗금 자동.')}${ar}${box('④ 도면 탭 Ctrl+P','같은 목록에서 여러 장 고름. 축척 격자 · 용지 · 선 굵기 pt · 도면 점검. 평면도는 정사영상만 + 진북.')}${ar}${box('⑤ SVG 저장','모델_도면_1-축척.svg · 층 이름 묶음 · 그리기용 빈 층 2. 같은 이름은 _2.')}${ar}${box('⑥ 일러스트레이터','층을 켜고 끄며 보고서 도면 완성. 레벨선은 이미 0.2 / 0.5 pt.', true)}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px">
+      <div><div class="scap"><span class="cap">SVG · DXF 층 — 일러스트에서 그대로 보이는 이름</span></div>
+      <div class="layers"><div class="h">층</div><div class="h">내용</div><div class="h">선 굵기</div><div class="h">색</div>
+        <div class="mo">LEVEL_MINOR</div><div>레벨선 10 cm마다</div><div class="mo">0.2 pt</div><div>#9C9A92</div>
+        <div class="mo">LEVEL_MAJOR</div><div>레벨선 50 cm마다 + 해발 숫자 EL.</div><div class="mo">0.5 pt</div><div>#141413</div>
+        <div class="mo">IMAGE</div><div>입면 영상 300 dpi 밑그림 (잠금)</div><div>—</div><div>—</div>
+        <div class="mo">SECTION_CUT_FILL</div><div>잘린 돌 빗금 45° · 종이 위 1.0 mm</div><div class="mo">0.13 mm</div><div>#141413</div>
+        <div class="mo">SECTION_CUT_OUTLINE</div><div>잘린 돌 영역 테</div><div class="mo">0.13 mm</div><div>#141413</div>
+        <div class="mo">SECTION_LINE</div><div>잘린 면(윗면) · A A′ 글자</div><div class="mo">0.5 pt</div><div>#FF0000</div>
+        <div class="mo">PLAN_OUTLINE_STONE · _TILE · _ARTIFACT</div><div>평면 윤곽(O 도구, 사람이 확정한 것만)</div><div class="mo">0.3 pt</div><div>#141413</div>
+        <div class="mo">FRAME · TITLE · LEGEND · SCALEBAR · NORTH</div><div>도곽 · 표제란 · 범례 · 축척 막대 · 진북</div><div class="mo">0.5 / 0.3 pt</div><div>#141413</div>
+        <div class="mo">DRAW_SOIL · DRAW_OUTLINE</div><div>그리기용 빈 층 (토층 · 윤곽)</div><div>—</div><div>—</div></div></div>
+      <div><div class="scap"><span class="cap">Strata와 이어지는 곳</span></div>
+        <div class="frow2">${box('Kerf 단면 GeoTIFF','자료 › 평면 GeoTIFF · 단면 GeoTIFF(EPSG:5186)')}${ar}${box('Strata 「단면도」 탭','GeoTIFF로 표고 · 거리 눈금 도면. 같은 리본 · 같은 탭 · 같은 상태줄.', true)}</div>
+        <div class="frow2" style="margin-top:16px">${box('Strata 단면선 레이어','section_line · 조사구역 좌표(5186 · 5187)')}${ar}${box('Kerf 좌표 입력','A · A′ 좌표를 붙여 넣으면 새 단면. 자료 › 단면 목록 가져오기(CSV)')}</div>
+        <div class="scap" style="margin-top:24px"><span class="cap">한 자리 원칙 (v4와 같음)</span></div>
+        <div class="layers" style="grid-template-columns:140px 1fr"><div class="h">자리</div><div class="h">하는 일</div><div>리본</div><div>손에 드는 도구와 값 바꾸기</div><div>화면 머리</div><div>그 화면을 어떻게 볼지(켜기 · 끄기 · 축척 · 확대)</div><div>떠 있는 칩</div><div>도구를 든 동안 다음 클릭 안내 + 되돌리기</div><div>왼쪽 목록</div><div>무엇을 — 두 탭이 같은 목록</div><div>오른쪽 판</div><div>단면: 읽기 전용 수치 · 도면: 고른 도면 설정 + 도면 점검</div><div>상태줄</div><div>다음 할 일 · 커서 X Y Z · 수평 · 높이 배지</div></div></div></div></div>`;
+}
+
+// ---------- 화판 붙이기
+const BOARDS = [
+  {n:'1', t:'홈', d:'Strata 홈과 같은 뼈대: 왼쪽 이름 · 설명 · 단추 둘, 이어서 작업 카드(명조 이름 · 칸 6 · 흙색 「이어서 열기」), 최근 모델 삼선표, 오른쪽 「작업 순서」 세 걸음, 맨 아래 「처음 쓰는 키」. 리본은 모델 묶음만 켜져 있고 나머지 묶음 이름은 흐림.', f:homeBoard},
+  {n:'2', t:'단면 — 그리는 중', d:'「단면선 긋기」 타일이 먹색으로 켜지고, 평면 왼쪽 위에 떠 있는 칩 「단면선 긋기 › A′ 찾는 중 · 끝점 A′를 클릭하세요 Esc」 + 되돌리기 · 다시. 리본 아래 도구 줄은 없다. 오른쪽 판은 지금 길이 · 방위만. 상태줄은 좌표만(안내는 칩에).', f:()=>workBoard({drawing:true})},
+  {n:'3', t:'단면 — 최종 + 잘린 돌 칠하기 H', d:'A–A′ 최종(54점). 「잘린 돌」 타일이 켜진 동안 단면 화면 왼쪽 위에 칩: 윗경계는 빨간 잘린 선을 따라 자동으로 붙고, 흙 속 아래 경계 4점만 사람이 찍어 Enter로 닫으면 45° 빗금. 정보 줄에 「잘린 돌 1곳」, 오른쪽 판에 한 줄. 흙색은 「도면」 타일 하나.', f:()=>workBoard({hatch:true})},
+  {n:'4', t:'도면 — 단면도', d:'문서 탭 「도면 ×」. 왼쪽 같은 목록 + 「평면도」 줄과 고르기 칸. 가운데 책상 위 A4 종이와 종이 아래 떠 있는 도구 줄(Strata 도면과 같은 6칸). 오른쪽 320: 도면 항목 타일 · 축척 입력 + 격자(10단위) · 레벨선 굵기 10 cm 0.2 pt / 50 cm 0.5 pt · 빗금 · 형식 · 도면 점검 · 흙색 「1장 SVG 저장」 + 「PDF」.', f:()=>sheetBoard('section')},
+  {n:'5', t:'도면 — 평면도', d:'같은 바깥 도곽(표제란 · 범례 · 축척 막대)에 그림 칸만 정사영상. 단면선 없음, 진북만. 좌표 숫자는 그림 칸 밖 4 m마다 모노. 진북 타일이 켜지고 크기 28 mm.', f:()=>sheetBoard('plan')},
+  {n:'6', t:'리본 크기 단계 · 대화 창', d:'Strata KaBeginnerRibbon과 같은 규칙: 창 폭에 맞는 가장 큰 크기로 그리고, 좁아지면 글자를 먼저 숨긴 뒤 타일을 줄인다. 묶음은 접지 않는다. 대화 창은 S 440 · M 560, 폼은 칸부터, 물음은 명조 20, 단추 순서 주 → 취소.', f:ribbonBoard},
+  {n:'7', t:'부품 · 아이콘 · 토큰', d:'색 · 글자 · 부품은 Strata tokens.json과 같다(theme.hpp도 이미 같음). 아이콘은 Lucide 규격으로, 흙색 테가 있는 14개만 Kerf 전용으로 새로 그린다. 나머지는 Strata의 SVG 파일을 그대로 복사한다.', f:partsBoard},
+  {n:'8', t:'흐름도 — 열기부터 일러스트레이터까지', d:'여섯 걸음과 SVG · DXF 층 이름, 선 굵기(pt), Strata와 이어지는 두 길(단면 GeoTIFF → Strata 단면도 탭, Strata 단면선 → Kerf 좌표 입력).', f:flowBoard},
+];
+const host = document.getElementById('boards');
+BOARDS.forEach(b => {
+  const w = document.createElement('div'); w.className='boardwrap'; w.id = 'board-'+b.n;
+  w.innerHTML = `<div class="bhead"><span class="num">화판 ${b.n} / 8</span><h2>${b.t}</h2><div class="btools"><button type="button" data-full>100 %로 보기</button></div><p>${b.d}</p></div><div class="frame"><div class="b">${b.f()}</div></div>`;
+  host.appendChild(w);
+  const frame = w.querySelector('.frame'), btn = w.querySelector('[data-full]');
+  btn.addEventListener('click', () => { const on = frame.classList.toggle('full'); btn.textContent = on ? '맞춰 보기' : '100 %로 보기'; fit(); });
+});
+function shrinkRibbons(){ let guard = 0, r; while((r = document.querySelector('.ribbon[data-ro]')) && guard++ < 40){ if(r.scrollWidth <= r.clientWidth + 1){ r.removeAttribute('data-ro'); continue; } const o = JSON.parse(decodeURIComponent(r.getAttribute('data-ro'))); r.outerHTML = ribbon(o); } }
+function fit(){ document.querySelectorAll('.frame').forEach(f => { if(f.classList.contains('full')) return; const s = f.clientWidth/1920; f.querySelector('.b').style.setProperty('--s', s); }); }
+shrinkRibbons(); if(document.fonts && document.fonts.ready) document.fonts.ready.then(shrinkRibbons);
+if('ResizeObserver' in window){ const ro = new ResizeObserver(fit); document.querySelectorAll('.frame').forEach(f=>ro.observe(f)); } else { window.addEventListener('resize', fit); }
+fit();
+})();
+</script>

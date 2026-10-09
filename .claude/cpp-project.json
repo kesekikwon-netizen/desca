@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "name": "Kerf (SectionViewer)",
+  "buildSystem": "cmake",
+  "commands": {
+    "configure": "cmake -S C:/dev/desca -B C:/dev/kerf-v4c -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl \"-DCMAKE_RC_FLAGS=/C 65001\" -DCMAKE_TOOLCHAIN_FILE=C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows -DCMAKE_PREFIX_PATH=C:/Qt/6.10.3/msvc2022_64",
+    "build": "cmake --build C:/dev/kerf-v4c",
+    "test": "C:/dev/kerf-v4c/asec_tests.exe",
+    "quickTest": "C:/dev/kerf-v4c/asec_tests.exe \"~CoalescingWorker*\"",
+    "run": "C:/dev/kerf-v4c/app/SectionViewer.exe",
+    "screenshot": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/scripts/shot.ps1 -Scene {scene} -Out {out} -Size {w}x{h}"
+  },
+  "ui": {
+    "framework": "qt-widgets",
+    "designSystem": "docs/design-v4/FINAL_PLAN.md",
+    "themeFiles": ["app/theme.hpp"],
+    "scenes": ["work", "draw", "start"],
+    "windowSizes": ["1920x1040"]
+  },
+  "hooks": { "formatOnEdit": false, "verifyOnStop": true, "verifyTimeoutSec": 540 },
+  "protectedPaths": ["third_party/**", "docs/design-v4/boards/**"]
+}

@@ -1,10 +1,13 @@
-# 개발 진행 기록 — Kerf 디자인 v4
+# 개발 진행 기록 — Kerf 디자인 v5(구현 중) · v4 기록
 
 > **이 파일이 개발 진행의 단 하나의 기준이다.** 어떤 AI(Claude Code · OpenCode/Muse Spark · 그 밖)든, 어떤 계정이든 작업을 시작하기 전에 이 파일을 끝까지 읽고, **단계 하나를 마칠 때마다 이 파일을 고친다.**
 > 지시서: [`docs/design-v4/FINAL_PLAN.md`](design-v4/FINAL_PLAN.md) · 화판 원본: [`docs/design-v4/boards/`](design-v4/boards/) (단추 계약 = `Buttons1` · `Buttons2`, 아이콘 = `Icons`, 표시 = `Display`)
 > 온라인 캔버스(소유자만 열림): https://claude.ai/artifact/VNPpTTVmqxoFG8eeZDWupE
 
-> ## ⏸ 2026-10-09 디자인 보완 대기 — Strata와 같은 디자인 언어로
+> ## ▶ 2026-10-09 디자인 v5 확정 · 구현 시작
+> 사용자가 결정 C1–C7(모두 추천대로)을 닫고 /goal로 「디자인 v5를 보면서 똑같이 개발 완성하라」고 지시했다. **지금 기준은 [`docs/design/DESIGN_SPEC.md`](design/DESIGN_SPEC.md)(화판 `docs/design/boards/kerf-design-v5.html`)이고, 구현 순서는 [`docs/superpowers/plans/2026-10-09-design-v5.md`](superpowers/plans/2026-10-09-design-v5.md)(A–I 단계)이다.** 아래 ⏸ 표시는 모두 풀렸다. 모든 작업에 superpowers 스킬(계획 → 시험 먼저 → 검토 → 끝나기 전 확인)과 context7을 쓴다.
+>
+> (옛 안내) ## ⏸ 2026-10-09 디자인 보완 대기 — Strata와 같은 디자인 언어로
 > 사용자 요청: 「UI는 직관적이어야 한다. 내가 만든 GIS 앱 **Strata**와 공통적인 디자인으로 일관성을 줘라.」 디자인은 **다른 Claude Code 계정(Max)** 에서 한다.
 > **먼저 [`docs/design-v4/STRATA_CONSISTENCY.md`](design-v4/STRATA_CONSISTENCY.md)를 읽는다** — Strata 화면 분석, 지금 v4와 부딪치는 결정 C1–C7(한 줄 리본 D5 포함, 이미 구현됨), 디자인 세션이 할 일.
 > 디자인 결정(C1–C7)이 닫히기 전에는 **⏸ 표시된 UI 단계를 진행하지 않는다.** 그동안 개발은 디자인과 무관한 core 일만(§5).
@@ -19,11 +22,11 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-09 · Muse Spark — `--ui-audit` CI 편입 확인·적용. core 전부 끝. 디자인 보완은 다른 계정(Max) |
-| 디자인 상태 | ⏸ 보완 대기 — Strata 일관성(C1–C7 미결정). 위 안내 · `docs/design-v4/STRATA_CONSISTENCY.md` |
+| 마지막 갱신 | 2026-10-09 · Claude Code — `.claude/` 개발 환경 계약(cpp-project.json · verify · shot.ps1) + CLAUDE.md 명령을 Windows 기준으로. core 전부 끝. 디자인 보완은 다른 계정(Max) |
+| 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
-| 바뀐 파일(내용) | 단계별 커밋됨 — `git log --oneline 4422b4e..HEAD` · `origin/feature/design-v2`에 푸시 · CI: `.github/workflows/ci.yml` |
+| 바뀐 파일(내용) | **커밋 대기(2026-10-09 설정):** `CLAUDE.md` · `.claude/cpp-project.json` · `.claude/skills/verify/SKILL.md` · `.claude/scripts/shot.ps1` · 이 파일. 그 밖은 단계별 커밋됨 — `git log --oneline 4422b4e..HEAD` · `origin/feature/design-v2`에 푸시 · CI: `.github/workflows/ci.yml` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
 | 시험 | `asec_tests` 135 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 · `--ui-audit` RESULT ok · GitHub Actions(Linux · Windows) 통과 |
 | 최근 캡처 | `C:\dev\tmp\kerf-shots\work-v4d.png` · `draw-v4.png` · `work-step0-fixed.png`(빨간선 전체 0–12, offscreen이라 평면은 빈 화면·한글 깨짐) · `C:\dev\tmp\ui\` (이 PC에만) |
@@ -153,6 +156,11 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 처음 `--help`·`--start-shot`이 멈춘 것은 offscreen 플러그인 없음(`platforms/`에 `qwindows.dll`만) 탓 — Qt가 뜨지 못하고 대화 상자에서 멈춤. `C:\Qt\6.10.3\msvc2022_64\plugins\platforms\qoffscreen.dll`을 옆에 두니 `EXIT=0`. 합성선 `--ui-audit` → `EXIT=0`, `RESULT ok`(판정은 위젯 상태라 화면 없이도 됨). 덤으로 앱 단면도 고친 뒤 한 줄 54점(`section-ok: polylines=1`)으로 나옴을 확인.
 - **판정:** windeployqt는 qoffscreen을 안 넣으므로 CI에서 Qt 폴더에서 직접 복사 — 잘못이면: offscreen에서 Qt가 안 떠서 멈춤(60초 넘는 타임아웃으로 앎). YAML 문법은 push 뒤 Actions 탭에서 직접 확인할 것(이 PC에 yaml 검사기 없음).
 - **남은 문제:** CI 첫 실행 결과는 GitHub › Actions 탭에서 확인.
+
+### 2026-10-09 · Claude Code — 개발 환경 계약(`.claude/`) · CLAUDE.md 명령을 Windows 기준으로
+- **무엇을:** `/init`(전역 C++ 지시서 §6.7 「프로젝트 계약」 기준)으로 `.claude/cpp-project.json`(빌드 · 시험 · 빠른 시험 · 실행 · 캡처 명령의 단일 계약, `formatOnEdit:false` · `verifyOnStop:true`), `.claude/skills/verify/SKILL.md`(끝났다고 말하기 전 · 커밋 전 검증 절차), `.claude/scripts/shot.ps1`(장면 `work` · `draw` · `start` 캡처, `ui-visual-check`용)을 만듦. `CLAUDE.md` 「명령」 절을 WSL 기준에서 Windows(데스크톱 앱 · 터미널 `claude`) 기준으로 고침 — `cmake --build C:/dev/kerf-v4c` · `C:/dev/kerf-v4c/asec_tests.exe …`처럼 PowerShell · Git Bash 공통 명령. 터미널용 Claude Code 2.1.295를 이 PC에 설치(`~\.local\bin\claude.exe`).
+- **확인:** `cmake --build C:/dev/kerf-v4c`(TEMP · PATH 그대로인 cmd.exe) → exit 0. `asec_tests "~CoalescingWorker*"` → 132 통과 · 1 건너뜀(Bash · PowerShell 모두, 2초). `asec-section` → polylines=1 vertices=54. `--ui-audit` → EXIT=0 `RESULT ok`. `shot.ps1` work · draw · start → PNG 3장(실제 화면 확인). 전역 `ui-visual-check`의 `visual.py capture --scenes work,start --themes light --scales 1` → OK 2장. 전역 세션 시작 훅이 계약 요약을 출력함.
+- **판정:** `.clang-format` · `.clang-tidy`는 넣지 않음 — 저장소 규칙(바꾼 줄만 고침)과 전체 재포맷 위험 — 잘못이면: 자동 정렬 없이 손으로 모양을 맞춰야 함. 전역 디자인 토큰 감시 훅은 `ui/` · `gui/` 같은 폴더 이름만 보므로 `app/`에는 걸리지 않음(계약의 `ui.framework`는 기록용). 커밋하지 않음 — 사용자 지시 대기.
 
 ## 5. 다음 할 일 (위에서부터)
 **A. 디자인 세션(다른 계정, Max) — 먼저**
