@@ -104,6 +104,7 @@ public:
 protected:
     void initializeGL() override;
     void resizeGL(int w, int h) override;
+    void resizeEvent(QResizeEvent* e) override;   // GL 없이도(offscreen) 불리는 길: 맞춤 상태면 fitAll, 아니면 행렬만(B5). 기본 구현을 먼저 부른다(프레임버퍼 크기)
     void paintGL() override;
     void mousePressEvent(QMouseEvent*) override;
     void mouseMoveEvent(QMouseEvent*) override;
@@ -155,6 +156,7 @@ private:
     // 카메라(중심 기준 좌표)
     QVector3D target_;
     double mpp_ = 0.01, yaw_ = 0, pitch_ = 90;
+    bool fitted_ = false;               // 맞춤 상태(fitAll 뒤 사용자가 확대 · 이동 · 돌리기 · 카메라 지정을 안 함) — 창 크기가 바뀌면 다시 맞춘다(B5)
     double zoomPending_ = 0;            // 남은 확대량(log, 음수 = 확대)
     QPointF zoomAnchor_;
     class QTimer* zoomTimer_ = nullptr;
