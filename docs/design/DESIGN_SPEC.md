@@ -51,7 +51,7 @@ Kerf 창을 Strata 창과 **같은 쌓임 · 같은 리본 · 같은 탭 · 같�
 | 단면 `sec` | `draw` 긋기 「단면선 긋기 (S)」 · `addsec` 새 단면 「새 단면 (N)」 · `flip` 반전 「방향 반전」 · `move` 이동 ▾ 「평행 이동 ±0.1 · ±1 m」 · `hatch` 잘린 돌 「잘린 돌 칠하기 (H)」 · `outline` 윤곽 「윤곽 따기 (O)」 | draw · hatch · outline = **도구**(켜지면 먹색 타일) |
 | 입면 `elev` | 위젯: 뒤 깊이 칩 `0.5 1 2 3 5`(숫자키) · 「뒤」 m 칸 · 「앞」 m 칸 | 위젯 |
 | 보기 `view` | `listpanel` 목록 · `view1` 평면 · `view2` 단면 · `contrast` 고대비 | **보기 켜짐**(귀리색 타일 + 테) |
-| 자료 `data` | `csv` CSV 「단면선 CSV」 · `plan` GeoTIFF 「평면 · 단면 GeoTIFF」 · `xyz` XYZ · `las` LAS · `secjson` 목록 ▾ 「단면 목록 내보내기 · 가져오기」 | 보통 |
+| 자료 `data` | `csv` CSV 「단면선 CSV」 · `plan` GeoTIFF 「평면 · 단면 GeoTIFF」 · `xyz` XYZ · `las` LAS · `seclist` 목록 파일 ▾ 「단면 목록 내보내기 · 가져오기」(보기 묶음 「목록」과 이름이 겹치지 않게) | 보통 |
 | 내보내기 `out` | `sheet` 도면 「도면 (Ctrl+P)」 | **주 단추**(흙색 타일 + 흰 아이콘, 글자 700) — 단면 탭에서 한 화면의 유일한 흙색 |
 | 기타 `etc` | `keys` 단축키 「모든 키 (F1)」 · `more` 더보기 ▾ 「정보 · 영상 불투명도 · 단면선 굵기 · 매끈하게 · 영어 병기 · 끝내기」 | 보통 |
 

@@ -19,7 +19,7 @@
 
 namespace {
 constexpr int kRowPadLeft = 8, kRowPadRight = 12;                     // 리본 좌우 여백
-constexpr int kGroupPadX = 4, kGroupPadTop = 8, kGroupPadBottom = 10;  // 묶음 안 여백 — 타일 50 일 때 8 + 16 + 4 + 80 + 10 = 118
+constexpr int kGroupPadX = 3, kGroupPadTop = 8, kGroupPadBottom = 10;  // 묶음 안 여백 — 타일 50 일 때 8 + 16 + 4 + 80 + 10 = 118
 constexpr int kCaptionHeight = 16, kCaptionGap = 4;
 constexpr int kChipGap = 2, kGroupGap = 2;
 constexpr int kLabelPad = 8;        // 칩 폭 = 글자 폭 + 8(타일 + 8 보다 작지 않게)
@@ -124,6 +124,11 @@ void Ribbon::setCorner(QWidget* w) {
     updateGeometry();
 }
 
+void Ribbon::setChipOn(QToolButton* b, bool on) {
+    for (Chip& c : chips_)
+        if (c.button == b && c.forceOn != on) { c.forceOn = on; drawChip(c, look()); return; }
+}
+
 void Ribbon::setGroupDim(const QString& id, bool dim) {
     if (!groups_.contains(id)) return;
     QLabel* c = groups_[id].caption;
@@ -163,7 +168,7 @@ RibbonLook Ribbon::look() const { return looks().at(lookIndex_); }
 
 int Ribbon::chipWidth(const RibbonLook& L, const QToolButton* b) const {
     if (!L.labels) return L.chipWidth;
-    return std::max(L.tile + 8, std::min(labelWidth(b), kMaxLabelWidth) + kLabelPad);
+    return std::max(L.tile + 6, std::min(labelWidth(b), kMaxLabelWidth) + kLabelPad);   // 바닥은 타일 + 6(Strata 는 + 8 — 묶음 7 + 입면 위젯이 1920 에 들어가게 2 px 좁힘)
 }
 
 int Ribbon::chipHeight(const RibbonLook& L) const { return L.tile + 12 + (L.labels ? lineHeight() : 0); }
@@ -171,14 +176,20 @@ int Ribbon::chipHeight(const RibbonLook& L) const { return L.tile + 12 + (L.labe
 int Ribbon::lineHeight() const {
     int line = 0;
     for (const Chip& c : chips_) line = std::max(line, QFontMetrics(c.button->font()).height());
-    return line;
+    return std::max(18, line);   // 글자 줄은 18 이상 — 타일 50 일 때 리본 118(스펙 §2)
 }
 
 QIcon Ribbon::chipIconCached(const Chip& c, const RibbonLook& L) {
-    const QString key = QStringLiteral("%1|%2|%3").arg(c.icon).arg(L.tile).arg(int(c.kind));
+    const QString key = QStringLiteral("%1|%2|%3|%4").arg(c.icon).arg(L.tile).arg(int(c.kind)).arg(c.forceOn ? 1 : 0);
     auto it = iconCache_.find(key);
-    if (it == iconCache_.end()) it = iconCache_.insert(key, kerf::chipIcon(c.icon, L.tile, L.glyph, c.kind, colors_));
-    return it.value();
+    if (it != iconCache_.end()) return it.value();
+    QIcon src = kerf::chipIcon(c.icon, L.tile, L.glyph, c.forceOn ? kerf::ChipKind::Shown : c.kind, colors_);
+    if (!c.forceOn) return *iconCache_.insert(key, src);
+    // 체크할 수 없는 칩이라 Off 상태로 그려진다 → On 모양을 Off 자리에 넣는다
+    QIcon ic;
+    for (auto mode : {QIcon::Normal, QIcon::Active, QIcon::Disabled, QIcon::Selected})
+        for (qreal d : {1.0, 1.5, 2.0, 3.0}) ic.addPixmap(src.pixmap(QSize(L.tile, L.tile), d, mode, QIcon::On), mode, QIcon::Off);
+    return *iconCache_.insert(key, ic);
 }
 
 void Ribbon::drawChip(const Chip& c, const RibbonLook& L) {
@@ -210,6 +221,25 @@ QList<int> Ribbon::lookWidths() const {
             widths[k] += std::max(captionW, inner.at(k) + std::max(0, count - 1) * g.row->spacing()) + 2 * kGroupPadX + 1 + row_->spacing();
     }
     return widths;
+}
+
+QString Ribbon::widthReport() const {
+    const RibbonLook L = looks().first();
+    QStringList out;
+    for (const QString& id : order_) {
+        const Group& g = groups_.value(id);
+        int chipsW = 0, widgetsW = 0;
+        for (int i = 0; i < g.row->count(); ++i) {
+            QWidget* w = g.row->itemAt(i)->widget();
+            if (!w) continue;
+            const Chip* chip = nullptr;
+            for (const Chip& ch : chips_) if (ch.button == w) { chip = &ch; break; }
+            if (chip) chipsW += chipWidth(L, chip->button); else widgetsW += w->sizeHint().width();
+        }
+        out << QStringLiteral("%1:%2/%3/%4").arg(id).arg(g.caption->sizeHint().width()).arg(chipsW).arg(widgetsW);
+    }
+    out << QStringLiteral("corner:%1").arg(corner_ ? corner_->sizeHint().width() : 0);
+    return out.join(QLatin1Char(' '));
 }
 
 QSize Ribbon::sizeHint() const {

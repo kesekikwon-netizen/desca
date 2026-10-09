@@ -105,8 +105,11 @@ QToolButton#ribbonCorner:hover { background: #F5F4ED; border-color: #B0AEA5; }
 QLineEdit#ribbonSearch { min-height: 30px; max-height: 30px; min-width: 150px; max-width: 150px; border: 1px solid #C2C0B6; border-radius: 8px; background: #FFFFFF; padding: 0 10px; font-size: 12px; }
 QLineEdit#ribbonSearch:focus { border: 2px solid #141413; padding: 0 9px; }
 
-QTabBar#docTabs { background: #F0EEE6; border-bottom: 1px solid #DEDCD1; }
-QTabBar#docTabs::tab { background: transparent; color: #3D3D3A; border: 1px solid transparent; border-bottom: none; padding: 5px 14px; margin: 3px 2px 0 0; font-size: 13px; }
+QWidget#docTabsRow { background: #F0EEE6; border-bottom: 1px solid #DEDCD1; }
+QLabel#docTabCorner { color: #5E5D59; font-size: 13px; padding-right: 8px; }
+QTabBar#docTabs { background: transparent; border: none; }
+QTabBar#docTabs::tab { background: transparent; color: #3D3D3A; border: 1px solid transparent; border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; padding: 6px 14px; margin: 4px 2px 0 0; font-size: 13px; }
+QTabBar#docTabs::tab:disabled { color: #9C9A92; }
 QTabBar#docTabs::tab:selected { background: #FAF9F5; color: #141413; font-weight: 700; border-color: #DEDCD1; }
 QTabBar#docTabs::tab:hover:!selected { background: #F5F4ED; }
 QWidget#viewToggles { border: 1px solid #DEDCD1; border-radius: 6px; background: #FFFFFF; }

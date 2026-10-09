@@ -37,6 +37,8 @@ public:
     void addWidget(const QString& groupId, QWidget* w);
     /// 오른쪽 끝 묶음(Strata 「지역」 + 찾기 자리)
     void setCorner(QWidget* w);
+    /// 체크할 수 없는 칩을 켜짐(보기 켜짐) 모양으로 — 도면 탭의 「도면」 칩
+    void setChipOn(QToolButton* b, bool on);
     /// 홈 탭처럼 쓸 수 없는 묶음: 이름을 흐리게
     void setGroupDim(const QString& id, bool dim);
     QFrame* group(const QString& id) const;
@@ -49,6 +51,8 @@ public:
     /// widths[i] = looks()[i] 에서 필요한 폭. 들어가는 첫 크기, 없으면 마지막
     static int chooseLook(const QList<int>& widths, int available);
     QList<int> lookWidths() const;
+    /// 감사용: 묶음마다 「id:이름폭/칩합/위젯합」 과 오른쪽 끝 폭(타일 50 기준)
+    QString widthReport() const;
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
@@ -58,7 +62,7 @@ protected:
     bool eventFilter(QObject* watched, QEvent* e) override;
 
 private:
-    struct Chip { QToolButton* button = nullptr; kerf::ChipKind kind = kerf::ChipKind::Normal; QString icon; };
+    struct Chip { QToolButton* button = nullptr; kerf::ChipKind kind = kerf::ChipKind::Normal; QString icon; bool forceOn = false; };
     struct Group { QFrame* frame = nullptr; QLabel* caption = nullptr; QHBoxLayout* row = nullptr; };
 
     int chipWidth(const RibbonLook& L, const QToolButton* b) const;

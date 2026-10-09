@@ -463,7 +463,7 @@ int main(int argc, char** argv) {
         log(QStringLiteral("hover-final(%1 ms): ").arg(msSince(th), 0, 'f', 0) + w.cursorText());
     }
     if (front >= 0 || back >= 0) w.setThickness(front >= 0 ? front : 0.0, back >= 0 ? back : 0.5);
-    if (tab >= 0) w.selectRibbonTab(tab);
+    if (tab >= 0) w.selectDocTab(tab);
     processFor(300);
     log("window-" + w.windowTitleCheck());
     log(QStringLiteral("depth: front=%1m back=%2m backUserSet=%3").arg(w.frontDepth(), 0, 'f', 2).arg(w.backDepth(), 0, 'f', 2).arg(w.backUserSet() ? 1 : 0));

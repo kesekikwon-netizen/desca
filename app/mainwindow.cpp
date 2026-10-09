@@ -212,7 +212,7 @@ void MainWindow::closeEvent(QCloseEvent* e) {
 
 const SrsInfo& MainWindow::srs() const { static SrsInfo none; return src_ ? src_->srs : none; }
 bool MainWindow::hasSection() const { return section_->hasResult(); }
-void MainWindow::selectRibbonTab(int i) { tabs_->setCurrentIndex(i); }
+void MainWindow::selectDocTab(int i) { if (viewTabs_ && i >= 0 && i < viewTabs_->count()) viewTabs_->setCurrentIndex(i); }
 
 SectionStyle MainWindow::secStyle() const {
     SectionStyle s;

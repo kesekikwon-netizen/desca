@@ -1129,11 +1129,13 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
 
 void MainWindow::showWorkTab() {
     if (!body_) return;
-    body_->setCurrentIndex(src_ ? 1 : 0);
-    if (viewTabs_ && viewTabs_->currentIndex() != 0) {
+    if (!src_) { showStart(true); return; }
+    body_->setCurrentIndex(1);
+    if (viewTabs_ && viewTabs_->currentIndex() != 1) {
         QSignalBlocker b(viewTabs_);
-        viewTabs_->setCurrentIndex(0);
+        viewTabs_->setCurrentIndex(1);
     }
+    setRibbonContext(1);
 }
 
 void MainWindow::saveEmbeddedSheet() {
@@ -1151,13 +1153,13 @@ void MainWindow::showSheetTab(QWidget* page) {
     }
     sheetHost_ = page;
     if (body_->indexOf(page) < 0) body_->addWidget(page);
-    if (viewTabs_) {
-        if (viewTabs_->count() < 2) viewTabs_->addTab(theme::icon(theme::Ico::Sheet, 15), QStringLiteral("조판"));
+    if (viewTabs_) {   // v5 C2: 「도면 ×」 탭은 도면을 열 때 생기고 × 로 닫힌다
+        if (viewTabs_->count() < 3) viewTabs_->addTab(kerf::icon(QStringLiteral("sheet"), 16, theme::Hand), QStringLiteral("도면"));
         QSignalBlocker b(viewTabs_);
-        viewTabs_->setCurrentIndex(1);
-        viewTabs_->setVisible(true);
+        viewTabs_->setCurrentIndex(2);
     }
     body_->setCurrentWidget(page);
+    setRibbonContext(2);
 }
 
 void MainWindow::showSheetTab(QDialog* d, std::function<void()> save) {
