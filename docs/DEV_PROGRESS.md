@@ -19,11 +19,11 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-09 · Muse Spark — A3 core 완료(`localRelief` · `contoursAbove` + 시험 4개). 디자인 보완은 다른 계정(Max) |
+| 마지막 갱신 | 2026-10-09 · Muse Spark — `--ui-audit` CI 편입 확인·적용. core 전부 끝. 디자인 보완은 다른 계정(Max) |
 | 디자인 상태 | ⏸ 보완 대기 — Strata 일관성(C1–C7 미결정). 위 안내 · `docs/design-v4/STRATA_CONSISTENCY.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
-| 바뀐 파일(내용) | 커밋됨 — `f4c246e` 단계 0 고치기 + A1 core, `origin/feature/design-v2`에 푸시 · CI: `.github/workflows/ci.yml` |
+| 바뀐 파일(내용) | 단계별 커밋됨 — `git log --oneline 4422b4e..HEAD` · `origin/feature/design-v2`에 푸시 · CI: `.github/workflows/ci.yml` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
 | 시험 | `asec_tests` 135 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 · `--ui-audit` RESULT ok · GitHub Actions(Linux · Windows) 통과 |
 | 최근 캡처 | `C:\dev\tmp\kerf-shots\work-v4d.png` · `draw-v4.png` · `C:\dev\tmp\ui\` (이 PC에만) |
@@ -148,6 +148,12 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 선언만 넣고 링크 실패 RED → 구현 뒤 `[relief]` 통과. 전체 `asec_tests` → 135 통과 · 1 실패(알려진 CoalescingWorker) · 1 건너뜀. 전체 빌드 새 경고 없음.
 - **판정:** 지시서 스케치(원기둥=원 하나)와 달리 깎아지른 원기둥은 창 경계에서 안쪽 고리가 하나 더 생김(창이 바깥을 보기 시작하는 자리, 탐침 확인) — 매끈한 둔덕(합성 모델 돌 모양)으로 시험하고 이유를 시험 주석에 적음 — 잘못이면: 후보가 2개로 나옴(앱에서 고르는 것은 사람 몫).
 
+### 2026-10-09 · Muse Spark — `--ui-audit` CI 편입(확인됨)
+- **무엇을:** 화면 없는 러너에서 `--ui-audit`이 도는지 확인하고 `.github/workflows/ci.yml` windows-app에 넣음(묶음 만든 뒤 · 올리기 전). 합성 모델 생성 → `qoffscreen.dll` 복사 → `QT_QPA_PLATFORM=offscreen` 실행 → 종료 코드 9이면 실패.
+- **확인:** 처음 `--help`·`--start-shot`이 멈춘 것은 offscreen 플러그인 없음(`platforms/`에 `qwindows.dll`만) 탓 — Qt가 뜨지 못하고 대화 상자에서 멈춤. `C:\Qt\6.10.3\msvc2022_64\plugins\platforms\qoffscreen.dll`을 옆에 두니 `EXIT=0`. 합성선 `--ui-audit` → `EXIT=0`, `RESULT ok`(판정은 위젯 상태라 화면 없이도 됨). 덤으로 앱 단면도 고친 뒤 한 줄 54점(`section-ok: polylines=1`)으로 나옴을 확인.
+- **판정:** windeployqt는 qoffscreen을 안 넣으므로 CI에서 Qt 폴더에서 직접 복사 — 잘못이면: offscreen에서 Qt가 안 떠서 멈춤(60초 넘는 타임아웃으로 앎). YAML 문법은 push 뒤 Actions 탭에서 직접 확인할 것(이 PC에 yaml 검사기 없음).
+- **남은 문제:** CI 첫 실행 결과는 GitHub › Actions 탭에서 확인.
+
 ## 5. 다음 할 일 (위에서부터)
 **A. 디자인 세션(다른 계정, Max) — 먼저**
 1. `docs/design-v4/STRATA_CONSISTENCY.md`를 읽고 Strata 캡처(이 PC `C:\Users\권을\Documents\desc\design-v4\strata-ref\`)와 Strata 코드에서 공통 디자인 언어(토큰 · 리본 · 탭 · 판 치수)를 정리한다.
@@ -155,7 +161,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 3. 캔버스 화판과 `docs/design-v4/boards/` · `FINAL_PLAN.md` 결정표를 고치고, 이 파일의 ⏸를 풀 단계를 적는다.
 
 **B. 개발 — 디자인과 무관해서 지금 해도 되는 것(core, 시험 먼저)**
-1. 단계 0 완료. 2. A1 core 완료. 3. 단계 14 core 완료. 4. 단계 12 core 완료. 5. A3 core 완료(§4 기록). core 남음: `--ui-audit` CI 넣기 확인.
+1. 단계 0 완료. 2. A1 core 완료. 3. 단계 14 core 완료. 4. 단계 12 core 완료. 5. A3 core 완료. 6. `--ui-audit` CI 편입(§4 기록). core는 끝 — 남음: 디자인 결정 뒤 ⏸ UI 단계들.
 2. A1 core — `hatchPolygon(다각형, 각도, 간격)` · `closeCutRegion(…)` (FINAL_PLAN §9).
 3. 단계 14 core — 도면 파일 이름 함수(금지 글자 · 겹침 `_2`).
 4. 단계 12 core — 3D 기울어진 평면에서 「위에서 본 범위」 계산.

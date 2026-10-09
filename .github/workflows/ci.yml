@@ -70,6 +70,16 @@ jobs:
           Copy-Item "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin\zlib1.dll" $out -ErrorAction SilentlyContinue
           Get-ChildItem build -Recurse -Filter z*.dll | Copy-Item -Destination $out -ErrorAction SilentlyContinue
           & windeployqt --release --no-translations --no-system-d3d-compiler --no-compiler-runtime "$out\SectionViewer.exe"
+      - name: UI 감사 (offscreen, 화면 없이)
+        shell: pwsh
+        # windeployqt는 qoffscreen.dll을 넣지 않으므로 Qt에서 직접 복사한다.
+        # 화면(OpenGL) 없이도 감사 판정(단추 겹침·자리 규칙)은 위젯 상태로만 하므로 돈다.
+        run: |
+          & .\build\Release\asec-make-synthetic.exe "$env:TEMP\kerf-synth"
+          Copy-Item "$env:QT_ROOT_DIR\plugins\platforms\qoffscreen.dll" dist\Kerf-ci\
+          $env:QT_QPA_PLATFORM = "offscreen"
+          & dist\Kerf-ci\SectionViewer.exe "$env:TEMP\kerf-synth\Synthetic.3mx" --line 200002 450006 200014 450006 --size 1920x1040 --settings "$env:TEMP\kerf-audit-settings" --ui-audit "$env:TEMP\kerf-audit" --quit
+          if ($LASTEXITCODE -ne 0) { throw "ui-audit failed (exit=$LASTEXITCODE)" }
       - name: 실행 묶음 올리기
         uses: actions/upload-artifact@v4
         with:
