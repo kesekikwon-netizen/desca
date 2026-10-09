@@ -212,6 +212,16 @@ QString Ribbon::chipIconName(const QAbstractButton* b) const {
     return QString();
 }
 
+QPixmap Ribbon::chipReference(const QAbstractButton* b, qreal dpr) const {
+    for (const Chip& c : chips_)
+        if (c.button == b) {
+            const RibbonLook L = look();
+            const bool caret = c.action && c.action->menu();
+            return kerf::chipPixmap(c.icon, L.tile, L.glyph, c.forceOn ? kerf::ChipKind::Shown : c.kind, colors_, QIcon::Normal, c.forceOn ? QIcon::On : QIcon::Off, dpr, caret);
+        }
+    return QPixmap();
+}
+
 QList<int> Ribbon::lookWidths() const {
     const QList<RibbonLook> all = looks();
     QList<int> widths(all.size(), kRowPadLeft + kRowPadRight + (corner_ ? corner_->sizeHint().width() + row_->spacing() : 0));

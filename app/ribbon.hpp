@@ -46,6 +46,8 @@ public:
     QList<QToolButton*> chips() const;
     /// 감사용: 이 단추가 리본 칩이면 아이콘 이름, 아니면 빈 글
     QString chipIconName(const QAbstractButton* b) const;
+    /// 감사용(B5 검토 ⓓ): 이 칩이 지금 크기에서 가져야 할 Normal · Off 장을 dpr 배율로 바로 굽는다(chipIconCached 와 같은 인자 — forceOn 칩은 Shown · On 모양, 메뉴 칩은 ▾). 칩이 아니면 빈 pixmap
+    QPixmap chipReference(const QAbstractButton* b, qreal dpr) const;
 
     RibbonLook look() const;
     int lookIndex() const { return lookIndex_; }

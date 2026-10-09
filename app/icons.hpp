@@ -29,4 +29,6 @@ struct ChipColors {
 [[nodiscard]] QPixmap glyph(const QString& name, int px, const QColor& ink, qreal dpr = 1.0);
 /// 리본 칩 아이콘: tile 한 변(px) 안에 glyph 크기 아이콘, 둥글기 tile/4. kind 에 따라 켜짐 색이 다르다
 [[nodiscard]] QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, bool caret = false);   // caret = 메뉴 칩 ▾(타일 오른쪽 아래)
+/// 칩 한 장 바로 그리기(상태 · 배율 지정) — chipIcon 의 반복이 이것을 부르고, --ui-audit 가 같은 인자로 구운 기준 장과 칩 아이콘을 픽셀 비교한다(B5 검토 ⓓ)
+[[nodiscard]] QPixmap chipPixmap(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, QIcon::Mode mode, QIcon::State state, qreal dpr, bool caret = false);
 }  // namespace kerf

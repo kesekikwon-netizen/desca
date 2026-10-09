@@ -2044,19 +2044,23 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         auto judgeDim = [&](int wantV, int availV) { return offscreen || !avail.isValid() || wantV <= availV; };
         const bool sizeOk = !want.isValid() || ((!judgeDim(want.width(), avail.width()) || width() == want.width()) && (!judgeDim(want.height(), avail.height()) || height() == want.height()));
         const bool scaleOk = !offscreen || qFuzzyCompare(devicePixelRatioF(), scale.toDouble() > 0 ? scale.toDouble() : 1.0);
-        // 선 아이콘: 바로 그린 장과 크기 · 픽셀이 같아야 함. 리본 칩(보이는 것 전부): 돌려받은 장의 dpr 이 요청한 배율이어야 함
-        int iconDprBad = 0;
+        // 선 아이콘 · 리본 칩(보이는 것 전부): 그 배율로 바로 구운 기준 장과 크기 · dpr · 픽셀이 같아야 함(칩은 chipReference — dpr 값만 보던 옛 판정은 Qt 가 다른 장을 늘려 돌려줘도 통과했다, B5 검토 ⓓ)
+        int iconDprBad = 0, chipDprBad = 0;
         for (qreal d : {1.25, 1.75}) {
             const QPixmap a = kerf::icon(QStringLiteral("search"), 18, theme::Hand).pixmap(QSize(18, 18), d);
             const QPixmap b = kerf::glyph(QStringLiteral("search"), 18, theme::Hand, d);
             if (a.size() != b.size() || !qFuzzyCompare(a.devicePixelRatio(), d) || a.toImage() != b.toImage()) ++iconDprBad;
             const int tile = ribbon_->look().tile;
-            for (auto* c : ribbon_->chips()) if (c->isVisibleTo(this) && !qFuzzyCompare(c->icon().pixmap(QSize(tile, tile), d).devicePixelRatio(), d)) ++iconDprBad;
+            for (auto* c : ribbon_->chips())
+                if (c->isVisibleTo(this)) {
+                    const QPixmap ca = c->icon().pixmap(QSize(tile, tile), d, QIcon::Normal, QIcon::Off), cb = ribbon_->chipReference(c, d);
+                    if (ca.size() != cb.size() || !qFuzzyCompare(ca.devicePixelRatio(), d) || ca.toImage() != cb.toImage()) ++chipDprBad;
+                }
         }
-        const bool envOk = sizeOk && minW <= 1280 && overflow == 0 && scaleOk && iconDprBad == 0;
-        L << QStringLiteral("ui-audit env size=%1x%2 want=%3x%4 scale=%5 dpr=%6 min-width=%7 overflow=%8%9 icon-dpr-bad=%10%11%12").arg(width()).arg(height()).arg(want.width()).arg(want.height()).arg(scale).arg(devicePixelRatioF(), 0, 'f', 2).arg(minW).arg(overflow)
+        const bool envOk = sizeOk && minW <= 1280 && overflow == 0 && scaleOk && iconDprBad == 0 && chipDprBad == 0;
+        L << QStringLiteral("ui-audit env size=%1x%2 want=%3x%4 scale=%5 dpr=%6 min-width=%7 overflow=%8%9 icon-dpr-bad=%10 chip-dpr-bad=%11%12%13").arg(width()).arg(height()).arg(want.width()).arg(want.height()).arg(scale).arg(devicePixelRatioF(), 0, 'f', 2).arg(minW).arg(overflow)
                  .arg(over.isEmpty() ? QString() : QStringLiteral(" [%1]").arg(over.join(QLatin1Char(','))))
-                 .arg(iconDprBad)
+                 .arg(iconDprBad).arg(chipDprBad)
                  .arg(offscreen ? QString() : QStringLiteral(" screen-avail=%1x%2").arg(avail.width()).arg(avail.height()))   // 실제 화면일 때만: ① · ④ 가 어디까지 판정됐는지 읽을 수 있게
                  .arg(envOk ? QString() : QStringLiteral("  FAIL"));
         ok &= envOk;

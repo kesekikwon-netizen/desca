@@ -132,14 +132,16 @@ QIcon icon(const QString& name, int px, const QColor& ink) {
     return ic;
 }
 
+QPixmap chipPixmap(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, QIcon::Mode mode, QIcon::State state, qreal dpr, bool caret) {
+    const Look L = lookFor(kind, mode == QIcon::Selected ? QIcon::Normal : mode, state, c);
+    return renderChip(find(name), tile, glyphPx, L, dpr, caret);
+}
+
 QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, bool caret) {
-    const kerficons::Svg* s = find(name);
-    QIcon ic;
+    QIcon ic;   // 그리는 길은 chipPixmap 하나 — 감사 기준 장과 같은 함수
     for (auto mode : {QIcon::Normal, QIcon::Active, QIcon::Disabled, QIcon::Selected})
-        for (auto state : {QIcon::Off, QIcon::On}) {
-            const Look L = lookFor(kind, mode == QIcon::Selected ? QIcon::Normal : mode, state, c);
-            for (qreal d : iconDprs()) ic.addPixmap(renderChip(s, tile, glyphPx, L, d, caret), mode, state);
-        }
+        for (auto state : {QIcon::Off, QIcon::On})
+            for (qreal d : iconDprs()) ic.addPixmap(chipPixmap(name, tile, glyphPx, kind, c, mode, state, d, caret), mode, state);
     return ic;
 }
 }  // namespace kerf
