@@ -148,6 +148,23 @@ void setElidedText(QLabel* l, const QString& text, Qt::TextElideMode mode, int w
     l->setText(shown);
     l->setToolTip(shown == whole ? QString() : whole);
 }
+// 홈의 한 줄 글(스펙 §7): 가로 Ignored(창 최소 폭을 밀지 않음) + 동적 속성 elideMode — 앱 전체 필터가 Resize 때 contentsRect 폭에 맞게 줄임표 · 툴팁(경로 · 이름 = 가운데, 문장 = 끝)
+QLabel* elideLab(QLabel* l, Qt::TextElideMode mode) {
+    l->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    l->setProperty("elideMode", int(mode));
+    l->setProperty("fullText", l->text());
+    return l;
+}
+// 홈 「처음 쓰는 키」 줄(스펙 §7): 폭이 모자라면 뒤 키 묶음부터 숨긴다(Ctrl+Z → Ctrl+P → O → H → 1–5 → S). 「처음 쓰는 키」 머리와 「모든 키 F1」은 남긴다
+void fitHomeKeys(QWidget* keys) {
+    QLayout* lay = keys->layout();
+    if (!lay) return;
+    QList<QWidget*> groups;
+    for (int i = 0; i < lay->count(); ++i) if (QWidget* w = lay->itemAt(i)->widget()) if (w->property("keyGroup").toBool()) groups << w;
+    for (QWidget* g : groups) g->setVisible(true);
+    lay->activate();
+    for (int i = groups.size() - 1; i >= 0 && lay->minimumSize().width() > keys->width(); --i) { groups[i]->setVisible(false); lay->activate(); }
+}
 
 QWidget* vbox(std::initializer_list<QWidget*> ws, int spacing = 3) {
     auto* w = new QWidget; auto* l = new QVBoxLayout(w); l->setContentsMargins(0, 0, 0, 0); l->setSpacing(spacing);
@@ -368,6 +385,11 @@ bool MainWindow::eventFilter(QObject* o, QEvent* e) {
         }
         if (o == secTitleBar_) fitSectionHeader();   // 좁은 창: 단면 머리를 폭에 맞게 줄인다(스펙 §4 — 필터는 layout 의 doResize 보다 먼저 받는다)
         if (o == infoStrip_) fitInfoStrip();         // 정보 줄도 같은 때
+        if (const QVariant em = o->property("elideMode"); em.isValid() && o->inherits("QLabel")) {   // 홈 한 줄 글: 폭에 맞게 줄임표 + 툴팁(스펙 §7)
+            auto* l = static_cast<QLabel*>(o);
+            setElidedText(l, l->property("fullText").toString(), Qt::TextElideMode(em.toInt()), l->contentsRect().width());
+        }
+        if (o->objectName() == QLatin1String("homeKeys")) fitHomeKeys(static_cast<QWidget*>(o));   // 키 줄은 뒤 키부터 숨김
     }
     if (e && (e->type() == QEvent::FocusIn || e->type() == QEvent::FocusOut) && o && o->isWidgetType() && o->inherits("QAbstractButton")) {
         auto* b = static_cast<QWidget*>(o);
@@ -1287,11 +1309,22 @@ QWidget* MainWindow::buildStartPage() {
     return w;
 }
 
+// 레이아웃을 재귀로 비운다(QLayout::takeAt 문서의 안전한 비우기 + 하위 레이아웃 재귀): 위젯은 숨기고 deleteLater, 하위 레이아웃은 먼저 비운 뒤 항목으로 delete.
+// 전에는 최상위 항목(격자 레이아웃 하나)만 delete 해 격자 안 위젯이 startPage_ 의 자식으로 남아 (0,0)에 겹쳐 그려졌다(AC14 — 사용자 버그 보고 2026-10-10)
+void MainWindow::clearLayout(QLayout* lay) {
+    if (!lay) return;
+    while (QLayoutItem* it = lay->takeAt(0)) {
+        if (QWidget* w = it->widget()) { w->hide(); w->deleteLater(); }
+        else if (QLayout* sub = it->layout()) clearLayout(sub);
+        delete it;
+    }
+}
+
 // 홈(디자인 v5 C3 · 스펙 §7 · Strata 홈과 같은 뼈대): 이름 · 설명 · 단추 둘 | 이어서 작업 카드 | 최근 모델 삼선표 + 찾기 | 작업 순서 세 걸음 | 처음 쓰는 키
 void MainWindow::rebuildStartPage() {
     if (!startPage_) return;
     auto* lay = static_cast<QVBoxLayout*>(startPage_->layout());
-    while (auto* it = lay->takeAt(0)) { if (it->widget()) it->widget()->deleteLater(); delete it; }
+    clearLayout(lay);
     lay->setContentsMargins(48, 24, 48, 0); lay->setSpacing(0);
     const QStringList rf = recentFiles();
     QSettings st;
@@ -1330,7 +1363,7 @@ void MainWindow::rebuildStartPage() {
         rb->setFixedHeight(40); rb->setMenu(recentMenu_); rb->setPopupMode(QToolButton::InstantPopup); rb->setEnabled(!rf.isEmpty()); rb->setFocusPolicy(Qt::NoFocus);
         bt->addWidget(ob); bt->addWidget(rb); bt->addStretch();
         v->addLayout(bt);
-        auto* drop = lab(QStringLiteral("파일을 창 어디에나 끌어다 놓아도 열립니다 · *.3mx(권장) · *.3sm · *.obj"), "lab"); drop->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // 한 줄 글이 창 최소 폭을 밀어내지 않게(B5)
+        auto* drop = elideLab(lab(QStringLiteral("파일을 창 어디에나 끌어다 놓아도 열립니다 · *.3mx(권장) · *.3sm · *.obj"), "lab"), Qt::ElideRight);   // 한 줄 글이 창 최소 폭을 밀어내지 않게(B5) + 좁으면 줄임표(#3c)
         v->addWidget(drop);
         v->addStretch(); }
     g->addWidget(hero, 0, 0);
@@ -1345,11 +1378,10 @@ void MainWindow::rebuildStartPage() {
         auto* top = new QWidget; { auto* tv = new QVBoxLayout(top); tv->setContentsMargins(20, 14, 20, 12); tv->setSpacing(2);
             auto* cap = new QHBoxLayout; cap->addWidget(lab(QStringLiteral("이어서 작업"), "cap")); cap->addStretch(); cap->addWidget(lab(f0.isEmpty() ? QString() : (ok0 ? QStringLiteral("저장됨 · 이 PC") : QStringLiteral("원본 없음")), "cap"));
             tv->addLayout(cap);
-            tv->addWidget(lab(f0.isEmpty() ? QStringLiteral("아직 연 모델이 없습니다") : QFileInfo(f0).completeBaseName(), f0.isEmpty() ? "ccEmpty" : "heroName"));   // 빈 상태는 20 Muted(검토 UI 1)
-            auto* ccSub = lab(f0.isEmpty() ? QStringLiteral("모델을 열면 마지막 단면선 · 뒤 깊이 · 화면이 여기 남습니다")
-                                           : (cnt ? QStringLiteral("마지막 단면 %1 · 뒤 %2 m 그대로 열립니다").arg(meta(f0, "names").toString().section(QStringLiteral(" · "), 0, 0), QString::number(meta(f0, "back").toDouble(), 'f', 2))
-                                                  : QStringLiteral("단면선을 그으면 여기에 남습니다")), "lab");
-            ccSub->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // 한 줄 글이 창 최소 폭을 밀어내지 않게(B5)
+            tv->addWidget(elideLab(lab(f0.isEmpty() ? QStringLiteral("아직 연 모델이 없습니다") : QFileInfo(f0).completeBaseName(), f0.isEmpty() ? "ccEmpty" : "heroName"), f0.isEmpty() ? Qt::ElideRight : Qt::ElideMiddle));   // 빈 상태는 20 Muted(검토 UI 1). 긴 모델 이름은 가운데 줄임표(B5 review-code blocking 1)
+            auto* ccSub = elideLab(lab(f0.isEmpty() ? QStringLiteral("모델을 열면 마지막 단면선 · 뒤 깊이 · 화면이 여기 남습니다")
+                                                    : (cnt ? QStringLiteral("마지막 단면 %1 · 뒤 %2 m 그대로 열립니다").arg(meta(f0, "names").toString().section(QStringLiteral(" · "), 0, 0), QString::number(meta(f0, "back").toDouble(), 'f', 2))
+                                                           : QStringLiteral("단면선을 그으면 여기에 남습니다")), "lab"), Qt::ElideRight);   // 한 줄 글이 창 최소 폭을 밀어내지 않게(B5) + 줄임표
             tv->addWidget(ccSub); }
         bv->addWidget(top);
         bv->addStretch(1);   // 칸 줄은 카드 바닥에(스펙 §7: 칸 높이 48)
@@ -1363,8 +1395,8 @@ void MainWindow::rebuildStartPage() {
             for (int i = 0; i < 6; ++i) {
                 auto* c = new QWidget; c->setObjectName(i ? "ccCell" : "ccCellFirst"); c->setAttribute(Qt::WA_StyledBackground);
                 auto* cv = new QVBoxLayout(c); cv->setContentsMargins(12, 6, 12, 6); cv->setSpacing(0);
-                cv->addWidget(lab(ks[i], "cap"));
-                auto* vl = lab(vs[i]); vl->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+                cv->addWidget(elideLab(lab(ks[i], "cap"), Qt::ElideRight));
+                auto* vl = elideLab(lab(vs[i]), i == 0 ? Qt::ElideMiddle : Qt::ElideRight);   // 폴더(경로)는 가운데, 그 밖은 끝
                 if (i == 3) { const QString hs = meta(f0, "heightState").toString(); if (hs == "warn") vl->setStyleSheet("color:#7A5A00;"); else if (hs == "error") vl->setStyleSheet("color:#A33B3B;"); }
                 cv->addWidget(vl);
                 ch->addWidget(c, i == 0 ? 2 : 1);
@@ -1386,14 +1418,14 @@ void MainWindow::rebuildStartPage() {
                 if (!im.isNull()) thumbs.push_back({im, meta(f0, QStringLiteral("thumbName%1").arg(i)).toString()});
             }
             if (!thumbs.isEmpty()) {
-                sv->addWidget(lab(QStringLiteral("썸네일을 누르면 그 단면으로 엽니다"), "lab"));
+                sv->addWidget(elideLab(lab(QStringLiteral("썸네일을 누르면 그 단면으로 엽니다"), "lab"), Qt::ElideRight));
                 auto* tr = new QHBoxLayout; tr->setSpacing(8);
                 for (int i = 0; i < thumbs.size(); ++i) {
                     auto* col = new QWidget; auto* cv = new QVBoxLayout(col); cv->setContentsMargins(0, 0, 0, 0); cv->setSpacing(2);
                     auto* pic = new QToolButton; pic->setObjectName("thumb"); pic->setFocusPolicy(Qt::NoFocus); pic->setIcon(QPixmap::fromImage(thumbs[i].first)); pic->setIconSize(QSize(72, 40)); pic->setFixedSize(76, 44);
                     pic->setToolTip(thumbs[i].second);
                     QObject::connect(pic, &QToolButton::clicked, this, [this, f0, i] { pendingSection_ = i; openFile(f0); });
-                    cv->addWidget(pic); auto* nl = lab(thumbs[i].second.isEmpty() ? QStringLiteral("단면") : thumbs[i].second, "thumbName"); nl->setAlignment(Qt::AlignCenter); cv->addWidget(nl);
+                    cv->addWidget(pic); auto* nl = elideLab(lab(thumbs[i].second.isEmpty() ? QStringLiteral("단면") : thumbs[i].second, "thumbName"), Qt::ElideMiddle); nl->setAlignment(Qt::AlignCenter); cv->addWidget(nl);
                     tr->addWidget(col);
                 }
                 tr->addStretch(); sv->addLayout(tr);
@@ -1426,8 +1458,8 @@ void MainWindow::rebuildStartPage() {
             auto* it0 = new QTableWidgetItem; it0->setToolTip(QDir::toNativeSeparators(f)); tbl->setItem(i, 0, it0);
             { auto* cell = new QWidget; cell->setAttribute(Qt::WA_TransparentForMouseEvents);
                 auto* cv = new QVBoxLayout(cell); cv->setContentsMargins(8, 4, 8, 4); cv->setSpacing(0);
-                auto* nm = lab(QFileInfo(f).fileName(), ok ? "secName" : "faintName");
-                auto* pth = lab(QDir::toNativeSeparators(QFileInfo(f).absolutePath()), "monoFaint"); pth->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+                auto* nm = elideLab(lab(QFileInfo(f).fileName(), ok ? "secName" : "faintName"), Qt::ElideMiddle);
+                auto* pth = elideLab(lab(QDir::toNativeSeparators(QFileInfo(f).absolutePath()), "monoFaint"), Qt::ElideMiddle);
                 cv->addWidget(nm); cv->addWidget(pth);
                 tbl->setCellWidget(i, 0, cell); }
             tbl->setItem(i, 1, new QTableWidgetItem(ok ? QStringLiteral("열 수 있음") : QStringLiteral("● 원본 없음")));
@@ -1454,7 +1486,7 @@ void MainWindow::rebuildStartPage() {
         });
         tbl->setFixedHeight(28 + 48 * std::min(8, std::max(1, int(rf.size()))) + 2);   // 줄 수만큼(최대 8줄, 넘으면 스크롤) — 아래 선이 마지막 줄에 붙는다(검토 UI 2)
         rv->addWidget(tbl, 0);
-        auto* help = lab(QStringLiteral("두 번 누르면 엶 · 오른쪽 클릭 = 폴더 열기 · 목록에서 지우기(모델 파일은 그대로)"), "lab"); help->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // 한 줄 글이 창 최소 폭을 밀어내지 않게(B5)
+        auto* help = elideLab(lab(QStringLiteral("두 번 누르면 엶 · 오른쪽 클릭 = 폴더 열기 · 목록에서 지우기(모델 파일은 그대로)"), "lab"), Qt::ElideRight);   // 한 줄 글이 창 최소 폭을 밀어내지 않게(B5) + 줄임표
         rv->addWidget(help);
         rv->addStretch(1); }
     g->addWidget(recent, 1, 0, 1, 2);
@@ -1462,7 +1494,7 @@ void MainWindow::rebuildStartPage() {
     // ---- 작업 순서 세 걸음(카드 없음): ✓ 끝 · ● 다음 · 숫자 나중
     auto* steps = new QWidget; { auto* sv = new QVBoxLayout(steps); sv->setContentsMargins(0, 0, 0, 0); sv->setSpacing(14);
         auto* hd = new QHBoxLayout; hd->addStrut(32); hd->addWidget(lab(QStringLiteral("작업 순서"), "sectionHead")); hd->addStretch();   // 「최근 모델」 줄과 같은 높이
-        hd->addWidget(lab(f0.isEmpty() ? QString() : QStringLiteral("%1 기준").arg(QFileInfo(f0).completeBaseName()), "cap"));
+        hd->addWidget(elideLab(lab(f0.isEmpty() ? QString() : QStringLiteral("%1 기준").arg(QFileInfo(f0).completeBaseName()), "cap"), Qt::ElideMiddle));
         sv->addLayout(hd);
         int done = 0;
         if (ok0) done = (meta(f0, "hasLine").toBool() || meta(f0, "count").toInt() > 0) ? 2 : 1;
@@ -1495,7 +1527,11 @@ void MainWindow::rebuildStartPage() {
     { auto* kh = new QHBoxLayout(keys); kh->setContentsMargins(0, 12, 0, 16); kh->setSpacing(32);
         kh->addWidget(lab(QStringLiteral("처음 쓰는 키"), "sectionHead"));
         const char* kk[][2] = {{"S", "단면선 긋기"}, {"1–5", "뒤 깊이 0.5 · 1 · 2 · 3 · 5 m"}, {"H", "잘린 돌 칠하기"}, {"O", "윤곽 따기"}, {"Ctrl+P", "도면"}, {"Ctrl+Z", "되돌리기 200단계"}};
-        for (auto& k : kk) { auto* one = new QHBoxLayout; one->setSpacing(8); one->addWidget(kbd(QString::fromUtf8(k[0]))); one->addWidget(lab(QString::fromUtf8(k[1]), "lab")); kh->addLayout(one); }
+        for (auto& k : kk) {   // 키 묶음은 위젯 하나 — 폭이 모자라면 fitHomeKeys 가 뒤에서부터 숨긴다(스펙 §7)
+            auto* grp = new QWidget; grp->setProperty("keyGroup", true);
+            auto* one = new QHBoxLayout(grp); one->setContentsMargins(0, 0, 0, 0); one->setSpacing(8); one->addWidget(kbd(QString::fromUtf8(k[0]))); one->addWidget(lab(QString::fromUtf8(k[1]), "lab"));
+            kh->addWidget(grp);
+        }
         kh->addStretch();
         auto* all = new QPushButton(QStringLiteral("모든 키  F1")); all->setObjectName("quietLink"); all->setFlat(true); all->setFocusPolicy(Qt::NoFocus);
         QObject::connect(all, &QPushButton::clicked, this, [this] { dlgKeys(); });
@@ -1517,7 +1553,7 @@ void MainWindow::showStart(bool on) {
     if (viewTabs_) { QSignalBlocker b(viewTabs_); viewTabs_->setTabEnabled(1, bool(src_)); viewTabs_->setCurrentIndex(on ? 0 : 1); }
     setRibbonContext(on ? 0 : 1);
     showStatus(on ? (src_ ? QStringLiteral("%1 열림 — 「단면」 탭에서 이어서 작업합니다").arg(QFileInfo(path_).completeBaseName()) : QStringLiteral("먼저 모델을 열거나, 파일을 창에 끌어다 놓으세요.")) : QString());
-    refreshSteps();
+    // 홈은 위에서 한 번 그렸다 — refreshSteps() 로 한 번 더 그리지 않는다(AC14: 두 번 그리기가 옛 위젯 잔류를 드러냈다. 홈이 보이는 동안의 갱신은 updateHeader → refreshSteps)
 }
 
 // ---------------------------------------------------------------- 작은 동작

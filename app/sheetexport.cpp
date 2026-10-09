@@ -948,7 +948,7 @@ public:
         lay_ = new QVBoxLayout(this); lay_->setContentsMargins(12, 10, 12, 10); lay_->setSpacing(6);
     }
     void setItems(const std::vector<CheckItem>& items) {
-        while (QLayoutItem* it = lay_->takeAt(0)) { if (QWidget* w = it->widget()) { w->hide(); w->deleteLater(); } delete it; }
+        MainWindow::clearLayout(lay_);   // 같은 비우기 한 곳(AC14) — 여기는 줄 위젯만 담겨 전부터 문제 없었음
         for (const CheckItem& c : items) {
             auto* row = new QWidget(this); auto* h = new QHBoxLayout(row); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(8);
             auto* mark = new QLabel(c.ok ? QStringLiteral("✓") : QStringLiteral("▲")); mark->setObjectName(c.ok ? "checkOk" : "checkWarn"); mark->setFixedWidth(14); mark->setAlignment(Qt::AlignHCenter | Qt::AlignTop);

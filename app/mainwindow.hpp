@@ -37,6 +37,7 @@ class QFrame;
 class QComboBox;
 class QMenu;
 class QTableWidget;
+class QLayout;
 
 inline constexpr double kDepthFadeStrength = 0.55;   // 깊이 음영 세기(가장 먼 면을 흰색 쪽으로 55%)
 inline constexpr double kMaxBandDepth = 5.0;         // 두께 띠 앞/뒤 최대(m) — 입면 영상 깊이 최대 5 m
@@ -135,6 +136,8 @@ public:
     QDialog* buildPlanSheetDialog(PlanSheetParams& io, const QImage& preview, double prevX0, double prevY1, double prevRes, bool& accepted);
     QWidget* startPage() const { return startPage_; }
     void showStart(bool on);
+    /// 레이아웃을 재귀로 비운다(위젯은 숨기고 deleteLater, 하위 레이아웃은 재귀) — 홈 다시 그리기 · 도면 점검 상자가 씀(AC14: 격자 안 위젯이 남아 겹치던 버그)
+    static void clearLayout(QLayout* lay);
     bool undoTest(QString* log);                        // 자동화: 되돌리기/다시 점검
     bool uiAudit(const QString& dir, QString* log);     // 자동화(v4 단계 1): 같은 일 단추 겹침 · 자리 규칙 잠금 시험
     bool iconSheet(const QString& png, QString* log);   // 자동화(v5 A3): 모든 Ico 이름에 SVG 가 있는지 + 칩 모양 격자 캡처
