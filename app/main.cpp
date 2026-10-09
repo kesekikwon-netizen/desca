@@ -10,7 +10,7 @@
 //   --hover: 평면 보기 가운데로 마우스 이동을 흉내 → 좌표줄 Z 와 Z 출처(대략 → 잎 표면)를 로그
 //   --perf-log: 평면 보기 카메라 경로(맞춤→확대→이동→축소)를 재생하며 프레임마다 시간·LOD 상태를 CSV 로 기록
 //   1.2: --settings DIR(설정을 DIR 의 INI 로 — 시험용) --export-pdf f / --export-sheet-png f / --export-sheet-tiff f / --export-sheet-dxf f
-//        [--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split] --export-dialog-shot f --undo-test --ctx-shot f --ui-audit DIR
+//        [--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split] --export-dialog-shot f --undo-test --ctx-shot f --ui-audit DIR --icon-sheet f.png
 //        --extra-line AX AY BX BY(단면 목록에 더함, 반복 가능) --start-shot f(파일 없이: 시작 화면)
 //   --cut-check: 잘린 면 정확도(단면선 윗면 vs 잎 연직 피킹, 미리보기 vs 최종) + 단면선이 배경 위에 순수 빨강으로 그려졌는지(화면·내보내기)
 //   --vex N: 단면 화면 세로 과장(1·2·5·10, 화면만) / 창 제목 중복 검사는 항상 로그(window-title=…)
@@ -208,6 +208,7 @@ int main(int argc, char** argv) {
     int sheetPick = -1;   // --sheet-pick N: 조판 탭 왼쪽 도면 목록 N 번째 줄을 누름(0 = 평면도)
     bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
     QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, coordShot, uiAuditDir;
+    QString iconSheetPng; bool iconSheet = false;
     bool undoTest = false, split = false; double sheetScale = 0, sectionScale = 0;
     QString lodShot;
     double camX = 0, camY = 0, camMpp = 0, vexArg = 0, pitchArg = -1;
@@ -255,6 +256,7 @@ int main(int argc, char** argv) {
         else if (s == "--datum-shot") datumShot = nx();
         else if (s == "--coord-shot") coordShot = nx();
         else if (s == "--ctx-shot") ctxShot = nx();
+        else if (s == "--icon-sheet") { iconSheet = true; iconSheetPng = nx(); }   // v5 A3: 아이콘 이름 검사 + 격자 캡처(실패 종료 코드 10)
         else if (s == "--lod-shot") lodShot = nx();
         else if (s == "--section-scale") sectionScale = nx().toDouble();
         else if (s == "--start-shot") startShot = nx();
@@ -301,8 +303,6 @@ int main(int argc, char** argv) {
         fprintf(stdout, "start-shot %s: %s (%dx%d)\n", ok ? "ok" : "FAILED", startShot.toUtf8().constData(), pm.width(), pm.height());
         return ok ? 0 : 6;
     }
-    if (file.isEmpty()) return app.exec();
-
     int rc = 0;
     QFile logF(logPath);
     bool logOk = !logPath.isEmpty() && logF.open(QIODevice::WriteOnly | QIODevice::Text);
@@ -311,6 +311,15 @@ int main(int argc, char** argv) {
         if (logOk) { logF.write(b); logF.flush(); }
         fputs(b.constData(), stdout); fflush(stdout);
     };
+    if (iconSheet) {   // v5 A3: 모델 없이도 돈다 — 모든 Ico 이름에 SVG 가 있는지 + 격자 캡처
+        QString rep;
+        const bool ok = w.iconSheet(iconSheetPng, &rep);
+        log(rep);
+        if (!ok) rc = 10;
+        if (file.isEmpty() && quit) return rc;
+    }
+    if (file.isEmpty()) return app.exec();
+
     bool automated = haveLine || !shot.isEmpty() || !exports.isEmpty() || quit || !perfPath.isEmpty() || !startShot.isEmpty() || !sheetCheck.isEmpty();
     if (!automated) { QTimer::singleShot(0, &w, [&] { w.openFile(file); }); return app.exec(); }
 

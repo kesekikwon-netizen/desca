@@ -1802,3 +1802,33 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     if (out) *out = L.join(QLatin1Char('\n'));
     return ok;
 }
+
+// ---------------------------------------------------------------- 아이콘 전체 캡처(v5 A3)
+// 모든 theme::Ico 이름에 SVG 가 있어야 하고, 묶음의 이름 전부를 칩 모양(타일 50 · 아이콘 28)으로 격자에 그려 PNG 로 남긴다
+bool MainWindow::iconSheet(const QString& png, QString* out) {
+    QStringList L, missing;
+    for (int i = 0; i < theme::kIcoCount; ++i) {
+        const QString n = QString::fromLatin1(theme::iconName(theme::Ico(i)));
+        if (!kerf::hasIcon(n) && !missing.contains(n)) missing << n;
+    }
+    const QStringList names = kerf::iconNames();
+    const int cell = 76, cols = 12, rows = std::max(1, (int(names.size()) + cols - 1) / cols);
+    QPixmap pm(cell * cols, cell * rows);
+    pm.fill(theme::Ground);
+    {
+        QPainter p(&pm);
+        p.setFont(theme::uiFont(10)); p.setPen(theme::Muted);
+        const kerf::ChipColors cc = theme::chipColors();
+        for (int i = 0; i < names.size(); ++i) {
+            const int x = (i % cols) * cell, y = (i / cols) * cell;
+            kerf::chipIcon(names[i], 50, 28, kerf::ChipKind::Normal, cc).paint(&p, QRect(x + 13, y + 4, 50, 50));
+            p.drawText(QRect(x, y + 56, cell, 16), Qt::AlignCenter, names[i]);
+        }
+    }
+    const bool saved = !png.isEmpty() && pm.save(png);
+    const bool ok = missing.isEmpty() && !names.isEmpty() && (png.isEmpty() || saved);
+    L << QStringLiteral("icon-sheet n=%1 missing=%2 png=%3 RESULT %4").arg(names.size()).arg(missing.size()).arg(saved ? png : QStringLiteral("-")).arg(ok ? QStringLiteral("ok") : QStringLiteral("fail"));
+    for (const QString& m : missing) L << QStringLiteral("icon-missing: %1").arg(m);
+    if (out) *out = L.join(QLatin1Char('\n'));
+    return ok;
+}

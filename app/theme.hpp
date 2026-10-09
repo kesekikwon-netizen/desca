@@ -11,13 +11,14 @@
 #include <QPixmap>
 #include <QString>
 #include <QStringList>
+#include "icons.hpp"
 
 namespace theme {
 // ---- 토큰
 inline const QColor Ground{0xFA, 0xF9, 0xF5}, Card{0xFF, 0xFF, 0xFF}, Wash{0xF5, 0xF4, 0xED}, Desk{0xF0, 0xEE, 0xE6}, Press{0xE8, 0xE6, 0xDC}, Oat{0xE3, 0xDA, 0xCC};
 inline const QColor Ink{0x14, 0x14, 0x13}, Hand{0x30, 0x30, 0x2E}, Ink2{0x3D, 0x3D, 0x3A}, Muted{0x5E, 0x5D, 0x59}, Faint{0x73, 0x72, 0x6C};
 inline const QColor Line{0xDE, 0xDC, 0xD1}, Edge{0xC2, 0xC0, 0xB6}, Ring{0xB0, 0xAE, 0xA5}, CheckEdge{0x87, 0x86, 0x7F};
-inline const QColor Action{0xB5, 0x57, 0x3A}, Block{0xA3, 0x3B, 0x3B}, BlockWash{0xF3, 0xDE, 0xDA}, Caution{0x7A, 0x5A, 0x00}, Done{0x3F, 0x6B, 0x31};
+inline const QColor Action{0xB5, 0x57, 0x3A}, ActionHover{0xA4, 0x4D, 0x32}, ChipPressed{0xE3, 0xE0, 0xD4}, Block{0xA3, 0x3B, 0x3B}, BlockWash{0xF3, 0xDE, 0xDA}, Caution{0x7A, 0x5A, 0x00}, Done{0x3F, 0x6B, 0x31};
 inline const QColor LevelMinor{0xDE, 0xDC, 0xD1}, LevelMajor{0x9C, 0x9A, 0x92}, LevelText{0x3D, 0x3D, 0x3A};
 // 옛 이름(다른 파일 호환)
 inline const QColor Bg = Ground, InkSub = Muted, Chip = Desk, Idle = Faint, Outline = CheckEdge, Brand = Action, BrandSoft = Wash, Ok = Done;
@@ -276,155 +277,37 @@ QToolButton#ribbonTile:checked, QToolButton:checked, QToolButton#chip:checked { 
 enum class Ico { Open, Draw, Flip, Plan, Fit, Orbit, Image, Line, Levels, Dxf, Png, Smooth, Tif, Geo, Xyz, Las, Csv, ZoomIn, ZoomOut, Close, Info, Clear, View1, View2, Lang, Band,
                  Recent, Sheet, Undo, Redo, Measure, Height, Move, Add, Max, Picture, Keys, Vex };
 
-inline QIcon icon(Ico k, int S = 32, QColor inkColor = Ink) {
-    QIcon ic;
-    for (int scale : {1, 2}) {
-        int s = S * scale;
-        QPixmap pm(s, s);
-        pm.fill(Qt::transparent);
-        QPainter p(&pm);
-        p.setRenderHint(QPainter::Antialiasing);
-        p.scale(s / 32.0, s / 32.0);
-        const QColor I = inkColor;
-        QPen ink(I, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-        QPen red(SectionRed, 2.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin), thin(QColor(0x9C, 0x9A, 0x92), 1.3);
-        p.setPen(ink); p.setBrush(Qt::NoBrush);
-        switch (k) {
-        case Ico::Open: {
-            QPainterPath f; f.moveTo(4, 9); f.lineTo(12, 9); f.lineTo(14.5, 12); f.lineTo(28, 12); f.lineTo(28, 25); f.lineTo(4, 25); f.closeSubpath();
-            p.drawPath(f);
-            break; }
-        case Ico::Recent:
-            p.drawEllipse(QPointF(16, 16), 11, 11);
-            p.drawLine(QPointF(16, 9.5), QPointF(16, 16)); p.drawLine(QPointF(16, 16), QPointF(20.5, 19));
-            break;
-        case Ico::Draw:
-            p.drawLine(QPointF(8, 24), QPointF(24, 8));
-            p.setBrush(I == Ink ? QColor(Qt::white) : QColor(Qt::transparent)); p.drawEllipse(QPointF(7.5, 24.5), 3, 3); p.drawEllipse(QPointF(24.5, 7.5), 3, 3);
-            break;
-        case Ico::Flip:
-            p.drawLine(QPointF(5, 11), QPointF(25, 11)); p.drawLine(QPointF(21, 7), QPointF(25, 11)); p.drawLine(QPointF(21, 15), QPointF(25, 11));
-            p.drawLine(QPointF(27, 21), QPointF(7, 21)); p.drawLine(QPointF(11, 17), QPointF(7, 21)); p.drawLine(QPointF(11, 25), QPointF(7, 21));
-            break;
-        case Ico::Move:
-            p.drawLine(QPointF(5, 16), QPointF(27, 16));
-            p.drawLine(QPointF(9, 12), QPointF(5, 16)); p.drawLine(QPointF(9, 20), QPointF(5, 16));
-            p.drawLine(QPointF(23, 12), QPointF(27, 16)); p.drawLine(QPointF(23, 20), QPointF(27, 16));
-            break;
-        case Ico::Add:
-            p.drawLine(QPointF(16, 7), QPointF(16, 25)); p.drawLine(QPointF(7, 16), QPointF(25, 16));
-            break;
-        case Ico::Plan:
-            p.drawRoundedRect(QRectF(5, 5, 22, 22), 3, 3);
-            p.drawLine(QPointF(16, 10), QPointF(16, 20)); p.drawLine(QPointF(12.5, 13.5), QPointF(16, 10)); p.drawLine(QPointF(19.5, 13.5), QPointF(16, 10));
-            break;
-        case Ico::Fit:
-            for (auto c : {QPointF(6, 6), QPointF(26, 6), QPointF(6, 26), QPointF(26, 26)}) {
-                double sx = c.x() < 16 ? 1 : -1, sy = c.y() < 16 ? 1 : -1;
-                p.drawLine(c, c + QPointF(6 * sx, 0)); p.drawLine(c, c + QPointF(0, 6 * sy));
-            }
-            break;
-        case Ico::Max:
-            p.drawRect(QRectF(7, 7, 18, 18));
-            break;
-        case Ico::Orbit:
-            p.drawEllipse(QRectF(5, 10, 22, 12));
-            p.drawArc(QRectF(8, 4, 16, 24), 30 * 16, 120 * 16);
-            break;
-        case Ico::Image: case Ico::Picture: {
-            p.drawRoundedRect(QRectF(5, 7, 22, 18), 2, 2);
-            QPainterPath m; m.moveTo(7, 23); m.lineTo(13, 15); m.lineTo(17, 19); m.lineTo(21, 13); m.lineTo(25, 23);
-            p.drawPath(m);
-            p.drawEllipse(QPointF(11, 12), 1.6, 1.6);
-            break; }
-        case Ico::Line: {
-            QPainterPath pp; pp.moveTo(4, 14); pp.lineTo(10, 13); pp.lineTo(13, 21); pp.lineTo(20, 21); pp.lineTo(23, 12); pp.lineTo(28, 11);
-            p.setPen(QPen(SectionRed, 2.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin)); p.drawPath(pp);
-            break; }
-        case Ico::Levels:
-            p.setPen(QPen(QColor(0x9C, 0x9A, 0x92), 1.3)); for (int y = 8; y <= 24; y += 4) p.drawLine(6, y, 26, y);
-            p.setPen(QPen(I, 2.0)); p.drawLine(6, 16, 26, 16);
-            break;
-        case Ico::Sheet: {
-            QPainterPath d; d.moveTo(8, 4); d.lineTo(20, 4); d.lineTo(25, 9); d.lineTo(25, 28); d.lineTo(8, 28); d.closeSubpath();
-            p.drawPath(d);
-            p.drawLine(QPointF(12, 14), QPointF(21, 14)); p.drawLine(QPointF(12, 18.5), QPointF(21, 18.5)); p.drawLine(QPointF(12, 23), QPointF(18, 23));
-            break; }
-        case Ico::Dxf: case Ico::Png: case Ico::Tif: case Ico::Geo: case Ico::Xyz: case Ico::Las: case Ico::Csv: {
-            QPainterPath d; d.moveTo(8, 4); d.lineTo(20, 4); d.lineTo(25, 9); d.lineTo(25, 28); d.lineTo(8, 28); d.closeSubpath();
-            p.drawPath(d);
-            const char* t = k == Ico::Dxf ? "DXF" : k == Ico::Png ? "PNG" : k == Ico::Tif ? "TIF" : k == Ico::Geo ? "GEO" : k == Ico::Xyz ? "XYZ" : k == Ico::Las ? "LAS" : "CSV";
-            QFont f; f.setPixelSize(7); f.setBold(true); p.setFont(f); p.setPen(I);
-            p.drawText(QRectF(6, 14, 21, 10), Qt::AlignCenter, t);
-            break; }
-        case Ico::ZoomIn: case Ico::ZoomOut:
-            p.drawEllipse(QPointF(14, 14), 8, 8);
-            p.drawLine(QPointF(20, 20), QPointF(27, 27));
-            p.drawLine(QPointF(10, 14), QPointF(18, 14)); if (k == Ico::ZoomIn) p.drawLine(QPointF(14, 10), QPointF(14, 18));
-            break;
-        case Ico::Close:
-            p.drawLine(9, 9, 23, 23); p.drawLine(23, 9, 9, 23);
-            break;
-        case Ico::Info:
-            p.drawEllipse(QPointF(16, 16), 11, 11);
-            p.drawLine(QPointF(16, 14.5), QPointF(16, 22)); p.setPen(QPen(I, 2.8, Qt::SolidLine, Qt::RoundCap)); p.drawPoint(QPointF(16, 10));
-            break;
-        case Ico::Clear:
-            p.drawLine(QPointF(9, 10), QPointF(23, 10)); p.drawLine(QPointF(13, 10), QPointF(13, 7)); p.drawLine(QPointF(13, 7), QPointF(19, 7)); p.drawLine(QPointF(19, 7), QPointF(19, 10));
-            p.drawLine(QPointF(10.5, 10), QPointF(12, 26)); p.drawLine(QPointF(12, 26), QPointF(20, 26)); p.drawLine(QPointF(20, 26), QPointF(21.5, 10));
-            break;
-        case Ico::View1: case Ico::View2: {
-            p.drawRect(QRectF(4, 6, 24, 20));
-            QFont f; f.setPixelSize(12); f.setBold(true); p.setFont(f);
-            p.drawText(QRectF(4, 6, 24, 20), Qt::AlignCenter, k == Ico::View1 ? "1" : "2");
-            break; }
-        case Ico::Lang: {
-            p.drawRoundedRect(QRectF(3, 6, 18, 14), 2, 2);
-            QFont f; f.setPixelSize(10); f.setBold(true); p.setFont(f); p.drawText(QRectF(3, 6, 18, 14), Qt::AlignCenter, QString::fromUtf8("가"));
-            p.drawRoundedRect(QRectF(12, 14, 18, 14), 2, 2);
-            p.drawText(QRectF(12, 14, 18, 14), Qt::AlignCenter, "A");
-            break; }
-        case Ico::Band:
-            p.setPen(Qt::NoPen); p.setBrush(QColor(0x9C, 0x9A, 0x92, 70)); p.drawRect(QRectF(5, 12, 22, 10));
-            p.setPen(ink); p.setBrush(Qt::NoBrush); p.drawLine(5, 12, 27, 12);
-            p.setPen(QPen(I, 1.2)); p.drawLine(5, 22, 27, 22);
-            break;
-        case Ico::Smooth: {
-            QPainterPath s2; s2.moveTo(4, 20); s2.cubicTo(10, 6, 20, 28, 28, 12);
-            p.drawPath(s2);
-            break; }
-        case Ico::Undo: case Ico::Redo: {
-            p.save();
-            if (k == Ico::Redo) { p.translate(32, 0); p.scale(-1, 1); }
-            QPainterPath u; u.moveTo(9, 13); u.lineTo(20, 13); u.cubicTo(26, 13, 26, 24, 20, 24); u.lineTo(13, 24);
-            p.drawPath(u); p.drawLine(QPointF(13, 9), QPointF(9, 13)); p.drawLine(QPointF(13, 17), QPointF(9, 13));
-            p.restore();
-            break; }
-        case Ico::Measure:
-            p.save(); p.translate(16, 16); p.rotate(-45);
-            p.drawRect(QRectF(-13, -5, 26, 10));
-            for (int x = -9; x <= 9; x += 4) p.drawLine(QPointF(x, -5), QPointF(x, x % 8 == 3 || x % 8 == -5 ? -1 : 0.5));
-            p.restore();
-            break;
-        case Ico::Height:
-            p.drawLine(QPointF(5, 26), QPointF(27, 26));
-            p.drawLine(QPointF(16, 22), QPointF(16, 6)); p.drawLine(QPointF(11, 11), QPointF(16, 6)); p.drawLine(QPointF(21, 11), QPointF(16, 6));
-            break;
-        case Ico::Keys:
-            p.drawRoundedRect(QRectF(4, 9, 24, 15), 3, 3);
-            for (int x = 8; x <= 24; x += 4) p.drawPoint(QPointF(x, 14));
-            p.drawLine(QPointF(10, 19.5), QPointF(22, 19.5));
-            break;
-        case Ico::Vex:   // v4 아이콘 설계도 「세로 과장」: 위아래 화살표 + 가운데 짧은 가로 눈금
-            p.drawLine(QPointF(16, 4.5), QPointF(16, 27.5));
-            p.drawLine(QPointF(11.5, 9), QPointF(16, 4.5)); p.drawLine(QPointF(20.5, 9), QPointF(16, 4.5));
-            p.drawLine(QPointF(11.5, 23), QPointF(16, 27.5)); p.drawLine(QPointF(20.5, 23), QPointF(16, 27.5));
-            p.drawLine(QPointF(6, 16), QPointF(10, 16)); p.drawLine(QPointF(22, 16), QPointF(26, 16));
-            break;
-        }
-        p.end();
-        ic.addPixmap(pm);
+/// Ico → SVG 이름(app/icons/, 디자인 v5 §11). 새 Ico 를 더하면 여기와 icons.cmake 목록에 같이 더한다
+inline const char* iconName(Ico k) {
+    switch (k) {
+    case Ico::Open: return "folder";        case Ico::Draw: return "section-line"; case Ico::Flip: return "flip";
+    case Ico::Plan: return "map";           case Ico::Fit: return "maximize";      case Ico::Orbit: return "top-view";
+    case Ico::Image: return "image-layer";  case Ico::Line: return "profile";      case Ico::Levels: return "levels";
+    case Ico::Dxf: return "file-text";      case Ico::Png: return "image";         case Ico::Smooth: return "pencil";
+    case Ico::Tif: return "image";          case Ico::Geo: return "geotiff";       case Ico::Xyz: return "points-xyz";
+    case Ico::Las: return "cloud-las";      case Ico::Csv: return "csv";           case Ico::ZoomIn: return "zoom-in";
+    case Ico::ZoomOut: return "zoom-out";   case Ico::Close: return "x";           case Ico::Info: return "info";
+    case Ico::Clear: return "x";            case Ico::View1: return "map";         case Ico::View2: return "profile";
+    case Ico::Lang: return "file-text";     case Ico::Band: return "contrast";     case Ico::Recent: return "clock";
+    case Ico::Sheet: return "sheet";        case Ico::Undo: return "undo-2";       case Ico::Redo: return "redo-2";
+    case Ico::Measure: return "crosshair";  case Ico::Height: return "height";     case Ico::Move: return "move";
+    case Ico::Add: return "plus";           case Ico::Max: return "maximize";      case Ico::Picture: return "image";
+    case Ico::Keys: return "keyboard";      case Ico::Vex: return "vex";
     }
-    return ic;
+    return "x";
 }
+inline constexpr int kIcoCount = int(Ico::Vex) + 1;
+
+/// 리본 칩 타일 색(디자인 v5 §3.2 · Strata tokens.json ribbon) — 토큰에서만
+inline kerf::ChipColors chipColors() {
+    kerf::ChipColors c;
+    c.tile = Desk; c.tileHover = Press; c.tilePressed = ChipPressed; c.tileDisabled = Wash; c.glyph = Hand;
+    c.tileOn = Hand; c.borderOn = Hand; c.glyphOn = Ground;
+    c.tileShown = Oat; c.borderShown = Ring;
+    c.tilePrimary = Action; c.tilePrimaryHover = ActionHover; c.glyphPrimary = Card;
+    return c;
+}
+
+/// 선 아이콘(1× · 2×). 색은 Hand(Strata 아이콘 먹색) — 떠 있는 단추 · 탭 · 메뉴 · 화면 머리에 쓴다
+inline QIcon icon(Ico k, int S = 32, QColor inkColor = Hand) { return kerf::icon(QString::fromLatin1(iconName(k)), S, inkColor); }
 }  // namespace theme

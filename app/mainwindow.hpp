@@ -135,6 +135,7 @@ public:
     void showStart(bool on);
     bool undoTest(QString* log);                        // 자동화: 되돌리기/다시 점검
     bool uiAudit(const QString& dir, QString* log);     // 자동화(v4 단계 1): 같은 일 단추 겹침 · 자리 규칙 잠금 시험
+    bool iconSheet(const QString& png, QString* log);   // 자동화(v5 A3): 모든 Ico 이름에 SVG 가 있는지 + 칩 모양 격자 캡처
     QWidget* ctxBar() const { return ctxBar_; }
     std::shared_ptr<asec::MeshSource> source() const { return src_; }
     SectionDoc sectionDoc() const { return section_->doc(); }
