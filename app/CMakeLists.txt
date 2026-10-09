@@ -1,5 +1,5 @@
 # 발굴 단면뷰어 (Qt Widgets + OpenGL). moc 없이 빌드(Q_OBJECT 미사용) → 교차 빌드에서 Qt 도구 불필요
-set(APP_SRC main.cpp mainwindow.cpp mainwindow_ui.cpp sheetexport.cpp planview.cpp sectionview.cpp icons.cpp)
+set(APP_SRC main.cpp mainwindow.cpp mainwindow_ui.cpp sheetexport.cpp planview.cpp sectionview.cpp icons.cpp ribbon.cpp)
 # 아이콘: SVG 글자를 configure 때 헤더로 굽는다(icons/icons.cmake). rcc 없이 두 빌드 분기 모두 같은 헤더
 include(${CMAKE_CURRENT_LIST_DIR}/icons/icons.cmake)
 set(KERF_ICONS_HPP ${CMAKE_BINARY_DIR}/generated/kerf_icons.hpp)
