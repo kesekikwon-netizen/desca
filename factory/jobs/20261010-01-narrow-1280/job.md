@@ -1,7 +1,7 @@
 ---
 id: 20261010-01-narrow-1280
 title: 1280 좁은 창: 단면 머리 · 정보 줄 · 평면 눈금 · 리본 기대값 20 + B5 검토 should 7건
-status: spec              # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
+status: build             # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
 rework_count: 0           # 최대 2. 넘으면 needs-human
 ai_review: pending        # pending | pass | fail  (검토자 셋·UI 검토 결과 종합)
 user_approval: pending    # pending | approved | rejected  (사용자가 /factory approve 로 말한 뒤에만 approved)
@@ -26,6 +26,7 @@ updated: 2026-10-10 00:03
 | --- | --- | --- | --- |
 | 2026-10-10 00:03 | queued | factory | 작업 생성. 기준 feature/design-v2 @ 308daac82e8e46189600488c209d43020e046cc2 |
 | 2026-10-10 00:35 | spec | spec-writer | spec.md AC1–AC13(Task 1–10). 열린 질문 3(머리 줄이기 순서 · 정보 줄 숨기기 순서 · 세로 ×N 뒤 창 크기) → 사용자에게 물음. 사람 검토 필수(화면 · 감사) |
+| 2026-10-10 00:40 | build | factory | 사용자 답 Q1 A(글 → 크게 → 세로 아이콘만 → 토글 메뉴 하나) · Q2 A(레벨선 안내 → 입면 뒤 → 점 수 → …) · Q3 사용자 보기 유지(fitted_=false). spec.md §7 에 적음. builder 시작 |
 
 ## 참조
 - 명세 `spec.md` · 구현 요약 `build.md` · 검증 `verify.md` · 검토 `review.md` · 승인 `approval.md`
