@@ -16,6 +16,8 @@
 #include <QElapsedTimer>
 #include <QSet>
 #include <QDir>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
@@ -1033,6 +1035,8 @@ void MainWindow::restoreModelState() {
         int cur = -1; std::string err;
         sectionsFromJson(st.value(k + "sections").toString().toStdString(), sections_, &cur, &err);
         current_ = (cur >= 0 && cur < int(sections_.size())) ? cur : (sections_.empty() ? -1 : 0);
+        if (pendingSection_ >= 0 && pendingSection_ < int(sections_.size())) current_ = pendingSection_;   // 홈 썸네일로 연 단면
+        pendingSection_ = -1;
     }
     if (st.contains(k + "front")) {
         QSignalBlocker b1(front_), b2(back_);
@@ -1069,17 +1073,12 @@ QWidget* MainWindow::buildStartPage() {
     return w;
 }
 
+// 홈(디자인 v5 C3 · 스펙 §7 · Strata 홈과 같은 뼈대): 이름 · 설명 · 단추 둘 | 이어서 작업 카드 | 최근 모델 삼선표 + 찾기 | 작업 순서 세 걸음 | 처음 쓰는 키
 void MainWindow::rebuildStartPage() {
     if (!startPage_) return;
     auto* lay = static_cast<QVBoxLayout*>(startPage_->layout());
     while (auto* it = lay->takeAt(0)) { if (it->widget()) it->widget()->deleteLater(); delete it; }
-    lay->setContentsMargins(48, 32, 48, 24); lay->setSpacing(16);
-    auto* hdr = new QWidget; { auto* v = new QVBoxLayout(hdr); v->setContentsMargins(0, 0, 0, 0); v->setSpacing(4);
-        v->addWidget(lab(QStringLiteral("Kerf"), "bigTitle"));
-        v->addWidget(lab(QStringLiteral("발굴 평·단면 — 3MX·OBJ 모델에서 평면도·단면도를 뽑습니다. 원본 파일은 바꾸지 않습니다."), "hint")); }
-    lay->addWidget(hdr);
-    auto* cols = new QHBoxLayout; cols->setSpacing(20);
-    auto* left = new QVBoxLayout; left->setSpacing(14);
+    lay->setContentsMargins(48, 24, 48, 0); lay->setSpacing(0);
     const QStringList rf = recentFiles();
     QSettings st;
     auto meta = [&](const QString& f, const QString& key) { return st.value(modelKey(f) + key); };
@@ -1092,180 +1091,200 @@ void MainWindow::rebuildStartPage() {
         if (s < 2 * 86400) return QStringLiteral("어제 %1").arg(t.toString("HH:mm"));
         return t.toString("yyyy-MM-dd");
     };
-    if (!rf.isEmpty()) {
-        const QString f = rf.first();
-        bool ok = QFileInfo::exists(f);
-        auto* card = new QFrame; card->setObjectName("card"); card->setAttribute(Qt::WA_StyledBackground);
-        auto* g = new QGridLayout(card); g->setContentsMargins(20, 16, 20, 16); g->setHorizontalSpacing(24); g->setVerticalSpacing(6);
-        g->addWidget(lab(QStringLiteral("이어서 하기"), "faint"), 0, 0, 1, 4);
-        auto* hero = lab(QFileInfo(f).completeBaseName(), "heroName");
-        g->addWidget(hero, 1, 0, 1, 4);
-        auto* pathL = lab(QDir::toNativeSeparators(f), "monoFaint"); pathL->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        g->addWidget(pathL, 2, 0, 1, 4);
-        const QString ks[4] = {QStringLiteral("마지막으로 연 때"), QStringLiteral("단면"), QStringLiteral("좌표계"), QStringLiteral("높이 기준")};
-        QString names = meta(f, "names").toString();
-        int cnt = meta(f, "count").toInt();
-        const QString vs[4] = {ago(meta(f, "lastOpened").toString()), cnt ? QStringLiteral("%1개 · %2").arg(cnt).arg(names) : QStringLiteral("없음"),
-                               meta(f, "srs").toString().isEmpty() ? QStringLiteral("—") : meta(f, "srs").toString(),
-                               meta(f, "height").toString().isEmpty() ? QStringLiteral("—") : meta(f, "height").toString()};
-        for (int i = 0; i < 4; ++i) {
-            g->addWidget(lab(ks[i], "faint"), 3, i);
-            auto* val = lab(vs[i]); val->setWordWrap(true);
-            if (i == 3) { QString hs = meta(f, "heightState").toString(); if (hs == "warn") val->setStyleSheet("color:#7A5A00;font-weight:600"); else if (hs == "error") val->setStyleSheet("color:#B53333;font-weight:600"); }
-            g->addWidget(val, 4, i);
-        }
-        auto* go = new QPushButton(ok ? QStringLiteral("이어서 열기  →") : QStringLiteral("원본 없음")); go->setObjectName("primary"); go->setEnabled(ok);
-        go->setToolTip(QStringLiteral("마지막 단면선·두께·화면을 그대로 되살립니다 (Ctrl+Shift+O)"));
-        QObject::connect(go, &QPushButton::clicked, this, [this, f] { openFile(f); });
-        g->addWidget(go, 1, 4, 2, 1, Qt::AlignRight | Qt::AlignVCenter);
-        g->setColumnStretch(3, 1);
-        left->addWidget(card);
-    }
-    auto* recentHead = lab(QStringLiteral("최근 연 모델"), "sectionHead");
-    left->addWidget(recentHead);
-    auto* tbl = new QTableWidget(std::max<int>(1, int(rf.size())), 4); tbl->setObjectName("recentTable");
-    tbl->setHorizontalHeaderLabels({QStringLiteral("모델"), QStringLiteral("좌표계 · 높이"), QStringLiteral("단면"), QStringLiteral("마지막으로 연 때")});
-    tbl->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    tbl->verticalHeader()->setVisible(false); tbl->setEditTriggers(QAbstractItemView::NoEditTriggers); tbl->setSelectionBehavior(QAbstractItemView::SelectRows);
-    tbl->setSelectionMode(QAbstractItemView::SingleSelection); tbl->setShowGrid(false); tbl->setFocusPolicy(Qt::NoFocus);
-    tbl->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int c = 1; c < 4; ++c) tbl->horizontalHeader()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
-    tbl->verticalHeader()->setDefaultSectionSize(44);
-    if (rf.isEmpty()) {
-        tbl->setItem(0, 0, new QTableWidgetItem(QStringLiteral("아직 연 모델이 없습니다 — 아래에서 파일을 여세요")));
-        tbl->setSpan(0, 0, 1, 4);
-    }
-    for (int i = 0; i < rf.size(); ++i) {
-        const QString& f = rf[i];
-        bool ok = QFileInfo::exists(f);
-        auto* it0 = new QTableWidgetItem;
-        it0->setToolTip(QDir::toNativeSeparators(f) + (ok ? QString() : QStringLiteral("\n원본 파일이 없습니다(이동·삭제·드라이브 분리)")));
-        tbl->setItem(i, 0, it0);
-        {   // 두 줄: 굵은 이름 + 회색 경로
-            auto* cell = new QWidget; cell->setAttribute(Qt::WA_TransparentForMouseEvents);
-            auto* cv = new QVBoxLayout(cell); cv->setContentsMargins(8, 3, 8, 3); cv->setSpacing(0);
-            auto* nm = lab((ok ? QString() : QStringLiteral("<span style='color:#B53333'>●</span> ")) + QFileInfo(f).fileName().toHtmlEscaped(), "secName");
-            nm->setTextFormat(Qt::RichText);
-            auto* pth = lab(QDir::toNativeSeparators(f), "monoFaint");
-            pth->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-            cv->addWidget(nm); cv->addWidget(pth);
-            tbl->setCellWidget(i, 0, cell);
-        }
-        QString sr = meta(f, "srs").toString(), ht = meta(f, "height").toString();
-        tbl->setItem(i, 1, new QTableWidgetItem(sr.isEmpty() ? QStringLiteral("—") : sr + (ht.isEmpty() ? QString() : " · " + ht)));
-        tbl->setItem(i, 2, new QTableWidgetItem(QString::number(meta(f, "count").toInt())));
-        tbl->setItem(i, 3, new QTableWidgetItem(ago(meta(f, "lastOpened").toString())));
-    }
-    QObject::connect(tbl, &QTableWidget::cellClicked, this, [this, rf](int r, int) { if (r < rf.size() && QFileInfo::exists(rf[r])) openFile(rf[r]); });
-    tbl->setFixedHeight(34 + 44 * std::min<int>(6, std::max<int>(1, int(rf.size()))));
-    tbl->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    left->addWidget(tbl);
-    auto* drop = new QFrame; drop->setObjectName("dropZone"); drop->setAttribute(Qt::WA_StyledBackground);
-    { auto* h = new QHBoxLayout(drop); h->setContentsMargins(20, 16, 20, 16); h->setSpacing(14);
-        auto* ic = new QLabel; ic->setPixmap(theme::icon(theme::Ico::Open, 28, theme::Ink2).pixmap(28, 28)); h->addWidget(ic);
-        h->addWidget(vbox({lab(QStringLiteral("모델 파일을 여기로 끌어다 놓으세요"), "secName"), lab(QStringLiteral("Production_*.3mx (권장) · *.3sm · *.obj — 폴더가 읽기 전용이어도 됩니다"), "hint")}, 2), 1);
-        auto* ob = new QPushButton(QStringLiteral("파일 열기   Ctrl+O")); QObject::connect(ob, &QPushButton::clicked, this, [this] { chooseOpen(); });
-        h->addWidget(ob); }
-    left->addWidget(drop);
-    left->addStretch(1);
-    cols->addLayout(left, 3);
-    // 오른쪽: 세 걸음 + 자주 쓰는 키
-    auto* right = new QVBoxLayout; right->setSpacing(14);
-    auto* steps = new QFrame; steps->setObjectName("cardSide"); steps->setAttribute(Qt::WA_StyledBackground);
-    { auto* v = new QVBoxLayout(steps); v->setContentsMargins(18, 14, 18, 14); v->setSpacing(10);
-        v->addWidget(lab(QStringLiteral("세 걸음으로 단면도"), "sectionHead"));
-        const char* st3[3][2] = {{"모델 열기", "3MX 는 대략 모양이 먼저 뜨고 디테일이 이어서 옵니다"}, {"단면선 긋기  S", "평면에서 시작점 A, 끝점 A′ 를 클릭. 뒤 깊이 기본 3 m(숫자키 1–5)"}, {"도면 만들기  Ctrl+P", "축척·용지를 고르면 넘치는지 미리 보여 줍니다"}};
-        int done = 0;
-        if (!rf.isEmpty() && QFileInfo::exists(rf.first())) done = (meta(rf.first(), "hasLine").toBool() || meta(rf.first(), "count").toInt() > 0) ? 2 : 1;
-        for (int i = 0; i < 3; ++i) {
-            auto* row = new QHBoxLayout; row->setSpacing(10);
-            auto* n = lab(i < done ? QStringLiteral("✓") : QString::number(i + 1), "stepNum"); n->setFixedSize(24, 24); n->setAlignment(Qt::AlignCenter);
-            if (i < done) n->setStyleSheet(QStringLiteral("color:#3F6B31;border-color:#3F6B31;"));
-            else if (i == done) n->setStyleSheet(QStringLiteral("background:#141413;color:#FAF9F5;border-color:#141413;"));
-            row->addWidget(n, 0, Qt::AlignTop);
-            auto* t = vbox({lab(QString::fromUtf8(st3[i][0]), "secName"), lab(QString::fromUtf8(st3[i][1]), "hint")}, 1);
-            static_cast<QLabel*>(t->layout()->itemAt(1)->widget())->setWordWrap(true);
-            row->addWidget(t, 1);
-            v->addLayout(row);
-        } }
-    if (!rf.isEmpty()) {
-        QVector<QPair<QImage, QString>> thumbs;
-        for (int i = 0; i < 3; ++i) {
-            QByteArray ba = meta(rf.first(), QStringLiteral("thumb%1").arg(i)).toByteArray();
-            if (ba.isEmpty()) continue;
-            QImage im; im.loadFromData(ba, "PNG");
-            if (im.isNull()) continue;
-            thumbs.push_back({im, meta(rf.first(), QStringLiteral("thumbName%1").arg(i)).toString()});
-        }
-        if (!thumbs.isEmpty()) {
-            auto* card = new QFrame; card->setObjectName("cardSide"); card->setAttribute(Qt::WA_StyledBackground);
-            auto* v = new QVBoxLayout(card); v->setContentsMargins(18, 14, 18, 14); v->setSpacing(8);
-            v->addWidget(lab(QStringLiteral("이 모델의 단면"), "sectionHead"));
-            for (auto& t : thumbs) {
-                auto* row = new QHBoxLayout; row->setSpacing(8);
-                auto* pic = new QLabel; pic->setPixmap(QPixmap::fromImage(t.first.scaled(96, 44, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
-                pic->setFixedSize(96, 44); pic->setStyleSheet(QStringLiteral("background:#FFFFFF;border:1px solid #DEDCD1;"));
-                row->addWidget(pic);
-                row->addWidget(lab(t.second.isEmpty() ? QStringLiteral("단면") : t.second, "secName"), 1);
-                v->addLayout(row);
+    auto dash = [](const QString& s) { return s.isEmpty() ? QStringLiteral("—") : s; };
+    auto* g = new QGridLayout; g->setContentsMargins(0, 0, 0, 0); g->setHorizontalSpacing(48); g->setVerticalSpacing(24);
+    g->setColumnMinimumWidth(0, 420); g->setColumnStretch(1, 1); g->setColumnMinimumWidth(2, 320);
+    g->setRowStretch(1, 1);
+
+    // ---- 왼쪽 위: 앱 아이콘 56 · 「Kerf | 발굴 평·단면」 · 설명 · 「모델 열기 Ctrl+O」 「최근 ▾」 · 끌어 놓기 안내
+    auto* hero = new QWidget; { auto* v = new QVBoxLayout(hero); v->setContentsMargins(0, 40, 0, 0); v->setSpacing(12);
+        auto* nm = new QHBoxLayout; nm->setSpacing(14);
+        auto* ic = new QLabel; { QPixmap pm(56 * 2, 56 * 2); pm.setDevicePixelRatio(2); pm.fill(Qt::transparent);
+            QPainter p(&pm); p.setRenderHint(QPainter::Antialiasing); p.setPen(Qt::NoPen); p.setBrush(theme::Action); p.drawRoundedRect(QRectF(0, 0, 56, 56), 12, 12);
+            QPainterPath pr; pr.moveTo(10, 22); pr.lineTo(20, 22); pr.lineTo(25, 36); pr.lineTo(31, 36); pr.lineTo(36, 22); pr.lineTo(46, 22);
+            p.setPen(QPen(theme::Card, 3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin)); p.setBrush(Qt::NoBrush); p.drawPath(pr); p.end();
+            ic->setPixmap(pm); ic->setFixedSize(56, 56); }
+        nm->addWidget(ic); nm->addWidget(lab(QStringLiteral("Kerf"), "heroName"));
+        auto* sub = lab(QStringLiteral("발굴 평·단면"), "homeSub"); nm->addWidget(sub); nm->addStretch();
+        v->addLayout(nm);
+        auto* desc = lab(QStringLiteral("3MX · 3SM · OBJ 실사 메시에서 평면도 · 단면도를 잘라 보고서 도면 밑그림(SVG · DXF)까지 만듭니다."), "homeLead"); desc->setWordWrap(true);
+        v->addWidget(desc);
+        auto* bt = new QHBoxLayout; bt->setSpacing(8);
+        auto* ob = new QPushButton(kerf::icon(QStringLiteral("folder"), 16, theme::Hand), QStringLiteral("모델 열기   Ctrl+O")); ob->setObjectName("homeBtn"); ob->setFixedHeight(40);
+        QObject::connect(ob, &QPushButton::clicked, this, [this] { chooseOpen(); });
+        auto* rb = new QToolButton; rb->setObjectName("homeBtn"); rb->setText(QStringLiteral("최근 ▾")); rb->setIcon(kerf::icon(QStringLiteral("clock"), 16, theme::Hand)); rb->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        rb->setFixedHeight(40); rb->setMenu(recentMenu_); rb->setPopupMode(QToolButton::InstantPopup); rb->setEnabled(!rf.isEmpty()); rb->setFocusPolicy(Qt::NoFocus);
+        bt->addWidget(ob); bt->addWidget(rb); bt->addStretch();
+        v->addLayout(bt);
+        v->addWidget(lab(QStringLiteral("파일을 창 어디에나 끌어다 놓아도 열립니다 · *.3mx(권장) · *.3sm · *.obj"), "lab"));
+        v->addStretch(); }
+    g->addWidget(hero, 0, 0);
+
+    // ---- 이어서 작업 카드(먹색 테): 이름 명조 40 · 보조 줄 · 칸 6 · 오른쪽 흙색 「이어서 열기 →」 + 단면 썸네일
+    const QString f0 = rf.isEmpty() ? QString() : rf.first();
+    const bool ok0 = !f0.isEmpty() && QFileInfo::exists(f0);
+    const int cnt = f0.isEmpty() ? 0 : meta(f0, "count").toInt();
+    auto* card = new QFrame; card->setObjectName("continueCard"); card->setAttribute(Qt::WA_StyledBackground);
+    { auto* h = new QHBoxLayout(card); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(0);
+        auto* body = new QWidget; auto* bv = new QVBoxLayout(body); bv->setContentsMargins(0, 0, 0, 0); bv->setSpacing(0);
+        auto* top = new QWidget; { auto* tv = new QVBoxLayout(top); tv->setContentsMargins(20, 14, 20, 12); tv->setSpacing(2);
+            auto* cap = new QHBoxLayout; cap->addWidget(lab(QStringLiteral("이어서 작업"), "cap")); cap->addStretch(); cap->addWidget(lab(f0.isEmpty() ? QString() : (ok0 ? QStringLiteral("저장됨 · 이 PC") : QStringLiteral("원본 없음")), "cap"));
+            tv->addLayout(cap);
+            tv->addWidget(lab(f0.isEmpty() ? QStringLiteral("아직 연 모델이 없습니다") : QFileInfo(f0).completeBaseName(), "heroName"));
+            tv->addWidget(lab(f0.isEmpty() ? QStringLiteral("모델을 열면 마지막 단면선 · 뒤 깊이 · 화면이 여기 남습니다")
+                                           : (cnt ? QStringLiteral("마지막 단면 %1 · 뒤 %2 m 그대로 열립니다").arg(meta(f0, "names").toString().section(QStringLiteral(" · "), 0, 0), QString::number(meta(f0, "back").toDouble(), 'f', 2))
+                                                  : QStringLiteral("단면선을 그으면 여기에 남습니다")), "lab")); }
+        bv->addWidget(top);
+        bv->addStretch(1);   // 칸 줄은 카드 바닥에(스펙 §7: 칸 높이 48)
+        auto* cells = new QWidget; cells->setObjectName("ccCells"); cells->setAttribute(Qt::WA_StyledBackground); cells->setFixedHeight(56);
+        { auto* ch = new QHBoxLayout(cells); ch->setContentsMargins(0, 0, 0, 0); ch->setSpacing(0);
+            const QString folder = f0.isEmpty() ? QStringLiteral("—") : QDir::toNativeSeparators(QFileInfo(f0).absolutePath());
+            const QString sheets = meta(f0, "sheets").toString();
+            const QStringList ks = {QStringLiteral("폴더"), QStringLiteral("마지막 열림"), QStringLiteral("수평 좌표계"), QStringLiteral("높이"), QStringLiteral("단면"), QStringLiteral("도면")};
+            const QStringList vs = {folder, f0.isEmpty() ? QStringLiteral("—") : ago(meta(f0, "lastOpened").toString()), dash(meta(f0, "srs").toString()), dash(meta(f0, "height").toString()),
+                                    f0.isEmpty() ? QStringLiteral("—") : QStringLiteral("%1개").arg(cnt), sheets.isEmpty() ? QStringLiteral("—") : sheets};
+            for (int i = 0; i < 6; ++i) {
+                auto* c = new QWidget; c->setObjectName(i ? "ccCell" : "ccCellFirst"); c->setAttribute(Qt::WA_StyledBackground);
+                auto* cv = new QVBoxLayout(c); cv->setContentsMargins(12, 6, 12, 6); cv->setSpacing(0);
+                cv->addWidget(lab(ks[i], "cap"));
+                auto* vl = lab(vs[i]); vl->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+                if (i == 3) { const QString hs = meta(f0, "heightState").toString(); if (hs == "warn") vl->setStyleSheet("color:#7A5A00;"); else if (hs == "error") vl->setStyleSheet("color:#A33B3B;"); }
+                cv->addWidget(vl);
+                ch->addWidget(c, i == 0 ? 2 : 1);
+            } }
+        bv->addWidget(cells);
+        h->addWidget(body, 1);
+        auto* side = new QWidget; side->setObjectName("ccSide"); side->setAttribute(Qt::WA_StyledBackground); side->setFixedWidth(280);
+        { auto* sv = new QVBoxLayout(side); sv->setContentsMargins(20, 16, 20, 16); sv->setSpacing(10);
+            auto* go = new QPushButton(ok0 ? QStringLiteral("이어서 열기  →") : (f0.isEmpty() ? QStringLiteral("모델 열기…") : QStringLiteral("원본 없음"))); go->setObjectName("primary"); go->setFixedHeight(40);
+            go->setEnabled(ok0 || f0.isEmpty());
+            go->setToolTip(QStringLiteral("마지막 단면선·두께·화면을 그대로 되살립니다 (Ctrl+Shift+O)"));
+            QObject::connect(go, &QPushButton::clicked, this, [this, f0] { if (f0.isEmpty()) chooseOpen(); else openFile(f0); });
+            sv->addWidget(go);
+            QVector<QPair<QImage, QString>> thumbs;
+            for (int i = 0; i < 3 && !f0.isEmpty(); ++i) {
+                QByteArray ba = meta(f0, QStringLiteral("thumb%1").arg(i)).toByteArray();
+                if (ba.isEmpty()) continue;
+                QImage im; im.loadFromData(ba, "PNG");
+                if (!im.isNull()) thumbs.push_back({im, meta(f0, QStringLiteral("thumbName%1").arg(i)).toString()});
             }
-            right->addWidget(card);
+            if (!thumbs.isEmpty()) {
+                sv->addWidget(lab(QStringLiteral("썸네일을 누르면 그 단면으로 엽니다"), "lab"));
+                auto* tr = new QHBoxLayout; tr->setSpacing(8);
+                for (int i = 0; i < thumbs.size(); ++i) {
+                    auto* col = new QWidget; auto* cv = new QVBoxLayout(col); cv->setContentsMargins(0, 0, 0, 0); cv->setSpacing(2);
+                    auto* pic = new QToolButton; pic->setObjectName("thumb"); pic->setFocusPolicy(Qt::NoFocus); pic->setIcon(QPixmap::fromImage(thumbs[i].first)); pic->setIconSize(QSize(72, 40)); pic->setFixedSize(76, 44);
+                    pic->setToolTip(thumbs[i].second);
+                    QObject::connect(pic, &QToolButton::clicked, this, [this, f0, i] { pendingSection_ = i; openFile(f0); });
+                    cv->addWidget(pic); auto* nl = lab(thumbs[i].second.isEmpty() ? QStringLiteral("단면") : thumbs[i].second, "thumbName"); nl->setAlignment(Qt::AlignCenter); cv->addWidget(nl);
+                    tr->addWidget(col);
+                }
+                tr->addStretch(); sv->addLayout(tr);
+            }
+            sv->addStretch(); }
+        h->addWidget(side); }
+    g->addWidget(card, 0, 1, 1, 2);
+
+    // ---- 최근 모델: 머리 「최근 모델 n」 + 찾기, 삼선표(모델 · 상태 · 수평 · 높이 · 단면 · 마지막 열림), 도움말 한 줄
+    auto* recent = new QWidget; { auto* rv = new QVBoxLayout(recent); rv->setContentsMargins(0, 0, 0, 0); rv->setSpacing(8);
+        auto* hd = new QHBoxLayout; hd->setSpacing(8);
+        hd->addWidget(lab(QStringLiteral("최근 모델"), "sectionHead")); hd->addWidget(lab(QString::number(rf.size()), "cap")); hd->addStretch();
+        auto* find = new QLineEdit; find->setObjectName("homeFind"); find->setPlaceholderText(QStringLiteral("이름 · 폴더로 찾기")); find->setClearButtonEnabled(true); find->setFixedSize(260, 32);
+        hd->addWidget(find);
+        rv->addLayout(hd);
+        auto* tbl = new QTableWidget(std::max<int>(1, int(rf.size())), 6); tbl->setObjectName("recentTable");
+        tbl->setHorizontalHeaderLabels({QStringLiteral("모델"), QStringLiteral("상태"), QStringLiteral("수평"), QStringLiteral("높이"), QStringLiteral("단면"), QStringLiteral("마지막 열림")});
+        tbl->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        tbl->verticalHeader()->setVisible(false); tbl->setEditTriggers(QAbstractItemView::NoEditTriggers); tbl->setSelectionBehavior(QAbstractItemView::SelectRows);
+        tbl->setSelectionMode(QAbstractItemView::SingleSelection); tbl->setShowGrid(false); tbl->setFocusPolicy(Qt::NoFocus);
+        tbl->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+        for (int c = 1; c < 6; ++c) tbl->horizontalHeader()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
+        tbl->horizontalHeader()->setFixedHeight(28);
+        tbl->verticalHeader()->setDefaultSectionSize(48);
+        if (rf.isEmpty()) { tbl->setItem(0, 0, new QTableWidgetItem(QStringLiteral("아직 연 모델이 없습니다 — 「모델 열기」로 시작하세요"))); tbl->setSpan(0, 0, 1, 6); }
+        for (int i = 0; i < rf.size(); ++i) {
+            const QString& f = rf[i];
+            const bool ok = QFileInfo::exists(f);
+            auto* it0 = new QTableWidgetItem; it0->setToolTip(QDir::toNativeSeparators(f)); tbl->setItem(i, 0, it0);
+            { auto* cell = new QWidget; cell->setAttribute(Qt::WA_TransparentForMouseEvents);
+                auto* cv = new QVBoxLayout(cell); cv->setContentsMargins(8, 4, 8, 4); cv->setSpacing(0);
+                auto* nm = lab(QFileInfo(f).fileName(), ok ? "secName" : "faintName");
+                auto* pth = lab(QDir::toNativeSeparators(QFileInfo(f).absolutePath()), "monoFaint"); pth->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+                cv->addWidget(nm); cv->addWidget(pth);
+                tbl->setCellWidget(i, 0, cell); }
+            tbl->setItem(i, 1, new QTableWidgetItem(ok ? QStringLiteral("열 수 있음") : QStringLiteral("● 원본 없음")));
+            if (!ok) tbl->item(i, 1)->setForeground(theme::Block);
+            tbl->setItem(i, 2, new QTableWidgetItem(dash(meta(f, "srs").toString())));
+            auto* hi = new QTableWidgetItem(dash(meta(f, "height").toString()));
+            { const QString hs = meta(f, "heightState").toString(); if (hs == "warn") hi->setForeground(theme::Caution); else if (hs == "error") hi->setForeground(theme::Block); }
+            tbl->setItem(i, 3, hi);
+            auto* ci = new QTableWidgetItem(QString::number(meta(f, "count").toInt())); ci->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter); tbl->setItem(i, 4, ci);
+            auto* ai = new QTableWidgetItem(ago(meta(f, "lastOpened").toString())); ai->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter); tbl->setItem(i, 5, ai);
         }
-    }
-    right->addWidget(steps);
-    auto* keys = new QFrame; keys->setObjectName("cardSide"); keys->setAttribute(Qt::WA_StyledBackground);
-    { auto* g = new QGridLayout(keys); g->setContentsMargins(18, 14, 18, 14); g->setHorizontalSpacing(12); g->setVerticalSpacing(6);
-        g->addWidget(lab(QStringLiteral("자주 쓰는 키"), "sectionHead"), 0, 0, 1, 2);
-        const char* kk[][2] = {{"Ctrl+O", "열기"}, {"Ctrl+Shift+O", "최근 모델 다시 열기"}, {"S", "단면선 그리기"}, {"1 – 5", "뒤 깊이 0.5 / 1 / 2 / 3(기본) / 5 m"},
-                               {"[  ]", "평행 이동 0.1 m"}, {"R", "방향 반전"}, {"Ctrl+Z / Ctrl+Y", "되돌리기 / 다시"}, {"Ctrl+P", "도면"}, {"F1", "모든 단축키"}};
-        int r = 1;
-        for (auto& k : kk) { g->addWidget(kbd(QString::fromUtf8(k[0])), r, 0, Qt::AlignLeft); g->addWidget(lab(QString::fromUtf8(k[1])), r, 1); ++r; }
-        g->setColumnStretch(1, 1); }
-    right->addWidget(keys);
-    right->addStretch();
-    cols->addLayout(right, 2);
-    lay->addLayout(cols, 1);
-    auto* foot = lab(QStringLiteral("Kerf %1 · 높이는 모델 좌표계 그대로(높이 기준 지정은 이름표만) · 단면선 빨강 #FF0000").arg(QString::fromUtf8(kVersion)), "faint");
-    lay->addWidget(foot);
+        QObject::connect(tbl, &QTableWidget::cellDoubleClicked, this, [this, rf](int r, int) { if (r < rf.size() && QFileInfo::exists(rf[r])) openFile(rf[r]); });
+        QObject::connect(find, &QLineEdit::textChanged, tbl, [tbl, rf](const QString& t) {
+            for (int r = 0; r < rf.size(); ++r) tbl->setRowHidden(r, !t.trimmed().isEmpty() && !rf[r].contains(t.trimmed(), Qt::CaseInsensitive));
+        });
+        tbl->setContextMenuPolicy(Qt::CustomContextMenu);
+        QObject::connect(tbl, &QTableWidget::customContextMenuRequested, this, [this, tbl, rf](const QPoint& p) {
+            const int r = tbl->rowAt(p.y()); if (r < 0 || r >= rf.size()) return;
+            QMenu m(this);
+            m.addAction(QStringLiteral("열기"), this, [this, rf, r] { openFile(rf[r]); });
+            m.addAction(QStringLiteral("폴더 열기"), this, [rf, r] { QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(rf[r]).absolutePath())); });
+            m.addAction(QStringLiteral("목록에서 지우기(파일은 그대로)"), this, [this, rf, r] { QStringList l = rf; l.removeAt(r); QSettings().setValue("recent/files", l); rebuildRecentMenu(); rebuildStartPage(); });
+            m.exec(tbl->viewport()->mapToGlobal(p));
+        });
+        rv->addWidget(tbl, 1);
+        rv->addWidget(lab(QStringLiteral("두 번 누르면 엶 · 오른쪽 클릭 = 폴더 열기 · 목록에서 지우기(모델 파일은 그대로)"), "lab")); }
+    g->addWidget(recent, 1, 0, 1, 2);
+
+    // ---- 작업 순서 세 걸음(카드 없음): ✓ 끝 · ● 다음 · 숫자 나중
+    auto* steps = new QWidget; { auto* sv = new QVBoxLayout(steps); sv->setContentsMargins(0, 0, 0, 0); sv->setSpacing(14);
+        auto* hd = new QHBoxLayout; hd->addWidget(lab(QStringLiteral("작업 순서"), "sectionHead")); hd->addStretch();
+        hd->addWidget(lab(f0.isEmpty() ? QString() : QStringLiteral("%1 기준").arg(QFileInfo(f0).completeBaseName()), "cap"));
+        sv->addLayout(hd);
+        int done = 0;
+        if (ok0) done = (meta(f0, "hasLine").toBool() || meta(f0, "count").toInt() > 0) ? 2 : 1;
+        if (ok0 && !meta(f0, "sheets").toString().isEmpty()) done = 3;
+        const char* st3[3][2] = {{"모델 열기", "3MX 폴더의 .3mx 파일을 열면 평면이 위에서 본 모양으로 나옵니다."},
+                                 {"단면선 긋기", "평면에서 A, A′를 찍으면 오른쪽에 단면이 바로 나옵니다. 잘린 돌은 H로 빗금."},
+                                 {"도면 · 저장", "「도면」 탭에서 축척 · 용지를 정하고 SVG로 저장해 일러스트레이터에서 엽니다."}};
+        for (int i = 0; i < 3; ++i) {
+            auto* row = new QHBoxLayout; row->setSpacing(12);
+            auto* mark = new QLabel; mark->setObjectName("stepMark"); mark->setFixedSize(22, 22); mark->setAlignment(Qt::AlignCenter);
+            const bool isDone = i < done, isNext = i == done;
+            mark->setProperty("state", isDone ? "ok" : isNext ? "now" : "later");
+            if (isDone) mark->setPixmap(kerf::glyph(QStringLiteral("check"), 12, theme::Card, devicePixelRatioF())); else mark->setText(isNext ? QStringLiteral("●") : QString::number(i + 1));
+            row->addWidget(mark, 0, Qt::AlignTop);
+            auto* tt = new QHBoxLayout; tt->setSpacing(6);
+            tt->addWidget(lab(QString::fromUtf8(st3[i][0]), isNext ? "secName" : nullptr));
+            if (isNext) tt->addWidget(lab(QStringLiteral("● 다음"), "nextMark"));
+            tt->addStretch();
+            auto* ds = lab(QString::fromUtf8(st3[i][1]), "lab"); ds->setWordWrap(true);
+            auto* col = new QWidget; auto* cv = new QVBoxLayout(col); cv->setContentsMargins(0, 0, 0, 0); cv->setSpacing(2); cv->addLayout(tt); cv->addWidget(ds);
+            row->addWidget(col, 1);
+            sv->addLayout(row);
+        }
+        sv->addStretch(); }
+    g->addWidget(steps, 1, 2);
+
+    // ---- 처음 쓰는 키(선 위): S · 1–5 · H · O · Ctrl+P · Ctrl+Z + 오른쪽 「모든 키 F1」
+    auto* keys = new QWidget; keys->setObjectName("homeKeys"); keys->setAttribute(Qt::WA_StyledBackground);
+    { auto* kh = new QHBoxLayout(keys); kh->setContentsMargins(0, 12, 0, 16); kh->setSpacing(32);
+        kh->addWidget(lab(QStringLiteral("처음 쓰는 키"), "sectionHead"));
+        const char* kk[][2] = {{"S", "단면선 긋기"}, {"1–5", "뒤 깊이 0.5 · 1 · 2 · 3 · 5 m"}, {"H", "잘린 돌 칠하기"}, {"O", "윤곽 따기"}, {"Ctrl+P", "도면"}, {"Ctrl+Z", "되돌리기 200단계"}};
+        for (auto& k : kk) { auto* one = new QHBoxLayout; one->setSpacing(8); one->addWidget(kbd(QString::fromUtf8(k[0]))); one->addWidget(lab(QString::fromUtf8(k[1]), "lab")); kh->addLayout(one); }
+        kh->addStretch();
+        auto* all = new QPushButton(QStringLiteral("모든 키  F1")); all->setObjectName("quietLink"); all->setFlat(true); all->setFocusPolicy(Qt::NoFocus);
+        QObject::connect(all, &QPushButton::clicked, this, [this] { dlgKeys(); });
+        kh->addWidget(all); }
+    g->addWidget(keys, 2, 0, 1, 3);
+    lay->addLayout(g, 1);
 }
 
-QWidget* MainWindow::buildSteps() {
-    auto* w = new QWidget; w->setObjectName("wsteps");
-    auto* h = new QHBoxLayout(w); h->setContentsMargins(0, 0, 8, 0); h->setSpacing(4);
-    const char* names[] = {"모델 열기", "단면선 긋기", "도면 만들기"};
-    const char* tips[] = {"Ctrl+O", "S", "Ctrl+P"};
-    for (int i = 0; i < 3; ++i) {
-        if (i) { auto* line = new QFrame; line->setFixedSize(16, 1); line->setStyleSheet(QStringLiteral("background:#C2C0B6;")); h->addWidget(line); }
-        auto* b = new QToolButton; b->setObjectName("stepBtn"); b->setAutoRaise(true); b->setFocusPolicy(Qt::NoFocus);
-        b->setToolTip(QString::fromUtf8(tips[i]));
-        stepBtn_[i] = b;
-        h->addWidget(b);
-    }
-    QObject::connect(stepBtn_[0], &QToolButton::clicked, this, [this] { chooseOpen(); });
-    QObject::connect(stepBtn_[1], &QToolButton::clicked, this, [this] {
-        if (!src_) { showStatus(QStringLiteral("모델을 연 뒤에 단면선을 긋습니다")); return; }
-        showWorkTab(); plan_->setDrawMode(true);
-    });
-    QObject::connect(stepBtn_[2], &QToolButton::clicked, this, [this] {
-        if (!src_) { showStatus(QStringLiteral("모델을 연 뒤에 도면을 만듭니다")); return; }
-        dlgChooseSheet();
-    });
-    return w;
-}
-
+// 홈의 「작업 순서」는 rebuildStartPage 가 그린다 — 홈이 보이는 동안 상태가 바뀌면 다시 그린다
 void MainWindow::refreshSteps() {
-    if (!stepBtn_[0]) return;
-    const char* names[] = {"모델 열기", "단면선 긋기", "도면 만들기"};
-    int now = 0;
-    if (src_) now = (plan_ && plan_->hasLine()) ? 2 : 1;
-    for (int i = 0; i < 3; ++i) {
-        const char* state = i < now ? "ok" : i == now ? "now" : "later";
-        QString mark = i < now ? QStringLiteral("✓") : QString::number(i + 1);
-        stepBtn_[i]->setText(mark + QStringLiteral("  ") + QString::fromUtf8(names[i]));
-        stepBtn_[i]->setProperty("state", state);
-        stepBtn_[i]->style()->unpolish(stepBtn_[i]);
-        stepBtn_[i]->style()->polish(stepBtn_[i]);
-    }
+    if (body_ && body_->currentIndex() == 0 && startPage_ && startPage_->isVisible()) rebuildStartPage();
 }
 
 void MainWindow::showStart(bool on) {
@@ -1275,7 +1294,7 @@ void MainWindow::showStart(bool on) {
     if (guide_ && on) { guide_->hide(); undoBtns_->hide(); }
     if (viewTabs_) { QSignalBlocker b(viewTabs_); viewTabs_->setTabEnabled(1, bool(src_)); viewTabs_->setCurrentIndex(on ? 0 : 1); }
     setRibbonContext(on ? 0 : 1);
-    showStatus(on ? QStringLiteral("모델을 여세요 — 최근 모델을 누르거나 파일을 끌어다 놓아도 됩니다") : QString());
+    showStatus(on ? QStringLiteral("먼저 모델을 열거나, 파일을 창에 끌어다 놓으세요.") : QString());
     refreshSteps();
 }
 

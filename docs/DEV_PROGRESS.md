@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-09 · Claude Code — 디자인 v5 A단계(아이콘 SVG) 끝(`35be58d`). B단계(리본 · 문서 탭) 진행 중. 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
+| 마지막 갱신 | 2026-10-09 · Claude Code — 디자인 v5 A(아이콘) · B(리본 · 탭) · C(안내 칩 · 상태줄) 끝(`5fa3d88`). D(홈) 끝. E(도면 판 · 레벨선 pt) 진행 중. 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -185,6 +185,18 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 빈 구현으로 `--icon-sheet` → `EXIT=10 missing=31`(RED) → 구현 뒤 `EXIT=0 n=62 missing=0`(GREEN), `C:\dev\tmp\ui\icons.png`에서 타일 62개 확인. `cmake --build` exit 0(새 경고 0, 기존 `_wfopen` · `mirrored`만). `asec_tests "~CoalescingWorker*"` 51300 assertions 통과. `--ui-audit` RESULT ok. 실제 화면 캡처 `C:\dev\tmp\kerf-shots\v5-a2-icons.png`에서 리본 · 머리 · 배지 아이콘이 SVG로 바뀐 것 확인.
 - **판정:** A2(그리기)와 A3(`--icon-sheet`)를 한 커밋으로 — `--icon-sheet`가 A2의 RED→GREEN 시험 장치라 — 잘못이면: 되돌릴 때 둘이 같이 돌아감. `CLAUDE.md` · 이 파일은 팩토리 세션(다른 창)의 미커밋 변경과 섞여 있어 코드 커밋에서 뺌 — 사용자 지시 때 한꺼번에 커밋. 사용자 추가 지시 둘을 기록함: ① 「superpowers 스킬 · context7을 안정적으로」 → `CLAUDE.md` 「먼저 할 일」 개발 방식 절 ② 「4K · 와이드 어디서나 안정」 → `DESIGN_SPEC §2.1` · 계획 Task B5.
 - **남은 문제:** 리본은 아직 v4 모양(18 px 아이콘 옆 글자) — B단계에서 타일 리본으로. offscreen 캡처는 글꼴이 없어 글자가 □로 보임(앱 정상).
+
+### 2026-10-09 · Claude Code — 디자인 v5 B단계(리본 C1 · 문서 탭 C2) · C단계(떠 있는 안내 C4 · 상태줄 C6) — 커밋 `070dce5` · `fa961ca` · `5fa3d88`
+- **무엇을:** `app/ribbon.{hpp,cpp}` — Strata `KaBeginnerRibbon` 규칙을 `Q_OBJECT` 없이 옮김(묶음 이름 위 · 타일 칩 `kerf::chipIcon` · 크기 단계 50…34 → 32 → 32/24/20 글자 숨김 · 창 폭에 맞는 가장 큰 크기 · Tab/Enter). `buildRibbon()` 다시 씀: 탭 없이 **모델 · 단면 · 입면 · 보기 · 자료 · 내보내기 · 기타**, 글자 2–4자, 「도면」 흙색 주 단추, 오른쪽 끝 「좌표 입력」 + 「단면 찾기 Ctrl+F」(목록 거르기), 「더보기 ▾」(불투명도 · 단면선 굵기 · 매끈하게 · 영어 병기 · 정보 · 끝내기). `setRibbonContext(홈 · 단면 · 도면)`. 문서 탭 줄 36 px **홈 · 단면 · 도면(×)** 상시 + 구석 「모델 · 저장됨」. `app/guideband.{hpp,cpp}` — 평면 왼쪽 위 떠 있는 안내 칩 + 되돌리기 · 다시(리본 아래 도구 줄 삭제). 상태줄 32 px 셀(X · Y · Z) + 「수평 EPSG ▾」 · 「높이 ▾」 배지.
+- **확인:** `--ui-audit` v5 기대값으로 고쳐 **RESULT ok**: `tabs=0 doctabs=홈,단면` · `ribbon height=118 groups=7 look=50 labels=1 chips-clay=1`(폭 근거 need50=1906) · `guide-band=1` · `status-badges=2` · dup 0 · icons 0. `--ctx-shot` guide=1. `asec_tests "~CoalescingWorker*"` 통과. 캡처 `C:\dev\tmp\kerf-shots\v5-b2-work.png` · `v5-b2-start.png` · `v5-c1-draw.png` · `v5-c2-work.png`(실제 화면).
+- **판정:** ① 처음 감사에서 타일 32가 골라짐(need50 2185) → 입면 위젯 489→302 · 오른쪽 끝 320→278 · 묶음 여백 3 · 칩 바닥 타일+6(Strata +8)으로 1906. 잘못이면: 칩이 Strata 보다 2 px 좁음. ② 자료 「목록」→「목록 파일」(보기 「목록」과 겹침). ③ 좁은 창 감사는 창 최소 폭(판 넷 합 1729)에 막혀 `chooseLook` 규칙으로 판정 — 창 최소 폭 줄이기는 B5. ④ 평면 오른쪽 위 떠 있는 확대 묶음은 만들지 않음(머리와 겹침). ⑤ hatch · outline 칩은 꺼진 채(F · G에서 켬). ⑥ 「수평」 배지 글은 「수평 EPSG:5186 ▾」(원점 한글 이름 코드에 없음).
+- **남은 문제:** 홈(D) · 도면 판(E) 아직 v4 모양. `CLAUDE.md` · 이 파일은 팩토리 세션 미커밋 변경과 섞여 커밋 보류.
+
+### 2026-10-09 · Claude Code — 디자인 v5 D단계(홈 C3) · 개발 규칙 정본 `docs/DEV_RULES.md`
+- **무엇을:** `rebuildStartPage()` 다시 씀(스펙 §7, Strata 홈 뼈대): 왼쪽 앱 아이콘 56 + 「Kerf | 발굴 평·단면」 + 설명 + 「모델 열기 Ctrl+O」 · 「최근 ▾」 | 이어서 작업 카드(먹색 테: 이름 명조 40 · 보조 줄 · 칸 6 · 오른쪽 흙색 「이어서 열기 →」 + 단면 썸네일(누르면 그 단면으로, `pendingSection_`)) | 「최근 모델 n」 + 찾기 칸 + 삼선표(모델 · 상태 · 수평 · 높이 · 단면 · 마지막 열림, 두 번 누르면 엶, 오른쪽 클릭 폴더 열기 · 목록에서 지우기) | 「작업 순서」 세 걸음(✓ · ● 다음 · 숫자) | 「처음 쓰는 키」 줄 + 「모든 키 F1」. 옛 리본 걸음 단추(`buildSteps` · `stepBtn_`) · 끌어 놓기 칸 삭제(창 전체가 받음). 사용자 지시 「모든 개발규칙을 절대 준수하라, 규칙을 지정하라」 → **`docs/DEV_RULES.md`**(R1 절차 · R2 코드 · R3 검증 · R4 기록 · R5 Git · R6 검토 · R7 안전 + 과제 체크리스트), CLAUDE.md 맨 위에서 가리킴.
+- **확인:** 빌드 exit 0(새 경고 0). `--start-shot` → `C:\dev	mp\kerf-shots5-d1-home.png` 눈으로 확인(흙색은 「이어서 열기」 하나, 작업 순서 ✓✓●). `--ui-audit` RESULT ok. `asec_tests "~CoalescingWorker*"` 통과. cpp-reviewer(B · C diff) · ui-reviewer(홈 · 작업 · 그리기 캡처) 독립 검토 요청함(결과는 다음 기록에).
+- **판정:** 홈 「모델 열기」 · 「최근」은 리본 모델 묶음과 같은 일(Strata 홈도 「새 조사 · 조사 열기」가 리본과 겹침) — 홈은 감사 대상 밖. 「도면」 칸은 저장 기록(`sheets` 메타)이 생기기 전까지 「—」.
+- **남은 문제:** 도면 판(E) · 레벨선 pt(E1–E2) 다음.
 
 ## 5. 다음 할 일 (위에서부터)
 **A. 디자인 세션(다른 계정, Max) — 먼저**

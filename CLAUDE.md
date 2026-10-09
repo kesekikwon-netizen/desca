@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 다른 AI 에이전트(OpenCode 등)도 같은 규칙을 따른다.
 
 ## 먼저 할 일 (모든 AI · 모든 계정)
+- **개발 규칙은 [`docs/DEV_RULES.md`](docs/DEV_RULES.md)(절대 준수, 사용자 지시 2026-10-09)가 정본이다.** 코드를 바꾸기 전에 읽고, 과제마다 그 체크리스트를 장부에 채운다. 다른 문서와 어긋나면 그 문서가 이긴다.
 - 지금 진행 중인 개발은 **Kerf 디자인 v4**다. 작업을 시작하기 전에 `docs/DEV_PROGRESS.md`를 끝까지 읽고 「다음 할 일」부터 이어서 한다.
 - **단계 하나를 마칠 때마다 `docs/DEV_PROGRESS.md`를 고친다**(상태 표 · 기록 · 다음 할 일). 기록 없이 다음 단계로 가지 않는다.
 - 지시서는 `docs/design-v4/FINAL_PLAN.md`, 단추 하나하나의 계약은 `docs/design-v4/boards/Buttons1.dc.html` · `Buttons2.dc.html`(HTML을 글로 읽는다).

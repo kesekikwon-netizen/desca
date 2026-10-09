@@ -190,6 +190,7 @@ private:
     QWidget* docTabsRow_ = nullptr;
     QLabel* docTabCorner_ = nullptr;
     void filterSectionList(const QString& text);
+    int pendingSection_ = -1;           // 홈 썸네일로 연 뒤 고를 단면 번호(restoreModelState 가 씀)
     QStackedWidget* body_ = nullptr;      // 0 시작 화면, 1 작업, 조판은 별도 위젯
     QTabBar* viewTabs_ = nullptr;
     QWidget* sheetHost_ = nullptr;
@@ -225,7 +226,6 @@ private:
     QComboBox* scaleCombo_ = nullptr;
     QLabel *lvLine_ = nullptr, *lvLabel_ = nullptr;
     QToolButton* depthChip_[5] = {};
-    QToolButton* stepBtn_[3] = {};
     void refreshSteps();
     bool backUserSet_ = false;   // 뒤 깊이를 사용자가 직접 고름(아니면 기본 3 m 를 따름)
     QMenu* recentMenu_ = nullptr;
@@ -334,7 +334,6 @@ private:
     QAction* action(const QString& key) const { return act_.at(key); }
     QAction* makeAction(const QString& key, const QString& ko, const QString& en, theme::Ico ico, const QString& shortcut = {}, bool checkable = false);
     QWidget* buildRibbon();
-    QWidget* buildSteps();
     QWidget* buildCoordBar();
     void retranslate();
     void requestSection(bool final);

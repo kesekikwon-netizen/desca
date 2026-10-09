@@ -250,11 +250,33 @@ QMenu::separator { height: 1px; background: #DEDCD1; margin: 4px 8px; }
 QToolTip { background: #30302E; color: #FAF9F5; border: none; padding: 4px 8px; font-size: 12px; }
 
 QWidget#startPage { background: #FAF9F5; }
+QLabel#homeSub { font-size: 15px; color: #5E5D59; border-left: 1px solid #C2C0B6; padding-left: 14px; }
+QLabel#homeLead { font-size: 15px; color: #5E5D59; }
+QLabel#cap { font-size: 11px; color: #5E5D59; }
+QLabel#lab { font-size: 12px; color: #5E5D59; }
+QLabel#faintName { font-size: 13px; color: #73726C; }
+QLabel#thumbName { font-family: Batang, "Noto Serif KR", "Malgun Gothic"; font-size: 12px; color: #141413; }
+QPushButton#homeBtn, QToolButton#homeBtn { background: #FFFFFF; border: 1px solid #C2C0B6; border-radius: 8px; padding: 0 20px; font-size: 15px; color: #141413; }
+QPushButton#homeBtn:hover, QToolButton#homeBtn:hover { background: #F5F4ED; border-color: #B0AEA5; }
+QToolButton#homeBtn::menu-indicator { image: none; width: 0px; }
+QFrame#continueCard { background: #FFFFFF; border: 1px solid #141413; }
+QWidget#ccCells { border-top: 1px solid #DEDCD1; }
+QWidget#ccCell { border-left: 1px solid #DEDCD1; }
+QWidget#ccSide { border-left: 1px solid #DEDCD1; }
+QToolButton#thumb { border: 1px solid #DEDCD1; background: #FFFFFF; padding: 1px; }
+QToolButton#thumb:hover { border-color: #141413; }
+QLineEdit#homeFind { border: 1px solid #C2C0B6; border-radius: 8px; background: #FFFFFF; padding: 0 10px; font-size: 13px; }
+QLabel#stepMark { border: 1px solid #87867F; border-radius: 11px; font-size: 11px; color: #141413; background: transparent; }
+QLabel#stepMark[state="ok"] { background: #141413; border-color: #141413; }
+QLabel#stepMark[state="now"] { border-color: #D97757; color: #9C4A2F; }
+QLabel#nextMark { font-size: 12px; color: #9C4A2F; }
+QWidget#homeKeys { border-top: 1px solid #DEDCD1; }
+QPushButton#quietLink { background: transparent; border: none; color: #9C4A2F; text-decoration: underline; padding: 0 4px; }
 QFrame#card { background: #FFFFFF; border: 1px solid #C2C0B6; border-radius: 8px; }
 QFrame#cardSide { background: #FFFFFF; border: none; border-left: 1px solid #DEDCD1; }
 QFrame#dropZone { background: #F5F4ED; border: 1px dashed #B0AEA5; border-radius: 8px; }
-QTableWidget#recentTable { background: #FFFFFF; border: none; border-top: 2px solid #141413; border-bottom: 2px solid #141413; gridline-color: #DEDCD1; outline: 0; }
-QTableWidget#recentTable::item { border-bottom: 1px solid #DEDCD1; padding: 4px 6px; }
+QTableWidget#recentTable { background: #FAF9F5; border: none; border-top: 1px solid #141413; border-bottom: 1px solid #141413; gridline-color: #E8E6DC; outline: 0; }
+QTableWidget#recentTable::item { border-bottom: 1px solid #E8E6DC; padding: 4px 8px; }
 QTableWidget#recentTable::item:selected { background: #E3DACC; color: #141413; }
 QHeaderView::section { background: #FFFFFF; color: #5E5D59; border: none; border-bottom: 1px solid #DEDCD1; padding: 4px 6px; font-size: 11px; }
 QLabel#stepNum { border: 1px solid #141413; border-radius: 11px; min-width: 20px; max-width: 20px; min-height: 20px; max-height: 20px; font-size: 11px; qproperty-alignment: AlignCenter; }
