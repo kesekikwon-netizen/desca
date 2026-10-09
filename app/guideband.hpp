@@ -28,6 +28,7 @@ public:
     QString hint() const;
     bool titleShown() const;   // 감사용: 도구 이름(단계)이 보이는가
     QString debugWidths() const;   // 감사용: 문장 라벨 폭/권장 · 칩 폭/권장
+    qint64 iconCacheKey() const;   // 감사용: 지금 아이콘 장의 cacheKey(dpr 바뀌어 다시 구우면 달라진다 — B5)
 
 protected:
     bool eventFilter(QObject* watched, QEvent* e) override;

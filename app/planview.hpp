@@ -73,6 +73,8 @@ public:
     void setViewPitch(double deg);
 
     void fitAll();
+    /// 감사용: 장면 상자(XY)가 지금 창 크기에서 화면에 다 들어가는가(창을 줄여도 맞춤이 유지되는지 — B5)
+    bool contentFits() const;
     void topView();
     void homeView();
     QPointF compassCenter() const;                  // 나침반 자리(그리기 · 눌림 판정이 같은 값을 쓴다 — 검토 I1)

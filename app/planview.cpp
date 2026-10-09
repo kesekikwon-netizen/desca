@@ -344,6 +344,32 @@ void PlanView::fitAll() {
     update();
 }
 
+// 저장된 proj_ 가 아니라 지금 width() · height() · mpp_ · target_ · yaw_ · pitch_ 로 잰다 — offscreen(GL 없음)에서는 resizeGL 이 안 불려 proj_ 가 옛 크기 그대로라
+// viewRectLocal 로 재면 고치기 전에도 맞는 것처럼 보인다(spec §3-B Task 1). 식은 updateMatrices · screenToLocalXY 와 같다
+bool PlanView::contentFits() const {
+    if (!hasScene_ || !bounds_.valid() || width() <= 0 || height() <= 0) return false;
+    const double diag = std::max(1.0, bounds_.diag());
+    const double w = width() * mpp_, h = height() * mpp_;
+    QMatrix4x4 proj, view;
+    proj.ortho(float(-w / 2), float(w / 2), float(-h / 2), float(h / 2), float(-diag * 4), float(diag * 4));
+    view.rotate(float(-(90.0 - pitch_)), 1, 0, 0);
+    view.rotate(float(-yaw_), 0, 0, 1);
+    view.translate(-target_);
+    bool inv = false;
+    const QMatrix4x4 m = (proj * view).inverted(&inv);
+    if (!inv) return false;
+    Box3 v;
+    const double zr = refZ();
+    for (QPointF c : {QPointF(0, 0), QPointF(width(), 0), QPointF(0, height()), QPointF(width(), height())}) {
+        const float nx = float(c.x() / width() * 2 - 1), ny = float(1 - c.y() / height() * 2);
+        const QVector3D A = (m * QVector4D(nx, ny, -1, 1)).toVector3DAffine(), B = (m * QVector4D(nx, ny, 1, 1)).toVector3DAffine();
+        const double dz = B.z() - A.z();
+        const double t = std::fabs(dz) < 1e-9 ? 0 : (zr - A.z()) / dz;
+        v.add(Vec3(A.x() + t * (B.x() - A.x()) + center_.x, A.y() + t * (B.y() - A.y()) + center_.y, bounds_.mn.z));
+    }
+    return v.mn.x <= bounds_.mn.x + 1e-6 && v.mx.x >= bounds_.mx.x - 1e-6 && v.mn.y <= bounds_.mn.y + 1e-6 && v.mx.y >= bounds_.mx.y - 1e-6;   // 경계 1e-6 m(profile §7)
+}
+
 void PlanView::topView() { yaw_ = 0; pitch_ = 90; updateMatrices(); update(); }
 
 void PlanView::homeView() {

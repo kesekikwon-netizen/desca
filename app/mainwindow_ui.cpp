@@ -1840,6 +1840,41 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         return n == QLatin1String("chip") || n == QLatin1String("stepBtn") || (b->text().trimmed().isEmpty() && b->toolTip().isEmpty());
     };
 
+    // 0) 해상도 · DPI(B5, 사용자 지시 「4K · 와이드 어디서나 안정」): ① --size 로 연 창은 그 크기(가로 · 세로 모두) ② 창 최소 폭 ≤ 1280 ③ 보이는 단추 · 칸 · 판이 창 밖으로 안 나감
+    //    ④ QT_SCALE_FACTOR 가 실제로 먹음(dpr == scale — ×2 실행이 가짜가 아니어야) ⑤ 아이콘은 dpr 1.25 · 1.75(Windows 125 · 175 %)에서도 그 배율로 구운 장을 냄(다른 배율 장을 줄이면 흐림)
+    {
+        const QString scale = qEnvironmentVariable("QT_SCALE_FACTOR", QStringLiteral("1"));
+        int overflow = 0; QStringList over;
+        auto check = [&](QWidget* w, const QString& name) {
+            if (!w || !w->isVisibleTo(this)) return;
+            const QRect r(w->mapTo(this, QPoint(0, 0)), w->size());
+            if (r.right() > width() || r.bottom() > height() || r.left() < 0 || r.top() < 0) { ++overflow; if (over.size() < 6) over << name; }
+        };
+        for (auto* b : ribbon_->chips()) check(b, b->text());
+        check(coordBtn_, QStringLiteral("coord")); check(findBox_, QStringLiteral("find"));
+        check(srsLabel_, QStringLiteral("srs-badge")); check(heightBadge2_, QStringLiteral("height-badge"));
+        check(docTabCorner_, QStringLiteral("doc-corner")); check(inspector_, QStringLiteral("inspector"));
+        const int minW = minimumSizeHint().width();
+        const QSize want = property("auditSize").toSize();   // main.cpp --size W×H (없으면 ① 건너뜀)
+        const bool sizeOk = !want.isValid() || (width() == want.width() && height() == want.height());
+        const bool scaleOk = qFuzzyCompare(devicePixelRatioF(), scale.toDouble() > 0 ? scale.toDouble() : 1.0);
+        // 선 아이콘: 바로 그린 장과 크기 · 픽셀이 같아야 함. 리본 칩(보이는 것 전부): 돌려받은 장의 dpr 이 요청한 배율이어야 함
+        int iconDprBad = 0;
+        for (qreal d : {1.25, 1.75}) {
+            const QPixmap a = kerf::icon(QStringLiteral("search"), 18, theme::Hand).pixmap(QSize(18, 18), d);
+            const QPixmap b = kerf::glyph(QStringLiteral("search"), 18, theme::Hand, d);
+            if (a.size() != b.size() || !qFuzzyCompare(a.devicePixelRatio(), d) || a.toImage() != b.toImage()) ++iconDprBad;
+            const int tile = ribbon_->look().tile;
+            for (auto* c : ribbon_->chips()) if (c->isVisibleTo(this) && !qFuzzyCompare(c->icon().pixmap(QSize(tile, tile), d).devicePixelRatio(), d)) ++iconDprBad;
+        }
+        const bool envOk = sizeOk && minW <= 1280 && overflow == 0 && scaleOk && iconDprBad == 0;
+        L << QStringLiteral("ui-audit env size=%1x%2 want=%3x%4 scale=%5 dpr=%6 min-width=%7 overflow=%8%9 icon-dpr-bad=%10%11").arg(width()).arg(height()).arg(want.width()).arg(want.height()).arg(scale).arg(devicePixelRatioF(), 0, 'f', 2).arg(minW).arg(overflow)
+                 .arg(over.isEmpty() ? QString() : QStringLiteral(" [%1]").arg(over.join(QLatin1Char(','))))
+                 .arg(iconDprBad)
+                 .arg(envOk ? QString() : QStringLiteral("  FAIL"));
+        ok &= envOk;
+    }
+
     // 1) 리본 탭 없음 · 문서 탭 「홈 · 단면[· 도면]」 상시(v5 C2)
     QStringList names;
     for (int i = 0; i < viewTabs_->count(); ++i) names << viewTabs_->tabText(i);
@@ -1994,8 +2029,12 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             // 도구 이름(단계)은 평면 폭에 들어가면 보여야 한다(검토 UI 5): 숨겼다면 칩이 평면 폭을 거의 다 쓴 경우만
             const bool titleOk = guide_->titleShown() || guide_->width() >= planHost_->width() - 2 * 12 - 32;
             noteOk = inspNote_ && inspNote_->text() == QStringLiteral("A 찍음 · 끝점 A′를 찍으세요") ? 1 : 0;
-            guide2 = inside && apart && textOk && titleOk ? 1 : 0;
-            guide2Why = QStringLiteral("inside=%1 apart=%2 text=%3 title=%4 guide-w=%5 host-w=%6 %8 hint=\"%7\"").arg(inside ? 1 : 0).arg(apart ? 1 : 0).arg(textOk ? 1 : 0).arg(titleOk ? 1 : 0).arg(guide_->width()).arg(planHost_->width()).arg(guide_->hint()).arg(guide_->debugWidths());
+            // 화면을 옮겨 dpr 이 바뀌면(QEvent::DevicePixelRatioChange, Qt 6.6+) 칩 아이콘을 그 배율로 다시 구워야 한다(B5) — 같은 장이면 흐림
+            const qint64 key0 = guide_->iconCacheKey();
+            { QEvent dprEv(QEvent::DevicePixelRatioChange); QApplication::sendEvent(guide_, &dprEv); }
+            const bool dprOk = guide_->iconCacheKey() != key0;
+            guide2 = inside && apart && textOk && titleOk && dprOk ? 1 : 0;
+            guide2Why = QStringLiteral("inside=%1 apart=%2 text=%3 title=%4 dpr-rerender=%9 guide-w=%5 host-w=%6 %8 hint=\"%7\"").arg(inside ? 1 : 0).arg(apart ? 1 : 0).arg(textOk ? 1 : 0).arg(titleOk ? 1 : 0).arg(guide_->width()).arg(planHost_->width()).arg(guide_->hint()).arg(guide_->debugWidths()).arg(dprOk ? 1 : 0);
             if (!dir.isEmpty()) grab().save(QDir(dir).filePath(QStringLiteral("draw2.png")));
         }
         plan_->setDrawMode(false); plan_->setLine(keep, hadLine); pump(100);
@@ -2076,14 +2115,26 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     ok &= noIcon.isEmpty() && noTip.isEmpty();
 
     // 2b) 좁은 창 1280×800 — 맨 끝에서(offscreen 에서는 resize 를 되돌려도 판 폭이 돌아오지 않아 뒤 항목을 망친다, 실측): 글자 숨김 · 타일 32 이하(스펙 §3.3 · §12)
-    // 창 최소 폭(판 넷의 합)이 1280 보다 넓을 수 있으므로 고르기 규칙 자체를 판정한다. 창이 실제로 1280 으로 줄어드는지는 B5(해상도) 에서
+    // 고르기 규칙 + 실제로 줄어든 창(B5): 창 폭 ≤ 1280 · 그 리본 타일 ≤ 32 · 글자 숨김 · 맞춤 상태의 평면 · 단면 그림이 잘리지 않음(자동 맞춤) ·
+    // 사용자가 확대한 보기는 창 크기가 바뀌어도 축척이 그대로(zoom-kept — 지킴 시험, 자동 맞춤이 사용자 보기까지 다시 맞추면 0)
     const RibbonLook nk = Ribbon::looks().at(Ribbon::chooseLook(lw, 1280));   // lookWidths 에 리본 좌우 여백이 이미 들어 있다
-    const bool narrowOk = nk.tile <= 32 && !nk.labels;
     const QSize keepSize = size();
     resize(1280, 800); pump(250);
-    L << QStringLiteral("ui-audit narrow rule-at-1280 look=%1 labels=%2 window-min-width=%3 actual-look=%4%5").arg(nk.tile).arg(nk.labels ? 1 : 0).arg(minimumSizeHint().width()).arg(ribbon_->look().tile).arg(narrowOk ? QString() : QStringLiteral("  FAIL"));
+    const RibbonLook ak = ribbon_->look();
+    const int narrowW = width(), narrowMinW = minimumSizeHint().width();
+    const int planFits = src_ ? (plan_->contentFits() ? 1 : 0) : -1, secFits = section_->hasResult() ? (section_->contentFits() ? 1 : 0) : -1;
     if (!dir.isEmpty()) grab().save(QDir(dir).filePath(QStringLiteral("narrow.png")));
-    resize(keepSize); pump(250);
+    int zoomKept = -1;
+    if (src_ && section_->hasResult()) {
+        section_->zoomBy(1.4); plan_->zoomBy(1 / 1.4); pump(50);
+        const double ppm = section_->xf().ppm, mpp = plan_->metersPerPixel();
+        resize(keepSize); pump(250);
+        zoomKept = section_->xf().ppm == ppm && plan_->metersPerPixel() == mpp ? 1 : 0;   // 축척 값은 같아야 함(허용오차 없음 — 맞춤 상태가 아니면 resize 가 ppm · mpp 를 다시 계산하지 않는다)
+        section_->fit(); plan_->fitAll(); pump(50);
+    } else { resize(keepSize); pump(250); }
+    const bool narrowOk = nk.tile <= 32 && !nk.labels && narrowW <= 1280 && ak.tile <= 32 && !ak.labels && planFits != 0 && secFits != 0 && zoomKept != 0;
+    L << QStringLiteral("ui-audit narrow rule-at-1280 look=%1 labels=%2 window-min-width=%3 actual-width=%4 actual-look=%5 actual-labels=%6 plan-fits=%7 section-fits=%8 zoom-kept=%9%10")
+             .arg(nk.tile).arg(nk.labels ? 1 : 0).arg(narrowMinW).arg(narrowW).arg(ak.tile).arg(ak.labels ? 1 : 0).arg(planFits).arg(secFits).arg(zoomKept).arg(narrowOk ? QString() : QStringLiteral("  FAIL"));
     ok &= narrowOk;
 
     if (!dir.isEmpty()) grab().save(QDir(dir).filePath(QStringLiteral("work.png")));

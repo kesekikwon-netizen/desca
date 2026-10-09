@@ -291,7 +291,7 @@ int main(int argc, char** argv) {
         return ok ? 0 : 6;
     }
     MainWindow w;
-    if (W > 0 && H > 0) w.resize(W, H);
+    if (W > 0 && H > 0) { w.resize(W, H); w.setProperty("auditSize", QSize(W, H)); }   // --ui-audit env: 요청한 크기로 열렸는지(B5)
     if (file.isEmpty() && startShot.isEmpty() && shot.isEmpty() && !quit) {
         // 여는 화면: 화면 가운데 맨 위에 5 초 동안 선 그림 모션(초당 60 번 다시 그림)
         OpeningSplash splash;

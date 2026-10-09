@@ -47,6 +47,13 @@ void SectionView::fit() {
     xf_.plot = pr;
 }
 
+bool SectionView::contentFits() const {
+    if (!has_ || !xf_.plot.isValid() || xf_.ppm <= 0) return false;
+    const double L = SectionFrame(r_.line).L;
+    const double sa = xf_.s0, sb = xf_.s0 + xf_.plot.width() / xf_.ppm;
+    return sa <= 0.0 + 1e-6 && sb >= L - 1e-6;   // 경계 1e-6 m(profile §7 단면 끝점 s 좌표와 같은 값)
+}
+
 void SectionView::resizeEvent(QResizeEvent*) {
     QRectF pr = plotRect(rect(), 1.0);
     if (has_ && xf_.plot.isValid()) {

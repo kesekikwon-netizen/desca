@@ -65,6 +65,8 @@ public:
     bool hasResult() const { return has_; }
     const asec::SectionResult& result() const { return r_; }
     void fit();
+    /// 감사용: 단면선 전체(s 0–L)가 그림 칸 가로에 들어가는가(창을 줄여도 맞춤이 유지되는지 — B5)
+    bool contentFits() const;
     void zoomBy(double f);
     /// 휠 확대/축소(커서 위치의 (s, z) 고정, 부드럽게 — 설정 view/smoothZoom)
     void wheelZoom(const QPointF& at, double notches);

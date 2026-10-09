@@ -94,6 +94,7 @@ QString GuideBand::title() const { return title_->text(); }
 bool GuideBand::titleShown() const { return title_->isVisible(); }
 QString GuideBand::debugWidths() const { return QStringLiteral("hint=%1/%2 band=%3/%4").arg(hint_->width()).arg(hint_->sizeHint().width()).arg(width()).arg(sizeHint().width()); }
 QString GuideBand::hint() const { return hint_->text(); }
+qint64 GuideBand::iconCacheKey() const { return icon_->pixmap().cacheKey(); }
 
 bool GuideBand::eventFilter(QObject* watched, QEvent* e) {
     if (watched == host_ && e->type() == QEvent::Resize) place();
