@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-09 · Claude Code — 디자인 v5 A–D · E1–E3 끝(E3 도면 탭 `27ca154`), 검토 1차(`0f30c5a`) · 2차 + 둥글기 지시 반영(이번 커밋). 다음 E4(여러 장 SVG). 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` · 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` |
+| 마지막 갱신 | 2026-10-09 · Claude Code — 디자인 v5 A–E 끝(E4 여러 장 저장, 이번 커밋), 검토 1 · 2차 + 둥글기 지시 반영(`bceba3a`). 다음 B5(해상도) → D2 · D3 → F · G · H · I. 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` · 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -63,10 +63,10 @@ C:\dev\kerf-v4c\asec_tests.exe
 | 8 | 그리는 동안 안내 한 곳 | ✅ | 도구 줄 「단면선 긋기 › A/A′ 찾는 중」, 그동안 상태줄은 좌표만. 캡처 `draw-v4.png`. `--ui-audit` 항목은 단계 1에서 |
 | 9 | 홈 화면 | ✅ | v5 D1(`85802ec`) + 검토 반영(`0f30c5a`): 「높이」 칸 · 폴더 「C: › dev」 · 표 높이 |
 | 10 | 목록 하나 | 🟨 ⏸ | 조판 목록 머리 「단면 목록」으로. **남음:** 줄 모양 · 도면 상태 줄 · 고르기 칸 |
-| 11 | 조판: 고르는 곳 하나 · 모드 칩 · 리본 접기 | 🟨 | v5 E3(`27ca154`): 목록 348 · 책상 · 판 320 · 도면 점검 · 「n장 SVG 저장」. **남음:** E4 여러 장 저장 · `--sheet-batch` |
+| 11 | 조판: 고르는 곳 하나 · 모드 칩 · 리본 접기 | ✅ | v5 E3(`27ca154`) + E4: 고른 칸 전부 한 폴더에 `sheetFileName`(겹치면 `_2`) · `--sheet-batch` · 「n장 저장됨 · 폴더 열기」 |
 | 12 | 도면 점검 | 🟨 (core만, UI는 ⏸) | core 위에서 본 범위 함수 + 시험 끝. 남음: 점검 상자 UI · 캡처(디자인 결정 뒤) |
 | 13 | 형식 · DXF 공간 | ⬜ ⏸ | |
-| 14 | 여러 장 저장 | 🟨 (core만, UI는 ⏸) | core 파일 이름 함수 + 시험 끝. 남음: 일괄 저장 UI · `--sheet-batch` · 캡처(디자인 결정 뒤) |
+| 14 | 여러 장 저장 | ✅ | core 이름 함수 + E4 UI(`saveCheckedSheets` · `--sheet-batch` 4장 ok) |
 | 15 | 빈 구간 표시 · E 키 | ⬜ ⏸ | |
 | 16 | 빈 상태 | ⬜ ⏸ | |
 | 16a | 새 키 · 문장 · 토큰 | ⬜ ⏸ | |
@@ -219,9 +219,15 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **판정:** 장부 `Task R2` · `Task R3` Ruling(종이 위 도면은 둥글기 제외 · 한 변 선 제외 · QMenu 둥글기는 창 모서리 바탕색 · 「A」 글자색 #FF0000 유지 · 자동 맞춤(autoFit) · 창 최소 폭 강제는 B5 · dxfLineWeight 위치 유지 · QIconEngine 미룸).
 - **남은 문제:** E4(여러 장 SVG + `--sheet-batch`) · B5 · D2 · D3 · F · G · H · I. push 는 사용자 지시 때.
 
+### 2026-10-09 · Claude Code — 디자인 v5 E4(여러 장 SVG 저장 · `--sheet-batch`)
+- **무엇을:** `MainWindow::saveCheckedSheets(dir, base, log)` — 조판 목록에서 고른 칸(평면 1 + 단면 n) 전부를 한 폴더에 저장. 이름 core `sheetFileName(모델, 도면, 분모)` + `uniqueSheetFileName`(겹치면 `_2`). 평면도는 마지막 평면 조판 설정(없으면 기본), 단면은 판의 설정(용지 · 항목 · 형식 · pt)에 도면마다 자기 축척(저장된 값 → 없으면 맞춤, 지금 연 도면은 판의 값). 단면마다 `selectSection` + `computeNow`(최종), 끝나면 고른 단면으로 되돌림. 저장 상태는 QSettings 모델별 `sheet/<이름>/denom · paper · saved` → 목록 줄 글. 판 「n장 SVG 저장」 · 목록 「내보내기」가 고른 칸이 둘 이상이면 폴더를 묻고 묶음 저장, 끝나면 판 바닥 「n장 저장됨 · 폴더 열기」(링크). `main.cpp --sheet-batch DIR`: 전부 고르고 SVG 로 저장, 수가 안 맞으면 종료 코드 9.
+- **확인:** 시험 먼저 — 빈 구현으로 `--sheet-batch` → `saved=0 expected=4 RESULT fail`(EXIT 9) → 구현 뒤 `Synthetic_평면도_1-90.svg · A-A′_1-50 · B-B′_1-50 · C-C′_1-50` 4장 `RESULT ok`(EXIT 0, 합성 모델 + `--extra-line` 2개). 빌드 새 경고 0. `--ui-audit` RESULT ok. `--sheet-check` ok. `asec_tests "~CoalescingWorker*"` 통과.
+- **판정:** 「n장 저장됨 · 폴더 열기」 줄은 묶음 저장(폴더 대화상자) 뒤에만 보여 캡처로 확인하지 못함 — 코드 경로 + `--sheet-batch` 결과로 갈음 — 잘못이면: 글 모양을 눈으로 못 봄(다음 실제 저장 때 확인). DXF · PDF · PNG · TIFF 묶음도 같은 함수(형식 칩대로) — SVG 만 `--sheet-batch` 로 판정.
+- **남은 문제:** B5(해상도 · DPI) → D2 · D3 → F · G · H · I. 사용자 화면의 「no Qt platform plugin」 대화상자: `C:\dev\desca-build\app\platforms` 에 `qoffscreen.dll` 이 없어 offscreen 실행이 뜨지 못한 것(이 PC 의 다른 빌드 폴더) — 복사해 둠.
+
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.
-1. ~~E3~~ 끝(`27ca154`). **E4** 여러 장 SVG 저장(고른 칸 · `sheetFileName` · `uniqueSheetFileName`) + `--sheet-batch` + 끝 상태 「n장 저장됨 · 폴더 열기」.
+1. ~~E3 · E4~~ 끝. **B5** 해상도 · DPI(1280 · 1920 · 3440 · 3840 × 배율 1 · 2 감사, dpr 1.25 · 1.75, 창 최소 폭 ≤ 1280 강제, 창 줄일 때 자동 맞춤).
 2. 재검토(cpp · ui 3차) — 2차 지적 중 미룬 것은 장부 `Task R2` Ruling.
 3. **B5** 해상도 · DPI: 1280×800 · 1920×1040 · 3440×1440 · 3840×2160 × `QT_SCALE_FACTOR` 1 · 2 모두 `RESULT ok`(창 최소 폭은 1280 — `0f30c5a`), dpr 1.25 · 1.75 · 화면 옮김(`DevicePixelRatioChange`).
 4. **D2** 오른쪽 판 스펙 §4 · **D3** 단면 목록 줄(검토에서 미룬 것).

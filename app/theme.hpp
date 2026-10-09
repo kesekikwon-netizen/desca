@@ -230,6 +230,7 @@ QWidget#dialogSide { background: #FFFFFF; border-left: 1px solid #DEDCD1; }
 QScrollArea#sideScroll { border: none; background: #FFFFFF; }
 QScrollArea#sideScroll > QWidget > QWidget#sideBody { background: #FFFFFF; }
 QWidget#sideBottom { background: #FFFFFF; border-top: 1px solid #DEDCD1; }
+QLabel#sheetDone { font-size: 12px; color: #3F6B31; }
 QFrame#sideRule { background: #DEDCD1; border: none; }
 QLabel#inspName { font-family: Batang, "Noto Serif KR", "Malgun Gothic"; font-size: 20px; font-weight: 500; color: #141413; }
 QLabel#ccEmpty { font-size: 20px; color: #5E5D59; }

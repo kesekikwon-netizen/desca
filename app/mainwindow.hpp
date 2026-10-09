@@ -141,6 +141,10 @@ public:
     class GuideBand* guideBand() const { return guide_; }   // 자동화 --ctx-shot: 그리는 동안 떠 있는 안내(v5 C4)
     std::shared_ptr<asec::MeshSource> source() const { return src_; }
     SectionDoc sectionDoc() const { return section_->doc(); }
+    /// 조판 목록에서 고른 도면 전부를 dir 에 저장(이름 sheetFileName + uniqueSheetFileName, 축척 · 용지는 도면마다 자기 값). 동기 — 명령줄 --sheet-batch 도 쓴다. 저장한 수를 돌려주고 log 에 줄마다
+    int saveCheckedSheets(const QString& dir, const SheetParams& base, QStringList* log);
+    void setAllSheetsChecked(bool on);   // 고르기 칸 전부(평면 1 + 단면 n)
+    void noteBatchDone(int n, const QString& dir);   // 판 아래 「n장 저장됨 · 폴더 열기」
     bool hasScene() const { return bool(src_); }
     bool hasSection() const;
     void setLineLocal(const asec::SectionLine& l);
@@ -212,6 +216,7 @@ private:
     std::vector<bool> sheetChecked_;                  // 조판 목록 고르기 칸(0 = 평면도, 1.. = 단면) — 「n장 저장」
     std::function<void()> onSheetChecksChanged_;     // 열린 조판 판이 「n장」 글을 고치게
     QPointer<QLabel> sheetCount_;
+    QPointer<QLabel> sheetDoneLabel_;                 // 조판 판 바닥 「n장 저장됨 · 폴더 열기」(열린 조판의 것)
     QWidget* buildSheetSide();
     void refreshSheetList();
     void openSheetFromList(int row);

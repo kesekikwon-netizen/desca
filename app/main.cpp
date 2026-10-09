@@ -208,7 +208,7 @@ int main(int argc, char** argv) {
     int sheetWheel = 0;
     int sheetPick = -1;   // --sheet-pick N: 조판 탭 왼쪽 도면 목록 N 번째 줄을 누름(0 = 평면도)
     bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
-    QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, coordShot, uiAuditDir;
+    QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, coordShot, uiAuditDir, sheetBatch;
     QString iconSheetPng; bool iconSheet = false;
     bool undoTest = false, split = false; double sheetScale = 0, sectionScale = 0;
     QString lodShot;
@@ -268,6 +268,7 @@ int main(int argc, char** argv) {
         else if (s == "--paper") paperArg = nx().toUpper();
         else if (s == "--sheet-scale") sheetScale = nx().toDouble();
         else if (s == "--sheet-check") sheetCheck = nx();
+        else if (s == "--sheet-batch") sheetBatch = nx();   // v5 E4: 고른 도면 전부(평면 1 + 단면 n)를 DIR 에 SVG 로 — 수가 안 맞으면 종료 코드 9
         else if (s == "--open-sheet") openSheet = nx();
         else if (s == "--sheet-wheel") sheetWheel = nx().toInt();
         else if (s == "--sheet-edit") sheetEdit = true;
@@ -763,6 +764,18 @@ int main(int argc, char** argv) {
         bool ck = w.runSheetCheck(sheetCheck, &rep);
         log(rep);
         if (!ck) rc = 8;
+    }
+    if (!sheetBatch.isEmpty() && w.hasSection()) {   // v5 E4: 평면도 1 + 단면 n 장이 모두 생겨야 ok
+        QStringList lg;
+        w.setAllSheetsChecked(true);
+        SheetParams sp = w.defaultSheetParams(); sp.format = 4;
+        const int n = w.saveCheckedSheets(sheetBatch, sp, &lg);
+        for (const QString& l : lg) log(l);
+        const int expect = 1 + w.sectionCount();
+        const QStringList files = QDir(sheetBatch).entryList({QStringLiteral("*.svg")}, QDir::Files);
+        const bool okb = n == expect && files.size() >= expect;
+        log(QStringLiteral("sheet-batch saved=%1 expected=%2 files=%3 RESULT %4").arg(n).arg(expect).arg(files.join(QLatin1Char(' '))).arg(okb ? QStringLiteral("ok") : QStringLiteral("fail")));
+        if (!okb) rc = 9;
     }
     if (quit) return rc;
     return app.exec();

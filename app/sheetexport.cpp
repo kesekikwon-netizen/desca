@@ -44,6 +44,9 @@
 #include "guideband.hpp"
 #include "icons.hpp"
 #include <QDateTime>
+#include <QUrl>
+#include <QDesktopServices>
+#include <QFileDialog>
 #include <QScrollArea>
 #include "asec/raster.hpp"
 
@@ -962,10 +965,16 @@ public:
 private:
     QVBoxLayout* lay_ = nullptr;
 };
-QWidget* sideBottom(QPushButton* def, QPushButton* primary, QPushButton* secondary) {   // 맨 아래 Line 위: 조용한 「☆ 이 설정을 기본으로」 | 보조 | 흙색 주 단추
+QWidget* sideBottom(QPushButton* def, QPushButton* primary, QPushButton* secondary, QLabel** done) {   // 맨 아래 Line 위: 「n장 저장됨 · 폴더 열기」(저장 뒤) / 조용한 「☆ 기본으로」 | 보조 | 흙색 주 단추
     auto* w = new QWidget; w->setObjectName(QStringLiteral("sideBottom")); w->setAttribute(Qt::WA_StyledBackground);
-    auto* h = new QHBoxLayout(w); h->setContentsMargins(12, 8, 12, 10); h->setSpacing(6);
+    auto* v = new QVBoxLayout(w); v->setContentsMargins(12, 8, 12, 10); v->setSpacing(6);
+    auto* d = new QLabel; d->setObjectName(QStringLiteral("sheetDone")); d->setTextFormat(Qt::RichText); d->setOpenExternalLinks(false); d->hide();
+    QObject::connect(d, &QLabel::linkActivated, d, [](const QString& href) { QDesktopServices::openUrl(QUrl(href)); });
+    v->addWidget(d);
+    if (done) *done = d;
+    auto* h = new QHBoxLayout; h->setContentsMargins(0, 0, 0, 0); h->setSpacing(6);
     h->addWidget(def); h->addStretch(); if (secondary) h->addWidget(secondary); h->addWidget(primary);
+    v->addLayout(h);
     return w;
 }
 // 책상 위 떠 있는 것(스펙 §8): 왼쪽 위 「도면 보기」 안내 칩 + 아래 가운데 도구 줄 6칸 64×52
@@ -1086,7 +1095,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     auto* bDefault = new QPushButton(QStringLiteral("☆ 기본으로")); bDefault->setObjectName("quiet"); bDefault->setFocusPolicy(Qt::NoFocus); bDefault->setToolTip(QStringLiteral("이 설정(용지 · 축척 · 항목 · 형식 · 선 굵기)을 다음 도면의 기본으로"));
     auto* bSave = new QPushButton; bSave->setObjectName("primary"); bSave->setDefault(true);
     auto* bPdf = new QPushButton(QStringLiteral("PDF")); bPdf->setFocusPolicy(Qt::NoFocus); bPdf->setToolTip(QStringLiteral("같은 도면을 PDF 로"));
-    sv->addWidget(sideBottom(bDefault, bSave, bPdf));
+    { QLabel* done = nullptr; sv->addWidget(sideBottom(bDefault, bSave, bPdf, &done)); sheetDoneLabel_ = done; }
     outer->addWidget(side);
 
     // ---- 갱신
@@ -1368,6 +1377,73 @@ void MainWindow::noteSheetSaved(const QString& prefix, const SheetSpec& spec) {
 
 int MainWindow::checkedSheetCount() const { return int(std::count(sheetChecked_.begin(), sheetChecked_.end(), true)); }
 
+void MainWindow::setAllSheetsChecked(bool on) { sheetChecked_.assign(1 + sections_.size(), on); refreshSheetList(); }
+
+// 고른 도면 전부를 dir 에(E4): 평면도는 마지막 평면 조판 설정(없으면 기본), 단면은 base(용지 · 항목 · 형식 · pt)에 도면마다 자기 축척(저장된 값 → 없으면 맞춤, 지금 연 도면은 판의 값).
+// 동기 — 단면마다 selectSection + computeNow(최종). 끝나면 고른 단면으로 되돌린다
+int MainWindow::saveCheckedSheets(const QString& dir, const SheetParams& base, QStringList* log) {
+    if (!src_ || dir.isEmpty()) return 0;
+    QDir().mkpath(dir);
+    const QString model = QFileInfo(path_).completeBaseName();
+    std::vector<std::string> existing;
+    for (const QString& n : QDir(dir).entryList(QDir::Files)) existing.push_back(n.toStdString());
+    const QString ext = base.format == 4 ? QStringLiteral("svg") : QString::fromLatin1(kFormatExt[std::clamp(base.format, 0, 3)]);
+    auto nameFor = [&](const QString& sheet, double denom) {
+        QString n = QFileInfo(qs8(sheetFileName(model.toStdString(), sheet.toStdString(), denom))).completeBaseName() + QLatin1Char('.') + ext;
+        n = qs8(uniqueSheetFileName(n.toStdString(), existing));
+        existing.push_back(n.toStdString());
+        return QDir(dir).filePath(n);
+    };
+    if (sheetChecked_.size() != 1 + sections_.size()) sheetChecked_.resize(1 + sections_.size(), false);
+    const int keepCur = current_; const bool keepPlan = sheetIsPlan_;
+    QSettings st; const QString mk = modelKey(path_);
+    int saved = 0;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    for (size_t row = 0; row < sheetChecked_.size(); ++row) {
+        if (!sheetChecked_[row]) continue;
+        QString msg, f; bool ok = false;
+        if (row == 0) {
+            PlanSheetParams pp = lastPlanSheet_ ? *lastPlanSheet_ : defaultPlanSheetParams();
+            pp.format = base.format;
+            f = nameFor(QStringLiteral("평면도"), pp.spec.denom);
+            ok = exportPlanSheet(*src_, pp, f, &msg, nullptr, {});
+            if (ok) { st.setValue(mk + "sheet/plan/denom", pp.spec.denom); st.setValue(mk + "sheet/plan/paper", paperLabel(pp.spec)); st.setValue(mk + "sheet/plan/saved", QDateTime::currentDateTime().toString(Qt::ISODate)); }
+        } else {
+            const int i = int(row) - 1;
+            if (i >= int(sections_.size())) continue;
+            selectSection(i);
+            QString e;
+            if (!plan_->hasLine() || !computeNow(plan_->line(), &e)) { if (log) *log << QStringLiteral("sheet-batch %1: 단면 계산 실패 %2").arg(qs8(sections_[size_t(i)].name), e); continue; }
+            SheetParams sp = base;
+            const QString nm = sectionName();
+            sp.title = QStringLiteral("%1 단면도").arg(nm);
+            if (!sections_[size_t(i)].note.empty()) sp.title += QStringLiteral(" · ") + qs8(sections_[size_t(i)].note);
+            const SectionDoc doc = section_->doc();
+            if (!(i == keepCur && !keepPlan)) {   // 지금 연 도면은 판의 축척 그대로, 나머지는 저장된 값 → 없으면 맞춤(스펙 §8 「축척은 도면마다 자기 값」)
+                const double saved0 = st.value(mk + QStringLiteral("sheet/%1/denom").arg(nm), 0.0).toDouble();
+                const SheetGeom G = sheetGeom(doc, sp.spec);
+                sp.spec.denom = saved0 > 0 ? saved0 : (G.lenM > 0 && G.heightM > 0 ? fitDenomStep10(sp.spec, G.lenM, G.heightM) : sp.spec.denom);
+            }
+            f = nameFor(nm, sp.spec.denom);
+            ok = base.format == 4 ? exportSectionSvg(doc, *src_, sp, f, &msg) : exportSheet(doc, *src_, sp, f, &msg, nullptr, {});
+            if (ok) { const QString k = mk + QStringLiteral("sheet/%1/").arg(nm); st.setValue(k + "denom", sp.spec.denom); st.setValue(k + "paper", paperLabel(sp.spec)); st.setValue(k + "saved", QDateTime::currentDateTime().toString(Qt::ISODate)); }
+        }
+        if (log) *log << QStringLiteral("sheet-batch %1: %2").arg(ok ? QStringLiteral("ok") : QStringLiteral("FAIL"), ok ? f : msg);
+        if (ok) ++saved;
+    }
+    if (keepCur >= 0 && keepCur < int(sections_.size()) && keepCur != current_) { selectSection(keepCur); QString e; if (plan_->hasLine()) computeNow(plan_->line(), &e); }
+    sheetIsPlan_ = keepPlan;
+    QApplication::restoreOverrideCursor();
+    refreshSheetList();
+    return saved;
+}
+
+void MainWindow::noteBatchDone(int n, const QString& dir) {
+    if (!sheetDoneLabel_) return;
+    sheetDoneLabel_->setText(QStringLiteral("%1장 저장됨 · <a href=\"%2\" style=\"color:#9C4A2F\">폴더 열기</a>").arg(n).arg(QUrl::fromLocalFile(dir).toString()));
+    sheetDoneLabel_->show();
+}
+
 void MainWindow::refreshSheetList() {
     if (!sheetList_) return;
     const size_t rows = 1 + sections_.size();
@@ -1445,6 +1521,15 @@ void MainWindow::dlgSheet() {
     auto src = src_;
     showSheetTab(d, [this, params, doc, src] {
         SheetParams sp = *params;
+        if (checkedSheetCount() > 1) {   // v5 E4: 고른 도면 전부를 한 폴더에(이름 sheetFileName · 겹치면 _2)
+            const QString dir = QFileDialog::getExistingDirectory(this, QStringLiteral("고른 도면 %1장을 저장할 폴더").arg(checkedSheetCount()), QSettings().value("sheet/batchDir").toString());
+            if (dir.isEmpty() || src_ != src) return;
+            QSettings().setValue("sheet/batchDir", dir);
+            QStringList lg; const int n = saveCheckedSheets(dir, sp, &lg);
+            report(n > 0, QStringLiteral("%1장 저장됨 — %2").arg(n).arg(QDir::toNativeSeparators(dir)));
+            noteBatchDone(n, dir);
+            return;
+        }
         const bool svg = sp.format == 4;
         QString base = QFileInfo(path_).completeBaseName() + "_" + sectionName().replace(QStringLiteral("–"), "-").replace(QStringLiteral("′"), "'").remove('\'');
         QString ext = svg ? QStringLiteral("svg") : QString::fromLatin1(kFormatExt[std::clamp(sp.format, 0, 3)]);
@@ -1561,7 +1646,7 @@ QDialog* MainWindow::buildPlanSheetDialog(PlanSheetParams& io, const QImage& pre
     auto* bDefault = new QPushButton(QStringLiteral("☆ 기본으로")); bDefault->setObjectName("quiet"); bDefault->setFocusPolicy(Qt::NoFocus); bDefault->setToolTip(QStringLiteral("이 설정(용지 · 축척 · 항목 · 형식 · 선 굵기)을 다음 도면의 기본으로"));
     auto* bSave = new QPushButton; bSave->setObjectName("primary"); bSave->setDefault(true);
     auto* bPdf = new QPushButton(QStringLiteral("PDF")); bPdf->setFocusPolicy(Qt::NoFocus);
-    sv->addWidget(sideBottom(bDefault, bSave, bPdf));
+    { QLabel* done = nullptr; sv->addWidget(sideBottom(bDefault, bSave, bPdf, &done)); sheetDoneLabel_ = done; }
     outer->addWidget(side);
 
     auto reloadImage = [=] {
@@ -1693,6 +1778,16 @@ void MainWindow::dlgPlanSheet() {
     auto src = src_;
     showSheetTab(d, [this, params, src] {
         PlanSheetParams sp = *params;
+        if (checkedSheetCount() > 1) {   // v5 E4
+            const QString dir = QFileDialog::getExistingDirectory(this, QStringLiteral("고른 도면 %1장을 저장할 폴더").arg(checkedSheetCount()), QSettings().value("sheet/batchDir").toString());
+            if (dir.isEmpty() || src_ != src) return;
+            QSettings().setValue("sheet/batchDir", dir);
+            SheetParams base = lastSheet_ ? *lastSheet_ : defaultSheetParams(); base.format = sp.format;
+            QStringList lg; const int n = saveCheckedSheets(dir, base, &lg);
+            report(n > 0, QStringLiteral("%1장 저장됨 — %2").arg(n).arg(QDir::toNativeSeparators(dir)));
+            noteBatchDone(n, dir);
+            return;
+        }
         const bool svg = sp.format == 4;
         QString ext = svg ? QStringLiteral("svg") : QString::fromLatin1(kFormatExt[std::clamp(sp.format, 0, 3)]);
         QString name = svg ? QStringLiteral("SVG") : QString::fromLatin1(kFormatName[std::clamp(sp.format, 0, 3)]);
