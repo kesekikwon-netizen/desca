@@ -341,7 +341,7 @@ void MainWindow::closeScene() {
     pickFloorGen_ = pickWorker_->cancelAll();
     src_.reset();
     plan_->clearScene(); section_->clear(); last_ = SectionOutput();
-    srsLabel_->setText(QStringLiteral("좌표계 —")); srsLabel_->setToolTip(QString()); srsLabel_->setProperty("state", QString()); info_->clear();
+    srsLabel_->setText(QStringLiteral("수평 — ▾")); srsLabel_->setToolTip(QString()); srsLabel_->setProperty("state", QString()); info_->clear();
     srsLabel_->style()->unpolish(srsLabel_); srsLabel_->style()->polish(srsLabel_);
     notice_->setVisible(false); srsReport_ = SrsReport();
     src_.reset(); path_.clear();
@@ -1025,7 +1025,7 @@ void MainWindow::applySrsReport() {
     // 상태줄: 수평 좌표계만 짧게(높이는 옆 배지). 경고는 한 줄 알림 띠(「자세히」에 전체)
     const SrsDesc& d = r.desc;
     QString hz = d.horizontalEpsg ? QStringLiteral("EPSG:%1").arg(d.horizontalEpsg) : (d.known() ? qs(d.shortAscii()) : QStringLiteral("좌표계 없음"));
-    srsLabel_->setText(hz);
+    srsLabel_->setText(QStringLiteral("수평 %1 ▾").arg(hz));
     srsLabel_->setToolTip(qs(r.tooltipKo));
     srsLabel_->setProperty("state", !d.known() ? "error" : (warn ? "warn" : "ok"));
     srsLabel_->style()->unpolish(srsLabel_); srsLabel_->style()->polish(srsLabel_);

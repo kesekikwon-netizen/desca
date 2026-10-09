@@ -41,6 +41,7 @@
 #include <QWheelEvent>
 #include "asec/pick.hpp"
 #include "mainwindow.hpp"
+#include "guideband.hpp"
 #include "theme.hpp"
 
 using namespace asec;
@@ -738,7 +739,7 @@ int main(int argc, char** argv) {
         QPixmap pm = w.screen() ? w.screen()->grabWindow(w.winId()) : QPixmap();
         if (pm.isNull() || pm.width() < 10) pm = w.grab();
         bool ok = pm.save(ctxShot);
-        log(QStringLiteral("ctx-shot %1: %2 ctxbar=%3").arg(ok ? "ok" : "FAILED", ctxShot).arg(w.ctxBar()->isVisible() ? 1 : 0));
+        log(QStringLiteral("ctx-shot %1: %2 guide=%3").arg(ok ? "ok" : "FAILED", ctxShot).arg(w.guideBand() && w.guideBand()->isVisible() ? 1 : 0));
         pv->setDrawMode(false);
         pv->setLine(keep, hadLine);   // 그리기 전 단면선 되살림
         processFor(100);

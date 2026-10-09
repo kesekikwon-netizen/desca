@@ -136,7 +136,7 @@ public:
     bool undoTest(QString* log);                        // 자동화: 되돌리기/다시 점검
     bool uiAudit(const QString& dir, QString* log);     // 자동화(v4 단계 1): 같은 일 단추 겹침 · 자리 규칙 잠금 시험
     bool iconSheet(const QString& png, QString* log);   // 자동화(v5 A3): 모든 Ico 이름에 SVG 가 있는지 + 칩 모양 격자 캡처
-    QWidget* ctxBar() const { return ctxBar_; }
+    class GuideBand* guideBand() const { return guide_; }   // 자동화 --ctx-shot: 그리는 동안 떠 있는 안내(v5 C4)
     std::shared_ptr<asec::MeshSource> source() const { return src_; }
     SectionDoc sectionDoc() const { return section_->doc(); }
     bool hasScene() const { return bool(src_); }
@@ -210,8 +210,9 @@ private:
     void saveEmbeddedSheet();
     QWidget* startPage_ = nullptr;
     QWidget* workArea_ = nullptr;
-    QWidget* ctxBar_ = nullptr;
-    QLabel *ctxHint_ = nullptr, *ctxValue_ = nullptr;
+    class GuideBand* guide_ = nullptr;        // 평면 위 떠 있는 안내(그리는 동안)
+    class FloatButtons* undoBtns_ = nullptr;  // 안내 오른쪽 되돌리기 · 다시
+    QWidget* planHost_ = nullptr;             // 평면 캔버스를 품은 위젯(떠 있는 것들의 부모)
     QFrame* notice_ = nullptr;
     QLabel* noticeText_ = nullptr;
     QLabel *secTitle_ = nullptr, *secFacing_ = nullptr;
@@ -236,7 +237,9 @@ private:
     QListWidget* secList_ = nullptr;
     QLabel* secCount_ = nullptr;
     QLineEdit *cx_ = nullptr, *cy_ = nullptr, *cz_ = nullptr;
-    QLabel *msg_ = nullptr, *info_ = nullptr, *srsLabel_ = nullptr;
+    QLabel *msg_ = nullptr, *info_ = nullptr;
+    QToolButton* srsLabel_ = nullptr;   // 상태줄 「수평 EPSG:5186 ▾」 배지(v5 C6) — 누르면 좌표계 상세
+    void dlgSrsDetails();
     asec::SrsReport srsReport_;   // 열린 모델의 좌표계 점검(표시·경고)
     asec::Box3 sceneBounds_;      // 열린 모델 로컬 상자(좌표계 재점검용)
     std::vector<std::string> sceneWarnings_;  // 열 때 경고(병합 레이어 등)
@@ -284,7 +287,6 @@ private:
     void rebuildStartPage();
     // ---- 화면 부품
     QWidget* buildStartPage();
-    QWidget* buildCtxBar();
     QFrame* buildNotice();
     QWidget* buildSidePanel();
     QWidget* buildInspector();

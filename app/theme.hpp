@@ -18,7 +18,7 @@ namespace theme {
 inline const QColor Ground{0xFA, 0xF9, 0xF5}, Card{0xFF, 0xFF, 0xFF}, Wash{0xF5, 0xF4, 0xED}, Desk{0xF0, 0xEE, 0xE6}, Press{0xE8, 0xE6, 0xDC}, Oat{0xE3, 0xDA, 0xCC};
 inline const QColor Ink{0x14, 0x14, 0x13}, Hand{0x30, 0x30, 0x2E}, Ink2{0x3D, 0x3D, 0x3A}, Muted{0x5E, 0x5D, 0x59}, Faint{0x73, 0x72, 0x6C};
 inline const QColor Line{0xDE, 0xDC, 0xD1}, Edge{0xC2, 0xC0, 0xB6}, Ring{0xB0, 0xAE, 0xA5}, CheckEdge{0x87, 0x86, 0x7F};
-inline const QColor Action{0xB5, 0x57, 0x3A}, ActionHover{0xA4, 0x4D, 0x32}, ChipPressed{0xE3, 0xE0, 0xD4}, Block{0xA3, 0x3B, 0x3B}, BlockWash{0xF3, 0xDE, 0xDA}, Caution{0x7A, 0x5A, 0x00}, Done{0x3F, 0x6B, 0x31};
+inline const QColor Action{0xB5, 0x57, 0x3A}, ActionHover{0xA4, 0x4D, 0x32}, ChipPressed{0xE3, 0xE0, 0xD4}, ClayText{0x9C, 0x4A, 0x2F}, Block{0xA3, 0x3B, 0x3B}, BlockWash{0xF3, 0xDE, 0xDA}, Caution{0x7A, 0x5A, 0x00}, Done{0x3F, 0x6B, 0x31};
 inline const QColor LevelMinor{0xDE, 0xDC, 0xD1}, LevelMajor{0x9C, 0x9A, 0x92}, LevelText{0x3D, 0x3D, 0x3A};
 // 옛 이름(다른 파일 호환)
 inline const QColor Bg = Ground, InkSub = Muted, Chip = Desk, Idle = Faint, Outline = CheckEdge, Brand = Action, BrandSoft = Wash, Ok = Done;
@@ -100,7 +100,7 @@ QToolButton#ribbonChip[primary="true"] { font-weight: 700; }
 QToolButton#ribbonChip:disabled { color: #696862; }
 QToolButton#ribbonChip:focus { border: 1px solid #141413; }
 QToolButton#ribbonChip::menu-indicator { image: none; width: 0px; height: 0px; }
-QToolButton#ribbonCorner { min-height: 38px; padding: 0 12px; border: 1px solid #C2C0B6; border-radius: 8px; background: #FFFFFF; color: #141413; font-size: 13px; }
+QToolButton#ribbonCorner { min-height: 38px; padding: 0 6px; border: 1px solid #C2C0B6; border-radius: 8px; background: #FFFFFF; color: #141413; font-size: 13px; }
 QToolButton#ribbonCorner:hover { background: #F5F4ED; border-color: #B0AEA5; }
 QLineEdit#ribbonSearch { min-height: 30px; max-height: 30px; min-width: 150px; max-width: 150px; border: 1px solid #C2C0B6; border-radius: 8px; background: #FFFFFF; padding: 0 10px; font-size: 12px; }
 QLineEdit#ribbonSearch:focus { border: 2px solid #141413; padding: 0 9px; }
@@ -135,11 +135,19 @@ QToolButton#chip:checked { background: #E3DACC; border-color: #141413; }
 QToolButton#chip[pos="first"] { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
 QToolButton#chip[pos="last"] { border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
 
-QWidget#ctxBar { background: #F5F4ED; border-bottom: 1px solid #DEDCD1; }
-QWidget#ctxBar QLabel { font-size: 12px; }
-QLabel#ctxTool { background: #30302E; color: #FAF9F5; border-radius: 6px; padding: 3px 10px; font-weight: 700; font-size: 12px; }
+QFrame#guideBand { background: #FFFFFF; border: 1px solid #C2C0B6; border-radius: 8px; }
+QLabel#guideTitle { font-size: 13px; color: #141413; background: transparent; }
+QLabel#guideHint { font-size: 12px; color: #5E5D59; background: transparent; }
+QFrame#guideRule { background: #DEDCD1; }
+QFrame#floatButtons { background: #FFFFFF; border: 1px solid #C2C0B6; border-radius: 8px; }
+QToolButton#floatBtn, QToolButton#floatCell { border: none; border-radius: 0; background: transparent; color: #3D3D3A; padding: 0; font-size: 11px; }
+QToolButton#floatBtn[after="true"], QToolButton#floatCell[after="true"] { border-left: 1px solid #DEDCD1; }
+QToolButton#floatBtn:hover, QToolButton#floatCell:hover { background: #F5F4ED; }
+QToolButton#floatBtn:pressed, QToolButton#floatCell:pressed { background: #E8E6DC; }
+QToolButton#floatBtn:disabled, QToolButton#floatCell:disabled { color: #B0AEA5; }
+QToolButton#floatCell:checked { background: #30302E; color: #FAF9F5; }
+QToolButton#chip[tight="true"] { padding: 0 2px; }
 QLabel#kbd { font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 11px; color: #3D3D3A; background: #FFFFFF; border: 1px solid #C2C0B6; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; }
-QLabel#ctxValue { font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; color: #141413; }
 
 QWidget#viewFrame { background: #FFFFFF; border: 1px solid #DEDCD1; }
 QWidget#viewTitle { background: #FFFFFF; border-bottom: 1px solid #DEDCD1; }
@@ -150,11 +158,11 @@ QWidget#infoStrip QLabel { font-size: 12px; color: #3D3D3A; }
 QWidget#viewBar { background: #F5F4ED; border-bottom: 1px solid #DEDCD1; }
 QWidget#viewTitle QToolButton { padding: 2px; border-radius: 4px; }
 
-QToolButton#heightBadge { background: #F5F4ED; border: 1px solid #C2C0B6; border-radius: 4px; padding: 1px 8px; font-size: 12px; color: #141413; }
-QToolButton#heightBadge:hover { border-color: #141413; }
-QToolButton#heightBadge[state="warn"] { background: #FFFFFF; border-color: #7A5A00; color: #7A5A00; }
-QToolButton#heightBadge[state="error"] { background: #F3DEDA; border-color: #A33B3B; color: #A33B3B; }
-QToolButton#heightBadge[state="none"] { background: #F0EEE6; border-color: #DEDCD1; color: #73726C; }
+QToolButton#statusBadge, QToolButton#heightBadge { min-height: 22px; max-height: 22px; background: #FFFFFF; border: 1px solid #B5573A; border-radius: 8px; padding: 0 8px; font-size: 12px; font-weight: 700; color: #9C4A2F; }
+QToolButton#statusBadge:hover, QToolButton#heightBadge:hover { background: #F5F4ED; }
+QToolButton#statusBadge[state="warn"], QToolButton#heightBadge[state="warn"] { border-color: #7A5A00; color: #7A5A00; }
+QToolButton#statusBadge[state="error"], QToolButton#heightBadge[state="error"] { background: #F3DEDA; border-color: #A33B3B; color: #A33B3B; }
+QToolButton#statusBadge[state="none"], QToolButton#heightBadge[state="none"] { background: #F0EEE6; border-color: #DEDCD1; color: #73726C; font-weight: 400; }
 QToolButton#vexBtn { background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 0px 6px; font-size: 12px; color: #3D3D3A; }
 QToolButton#vexBtn:hover { border-color: #C2C0B6; }
 QToolButton#vexBtn::menu-indicator { image: none; width: 0px; }
@@ -171,15 +179,13 @@ QListWidget#sectionList::item:hover { background: #F5F4ED; }
 QListWidget#sectionList::item:selected { background: #E3DACC; color: #141413; border-left: 3px solid #141413; }
 QWidget#sidePanel { background: #FFFFFF; border-right: 1px solid #DEDCD1; }
 
-QWidget#coordBar { background: #FFFFFF; border-top: 1px solid #DEDCD1; }
-QLabel#coordKey { color: #5E5D59; font-size: 12px; padding: 0 2px 0 10px; }
-QLineEdit#coord { font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; background: transparent; border: none; padding: 0 4px; min-height: 20px; }
-QLabel#statusMsg { color: #141413; font-size: 12px; padding: 0 10px; }
-QLabel#zSrc { color: #5E5D59; font-size: 12px; padding: 0 4px; }
+QWidget#statusBar { background: #FAF9F5; border-top: 1px solid #DEDCD1; }
+QFrame#statusRule { background: #DEDCD1; }
+QLabel#coordKey { color: #5E5D59; font-size: 11px; padding: 0 6px 0 0; }
+QLineEdit#coord { font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; color: #141413; background: transparent; border: none; padding: 0; min-height: 20px; }
+QLabel#statusMsg { color: #5E5D59; font-size: 12px; padding: 0; }
+QLabel#zSrc { color: #5E5D59; font-size: 11px; padding: 0 0 0 6px; }
 QLabel#zSrc[coarse="true"] { color: #7A5A00; }
-QLabel#srsLabel { color: #141413; font-size: 12px; padding: 0 8px; }
-QLabel#srsLabel[state="warn"] { color: #7A5A00; }
-QLabel#srsLabel[state="error"] { color: #A33B3B; }
 
 QDoubleSpinBox, QSpinBox, QComboBox, QLineEdit { background: #FFFFFF; border: 1px solid #C2C0B6; border-radius: 4px; padding: 1px 6px; min-height: 20px; selection-background-color: #E3DACC; selection-color: #141413; }
 QDoubleSpinBox, QSpinBox { font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; }
@@ -262,7 +268,7 @@ QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 )");
     if (highContrast)
         s += QStringLiteral(R"(
-QWidget#ribbon, QWidget#viewTitle, QWidget#coordBar, QWidget#ribbonTop { border-color: #87867F; }
+QWidget#ribbon, QWidget#viewTitle, QWidget#statusBar, QWidget#docTabsRow { border-color: #87867F; }
 QDoubleSpinBox, QSpinBox, QComboBox, QLineEdit, QPushButton { border-color: #73726C; }
 QLabel#hint, QLabel#statusInfo, QLabel#groupLabel, QLabel#coordKey, QLabel#faint { color: #3D3D3A; }
 )");

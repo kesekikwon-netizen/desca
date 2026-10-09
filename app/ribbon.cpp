@@ -18,7 +18,7 @@
 #include <algorithm>
 
 namespace {
-constexpr int kRowPadLeft = 8, kRowPadRight = 12;                     // 리본 좌우 여백
+constexpr int kRowPadLeft = 8, kRowPadRight = 8;                     // 리본 좌우 여백
 constexpr int kGroupPadX = 3, kGroupPadTop = 8, kGroupPadBottom = 10;  // 묶음 안 여백 — 타일 50 일 때 8 + 16 + 4 + 80 + 10 = 118
 constexpr int kCaptionHeight = 16, kCaptionGap = 4;
 constexpr int kChipGap = 2, kGroupGap = 2;
