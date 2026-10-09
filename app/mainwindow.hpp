@@ -164,6 +164,7 @@ public:
     void setRibbonContext(int ctx);                     // 0 홈 · 1 단면 · 2 도면 — 리본 묶음 흐림 · 칩 켜고 끄기(디자인 v5 §3.1)
     void showHomeTab();
     void closeSheetTab();
+    void discardSheetTab();   // 「도면」 탭 · 조판 위젯 · 저장 함수를 버린다(모델 닫기 · 다른 모델 열기 · × — 검토 I4)
     class Ribbon* ribbon() const { return ribbon_; }
     int ribbonContext() const { return ribbonCtx_; }
     void openFile(const QString& path);
@@ -188,6 +189,7 @@ private:
     QWidget* depthBox_ = nullptr;       // 리본 「입면」 묶음의 뒤 깊이 칩 · 뒤 · 앞 칸
     QToolButton* sheetChip_ = nullptr;  // 「도면」 칩(단면 탭에서 흙색, 도면 탭에서 보기 켜짐 모양)
     QLineEdit* findBox_ = nullptr;      // 리본 오른쪽 끝 「단면 찾기」
+    QToolButton* coordBtn_ = nullptr;   // 리본 오른쪽 끝 「좌표 입력」(단면 문맥에서만 켜짐 — 검토 I2)
     QWidget* docTabsRow_ = nullptr;
     QLabel* docTabCorner_ = nullptr;
     void filterSectionList(const QString& text);

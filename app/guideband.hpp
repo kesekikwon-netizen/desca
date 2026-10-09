@@ -4,6 +4,7 @@
 #pragma once
 #include <QFrame>
 #include <QList>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 
@@ -38,6 +39,9 @@ private:
     QHBoxLayout* keysLay_ = nullptr;
     QList<QLabel*> keyLabels_;
     QString fullHint_;
+    QString fullTitle_;      // 「단면선 긋기 › A′ 찾는 중」 — 좁으면 「A′ 찾는 중」, 더 좁으면 숨김
+    QString iconName_;       // 지금 아이콘(같으면 SVG 를 다시 그리지 않음)
+    QStringList keys_;       // 지금 키 캡(같으면 라벨을 다시 만들지 않음 — 검토 I3)
     int reserveRight_ = 85;   // 되돌리기 · 다시(73) + 사이 12
 };
 
@@ -56,7 +60,7 @@ protected:
 
 private:
     QWidget* host_ = nullptr;
-    QWidget* follow_ = nullptr;
+    QPointer<QWidget> follow_;   // 따라가는 위젯이 먼저 지워지면 null(검토)
     int gap_ = 12, margin_ = 12;
     Qt::Alignment where_;
     Qt::Orientation orient_;

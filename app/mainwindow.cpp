@@ -237,15 +237,25 @@ void MainWindow::setProgress(double f) {
     if (f > 1.5) progress_->setRange(0, 0); else { progress_->setRange(0, 1000); progress_->setValue(int(f * 1000)); }
 }
 
+// 켜고 끄는 곳은 여기 하나(검토 I1): 모델 · 작업 중 · 리본 문맥(홈 0 · 단면 1 · 도면 2, 스펙 §3.1) · 그리는 중을 한 번에 본다.
+// 홈 = 모델 묶음만(열기 · 최근 · 닫기), 도면 = 단면 · 입면 꺼짐, 그리는 중 = 도면 · 자료 내보내기 꺼짐(화판 2)
 void MainWindow::updateEnabled() {
-    bool sc = bool(src_), sec = section_->hasResult(), busy = taskBusy_;
-    for (const char* k : {"draw", "fit", "top", "zoomin", "zoomout", "plan", "xyz", "las", "close", "height"}) action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
-    for (const char* k : {"flip", "clear", "move"}) action(k)->setEnabled(sc && plan_->hasLine());
-    for (const char* k : {"dxf", "secimg", "csv", "info"}) action(k)->setEnabled(sec && !busy);
-    for (const char* k : {"sheet", "plansheet", "sectionsheet"}) action(k)->setEnabled(sc && !busy);
-    for (const char* k : {"addsec", "secjson", "secimport", "image", "line", "levels", "fade", "smooth", "listpanel"}) action(k)->setEnabled(sc && !busy);
-    for (QWidget* wd : {static_cast<QWidget*>(front_), static_cast<QWidget*>(back_)}) wd->setEnabled(sc);
-    for (auto* c : depthChip_) if (c) c->setEnabled(sc);
+    if (!section_ || !plan_ || !front_ || !back_) return;
+    const bool sc = bool(src_), sec = section_->hasResult(), busy = taskBusy_;
+    const bool home = ribbonCtx_ == 0, secCtx = ribbonCtx_ == 1, drawing = plan_->drawMode();
+    for (const char* k : {"fit", "top", "zoomin", "zoomout", "height"}) action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
+    action("close")->setEnabled(sc && !busy);
+    for (const char* k : {"draw", "addsec"}) action(k)->setEnabled(sc && !busy && secCtx);
+    for (const char* k : {"flip", "clear", "move"}) action(k)->setEnabled(sc && plan_->hasLine() && secCtx);
+    for (const char* k : {"dxf", "secimg", "csv", "info"}) action(k)->setEnabled(sec && !busy && !home && !drawing);
+    for (const char* k : {"plan", "xyz", "las", "sheet", "plansheet", "sectionsheet"}) action(k)->setEnabled(sc && !busy && !home && !drawing);
+    for (const char* k : {"secjson", "secimport", "image", "line", "levels", "fade", "smooth", "listpanel"}) action(k)->setEnabled(sc && !busy && !home);
+    for (const char* k : {"seclist", "view1", "view2", "contrast"}) action(k)->setEnabled(!home);
+    for (QWidget* wd : {static_cast<QWidget*>(front_), static_cast<QWidget*>(back_)}) wd->setEnabled(sc && secCtx);
+    for (auto* c : depthChip_) if (c) c->setEnabled(sc && secCtx);
+    if (depthBox_) depthBox_->setEnabled(sc && secCtx);
+    if (findBox_) findBox_->setEnabled(!home);
+    if (coordBtn_) coordBtn_->setEnabled(sc && !busy && secCtx);   // 리본 오른쪽 끝 「좌표 입력」도 단면 문맥에서만(검토 I2)
     action("open")->setEnabled(!busy); action("recent")->setEnabled(!busy && !recentFiles().isEmpty());
 }
 
@@ -294,6 +304,7 @@ void MainWindow::openFile(const QString& path) {
 void MainWindow::applyScene(OpenedScene&& s) {
     secFloorGen_ = secWorker_->cancelAll();
     pickFloorGen_ = pickWorker_->cancelAll();
+    discardSheetTab();   // 다른 모델의 도면 탭을 버린다(검토 I4)
     src_ = s.src; path_ = s.path; kind_ = s.kind; displayTris_ = s.displayTris;
     section_->clear(); last_ = SectionOutput();
     if (!s.streamRoots.empty()) plan_->setStreamingScene(s.streamRoots, s.center, s.bounds, src_->srs, std::move(s.display));
@@ -341,13 +352,14 @@ void MainWindow::closeScene() {
     pickFloorGen_ = pickWorker_->cancelAll();
     src_.reset();
     plan_->clearScene(); section_->clear(); last_ = SectionOutput();
-    srsLabel_->setText(QStringLiteral("수평 — ▾")); srsLabel_->setToolTip(QString()); srsLabel_->setProperty("state", QString()); info_->clear();
+    srsLabel_->setText(QStringLiteral("수평 — ▾")); srsLabel_->setToolTip(QString()); srsLabel_->setProperty("state", "none"); info_->clear();   // 모델 없음 = 회색(검토 UI 4)
     srsLabel_->style()->unpolish(srsLabel_); srsLabel_->style()->polish(srsLabel_);
     notice_->setVisible(false); srsReport_ = SrsReport();
     src_.reset(); path_.clear();
     sections_.clear(); thumbs_.clear(); current_ = -1; refreshSectionList();
     undo_->clear();
     setWindowTitle(QStringLiteral("Kerf %1").arg(QString::fromUtf8(kVersion)));
+    discardSheetTab();   // 옛 모델의 「도면」 탭 · 조판 위젯이 남지 않게(검토 I4)
     showStart(true);
     updateEnabled();
     updateHeader();
@@ -435,10 +447,8 @@ void MainWindow::onSectionDone(SectionOutput&& out, uint64_t gen, bool final, co
         // 기복이 화면 높이에 비해 아주 작으면(1:1 에서 평평해 보임) 세로 과장을 권함 — 화면만, 도면은 1:1
         vexRelief_ = profileRelief(last_.result.profile);
         vexSuggest_ = suggestVerticalExaggeration(vexRelief_, section_->fitVisibleHeight());
-        QString vexHint;
-        if (vexSuggest_ > 1 && section_->verticalExaggeration() < 1.5)
-            vexHint = QStringLiteral(" · 기복 %1 cm 라 평평해 보이면 X: 세로 ×%2 과장(화면만)").arg(vexRelief_ * 100, 0, 'f', 0).arg(vexSuggest_);
-        showStatus(QStringLiteral("%1 단면 %2 m 완료 — 다음: Ctrl+P 「도면」, 숫자키 1–5 뒤 깊이, [ ] 평행 이동%3").arg(sectionName()).arg(L, 0, 'f', 2).arg(vexHint));
+        // 스펙 §6: 다음 할 일 한 문장. 세로 과장 권장은 단면 머리 「세로 ×1 ▾」 툴팁이 든다(검토 UI 1)
+        showStatus(QStringLiteral("%1 최종 %2 m — 다음: 리본의 「도면」(Ctrl+P)으로 종이에 옮기세요.").arg(sectionName()).arg(L, 0, 'f', 2));
         if (current_ >= 0) { thumbs_[current_] = makeThumb(); refreshSectionList(); }
         saveModelState();
     } else showStatus(last_.cutFromLeaf ? QStringLiteral("미리보기 — 단면선은 잎(정확), 배경 영상만 거친 LOD · 최종 계산 중…") : QStringLiteral("미리보기(거친 LOD) — 최종(잎) 계산 중…"));

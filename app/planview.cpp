@@ -647,7 +647,7 @@ void PlanView::paintEmpty(QPainter& p) {
 void PlanView::paintOverlay(QPainter& p) {
     // 북쪽 표시 + 축척 막대
     {
-        QPointF c(width() - 34, 40);
+        QPointF c(width() - 34, height() - 60);   // 오른쪽 아래 「진북」(스펙 §5) — 왼쪽 위 안내 칩 · 되돌리기 칸과 겹치지 않게
         double a = -yaw_ * M_PI / 180.0;
         QPointF dir(std::sin(a), -std::cos(a));
         QPointF tip = c + dir * 16, tail = c - dir * 12, side(dir.y(), -dir.x());
@@ -658,7 +658,7 @@ void PlanView::paintOverlay(QPainter& p) {
         p.drawText(QRectF(c.x() - 20, c.y() - 37, 40, 13), Qt::AlignCenter, "N");
         p.setFont(theme::uiFont(9));
         p.setPen(theme::Muted);
-        p.drawText(QRectF(c.x() - 28, c.y() + 24, 56, 12), Qt::AlignCenter, QStringLiteral("제자리"));
+        p.drawText(QRectF(c.x() - 28, c.y() + 24, 56, 12), Qt::AlignCenter, QStringLiteral("진북"));
         double len = niceStep(mpp_ * 120, 1);
         double px = len / mpp_;
         QRectF sb(16, height() - 28, px, 6);
@@ -741,6 +741,8 @@ void PlanView::paintOverlay(QPainter& p) {
                 QString t = QStringLiteral("%1 m").arg(s, 0, 'f', 0);
                 QPointF at = c - n * 16;
                 QRectF tr(at.x() - 18, at.y() - 8, 36, 16);
+                p.setPen(Qt::white);   // 어두운 구덩이 위에서도 읽히게 흰 테(검토 UI 4)
+                for (const QPointF& o : {QPointF(-1, 0), QPointF(1, 0), QPointF(0, -1), QPointF(0, 1)}) p.drawText(tr.translated(o), Qt::AlignCenter, t);
                 p.setPen(theme::Ink);
                 p.drawText(tr, Qt::AlignCenter, t);
             }
@@ -771,12 +773,13 @@ void PlanView::paintOverlay(QPainter& p) {
     auto handle = [&](QPointF c, const QString& name, QPointF away) {
         p.setPen(QPen(Qt::white, 5)); p.setBrush(Qt::NoBrush); p.drawEllipse(c, 6.5, 6.5);
         p.setPen(QPen(theme::SectionRed, 2)); p.setBrush(Qt::white); p.drawEllipse(c, 6.5, 6.5);
-        QRectF tr(0, 0, 30, 21); tr.moveCenter(c + away * 20);
+        const double tw = std::max(30.0, QFontMetricsF(p.font()).horizontalAdvance(name) + 12.0);   // 그리는 중 「A′ · 7.43 m」처럼 길어진다(화판 2)
+        QRectF tr(0, 0, tw, 21); tr.moveCenter(c + away * (5 + tw / 2));
         p.setPen(QPen(theme::Edge, 1)); p.setBrush(Qt::white); p.drawRoundedRect(tr, 4, 4);
         p.setPen(theme::SectionRed); p.drawText(tr, Qt::AlignCenter, name);
     };
     handle(A, "A", -du);
-    if (hasLine_ || drawStage_ == 1) handle(B, QStringLiteral("A′"), du);
+    if (hasLine_ || drawStage_ == 1) handle(B, drawStage_ == 1 && f.L > 0.05 ? QStringLiteral("A′ · %1 m").arg(f.L, 0, 'f', 2) : QStringLiteral("A′"), du);   // 길이는 여기(안내 칩 문장은 스펙 §5 고정)
     if (hasLine_) { p.setPen(QPen(theme::SectionRed, 1.5)); p.setBrush(theme::SectionRed); p.drawEllipse((A + B) / 2, 3.5, 3.5); }
 }
 

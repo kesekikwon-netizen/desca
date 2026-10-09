@@ -39,25 +39,44 @@ GuideBand::GuideBand(QWidget* host) : QFrame(host), host_(host) {
 }
 
 void GuideBand::setTool(const QString& iconName, const QString& title) {
-    icon_->setPixmap(kerf::glyph(iconName, 16, theme::Hand, devicePixelRatioF()));
-    title_->setText(title);
+    if (iconName != iconName_) { iconName_ = iconName; icon_->setPixmap(kerf::glyph(iconName, 16, theme::Hand, devicePixelRatioF())); }   // 같은 아이콘이면 SVG 를 다시 그리지 않음(검토 I3)
+    if (fullTitle_ == title) return;
+    fullTitle_ = title; title_->setText(title);
     adjustSize(); place();
 }
 
-void GuideBand::setHint(const QString& text) { fullHint_ = text; hint_->setText(text); adjustSize(); place(); }
+void GuideBand::setHint(const QString& text) {
+    if (text == fullHint_) return;
+    fullHint_ = text; hint_->setText(text); adjustSize(); place();
+}
 
+// 마우스가 움직일 때마다 불려도 라벨을 다시 만들지 않는다(검토 I3). 라벨은 한 번 만들어 글만 바꾸고, 남는 것은 숨긴다
 void GuideBand::setKeys(const QStringList& keys) {
-    for (QLabel* k : keyLabels_) { keysLay_->removeWidget(k); k->deleteLater(); }
-    keyLabels_.clear();
-    for (const QString& k : keys) { auto* l = new QLabel(k); l->setObjectName(QStringLiteral("kbd")); keysLay_->addWidget(l); keyLabels_ << l; }
+    if (keys == keys_) return;
+    keys_ = keys;
+    while (keyLabels_.size() < keys.size()) {
+        auto* l = new QLabel(keysBox_); l->setObjectName(QStringLiteral("kbd")); l->setFixedHeight(18); l->setAlignment(Qt::AlignCenter);   // 키 캡 18(스펙 §5)
+        keysLay_->addWidget(l, 0, Qt::AlignVCenter); keyLabels_ << l;
+        if (isVisible()) l->show();   // 보이는 칩 안에 더한 라벨은 바로 보여야 adjustSize 가 폭을 맞게 잼
+    }
+    for (int i = 0; i < keyLabels_.size(); ++i) { keyLabels_[i]->setVisible(i < keys.size()); if (i < keys.size()) keyLabels_[i]->setText(keys.at(i)); }
     adjustSize(); place();
 }
 
-// 칩은 호스트 폭 안에 들어간다: 문장이 길면 줄임표. 그래야 되돌리기 · 다시가 오른쪽에 붙을 자리가 남는다
+// 칩은 호스트 폭 안에 들어간다. 좁으면 ① 도구 이름을 단계만(「A′ 찾는 중」) ② 도구 이름 숨김(아이콘이 도구를 말한다) ③ 문장 줄임표 순서로 줄인다.
+// 되돌리기 · 다시는 오른쪽에 자리(reserveRight_)가 있으면 거기, 없으면 칩 아래로 간다(FloatButtons::place). 문장은 되도록 그대로 보인다(스펙 §5 · 검토 UI 3)
 void GuideBand::place() {
-    const int maxW = std::max(160, host_->width() - 2 * kMargin - reserveRight_);
+    const int hostW = std::max(160, host_->width() - 2 * kMargin);
+    const int withBtns = std::max(160, hostW - reserveRight_);
     hint_->setText(fullHint_);
+    title_->setText(fullTitle_); title_->setVisible(true);
     adjustSize();
+    if (width() > withBtns) {
+        const int cut = fullTitle_.indexOf(QStringLiteral(" › "));
+        if (cut > 0) { title_->setText(fullTitle_.mid(cut + 3)); adjustSize(); }
+    }
+    if (width() > withBtns) { title_->setVisible(false); adjustSize(); }
+    const int maxW = width() <= withBtns ? withBtns : hostW;
     if (width() > maxW) {
         const int over = width() - maxW;
         const QFontMetrics fm(hint_->font());
@@ -117,8 +136,10 @@ void FloatButtons::followRightOf(QWidget* w, int gap) { follow_ = w; gap_ = gap;
 void FloatButtons::place() {
     adjustSize();
     int x = margin_, y = margin_;
-    if (follow_) { x = follow_->x() + follow_->width() + gap_; y = follow_->y(); }
-    else {
+    if (follow_) {
+        x = follow_->x() + follow_->width() + gap_; y = follow_->y();
+        if (x + width() > host_->width() - margin_) { x = follow_->x(); y = follow_->y() + follow_->height() + 8; }   // 오른쪽에 자리가 없으면 칩 아래
+    } else {
         if (where_ & Qt::AlignRight) x = host_->width() - width() - margin_;
         else if (where_ & Qt::AlignHCenter) x = (host_->width() - width()) / 2;
         if (where_ & Qt::AlignBottom) y = host_->height() - height() - margin_;

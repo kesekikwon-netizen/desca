@@ -71,7 +71,7 @@ SectionDoc SectionView::doc() const {
 
 LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport) {
     QFont small(theme::fontFamily()); small.setPixelSize(std::max(8, int(std::lround(11.5 * ui))));
-    const double minLinePx = forExport ? 0.5 / 25.4 * 96.0 * ui : 4.0 * ui;   // 인쇄 0.5 mm / 화면 4 px
+    const double minLinePx = forExport ? 0.5 / 25.4 * 96.0 * ui : 8.0 * ui;   // 인쇄 0.5 mm / 화면 8 px(더 촘촘하면 50 cm 선만 — 회색 면처럼 보이지 않게, 검토 UI 1)
     return planLevels(ppm, minLinePx, QFontMetricsF(small).height() * 1.35, 10);
 }
 
@@ -287,7 +287,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     }
     p.setFont(small);
     p.setPen(theme::Idle);
-    p.drawText(QRectF(pr.right() - 160 * ui, pr.bottom() + 6 * ui + fm.height(), 160 * ui, fm.height()), Qt::AlignRight, QStringLiteral("A 로부터 거리(m)"));
+    p.drawText(QRectF(pr.right() - 160 * ui, pr.bottom() + 6 * ui + fm.height(), 160 * ui, fm.height()), Qt::AlignRight, QStringLiteral("A로부터 거리 (m)"));
     p.restore();
     // 9) A / A′ 는 그림 칸 위 여백에서만 가로로 움직인다
     p.save();
@@ -357,6 +357,14 @@ void SectionView::paintEvent(QPaintEvent*) {
     }
     SectionDoc d; d.r = r_; d.st = st_; d.imgS0 = imgS0_; d.imgZ1 = imgZ1_; d.imgRes = imgRes_;
     paintSectionDoc(p, d, rect(), xf_, 1.0, img_, false, QString(), nullptr, busy_, false);
+    if (drawingHint_) {   // 그리는 중(화판 2): 옛 단면은 그대로 두고 위에 안내 띠만 — 다시 긋는 동안 비교하려면 보여야 한다(판정)
+        const QString t = QStringLiteral("A′를 찍으면 단면이 여기에 나옵니다");
+        p.setFont(theme::uiFont(12));
+        QRectF tr(0, 0, QFontMetricsF(p.font()).horizontalAdvance(t) + 24, 28); tr.moveCenter(QPointF(width() / 2.0, 26));
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(QPen(theme::Edge, 1)); p.setBrush(theme::Card); p.drawRoundedRect(tr, 8, 8);
+        p.setPen(theme::Muted); p.drawText(tr, Qt::AlignCenter, t);
+    }
     static thread_local double lastPpm = -1;
     if (onViewChanged && xf_.ppm != lastPpm) { lastPpm = xf_.ppm; QTimer::singleShot(0, this, [this] { if (onViewChanged) onViewChanged(); }); }
 }

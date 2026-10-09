@@ -3,6 +3,7 @@
 
 #include <QAction>
 #include <QEvent>
+#include <QFocusEvent>
 #include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -58,13 +59,13 @@ QFrame* Ribbon::addGroup(const QString& id, const QString& caption) {
     g.row = new QHBoxLayout;
     g.row->setContentsMargins(0, 0, 0, 0);
     g.row->setSpacing(kChipGap);
-    g.row->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    g.row->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);   // 칩이 아닌 위젯(입면 칸)은 타일 높이 안 세로 가운데
     v->addWidget(g.caption, 0, Qt::AlignLeft);
     v->addLayout(g.row);
     // 마지막 묶음의 오른쪽 선은 QSS [last="true"] 로 뺀다
     if (!order_.isEmpty()) { groups_[order_.last()].frame->setProperty("last", false); }
     g.frame->setProperty("last", true);
-    row_->insertWidget(std::max(0, row_->count() - (corner_ ? 2 : 1)), g.frame, 0, Qt::AlignLeft | Qt::AlignVCenter);
+    row_->insertWidget(std::max(0, row_->count() - (corner_ ? 2 : 1)), g.frame, 0, Qt::AlignLeft | Qt::AlignTop);   // 묶음 이름은 모두 같은 줄(applyLook 이 묶음 높이를 같게 맞춤)
     groups_.insert(id, g);
     order_.append(id);
     for (const QString& k : order_) { QFrame* f = groups_[k].frame; f->style()->unpolish(f); f->style()->polish(f); }
@@ -201,6 +202,11 @@ void Ribbon::drawChip(const Chip& c, const RibbonLook& L) {
 }
 
 // 크기마다 필요한 폭: 묶음마다 max(이름 폭, 칩들 + 위젯들 나란히) + 묶음 여백 · 선, 오른쪽 끝 묶음, 리본 여백
+QString Ribbon::chipIconName(const QAbstractButton* b) const {
+    for (const Chip& c : chips_) if (c.button == b) return c.icon;
+    return QString();
+}
+
 QList<int> Ribbon::lookWidths() const {
     const QList<RibbonLook> all = looks();
     QList<int> widths(all.size(), kRowPadLeft + kRowPadRight + (corner_ ? corner_->sizeHint().width() + row_->spacing() : 0));
@@ -256,6 +262,15 @@ void Ribbon::resizeEvent(QResizeEvent* e) { QWidget::resizeEvent(e); updateLook(
 void Ribbon::showEvent(QShowEvent* e) { QWidget::showEvent(e); updateLook(); }
 
 bool Ribbon::eventFilter(QObject* watched, QEvent* e) {
+    if (e && (e->type() == QEvent::FocusIn || e->type() == QEvent::FocusOut)) {   // 초점 테는 Tab 으로 왔을 때만(QSS [kbdFocus="true"]:focus — 검토 UI 5)
+        for (const Chip& c : chips_)
+            if (c.button == watched) {
+                const Qt::FocusReason r = e->type() == QEvent::FocusIn ? static_cast<const QFocusEvent*>(e)->reason() : Qt::OtherFocusReason;
+                const bool kbd = r == Qt::TabFocusReason || r == Qt::BacktabFocusReason;
+                if (c.button->property("kbdFocus").toBool() != kbd) { c.button->setProperty("kbdFocus", kbd); c.button->style()->unpolish(c.button); c.button->style()->polish(c.button); }
+                break;
+            }
+    }
     if (e && e->type() == QEvent::KeyPress) {
         const auto* k = static_cast<const QKeyEvent*>(e);
         if (k->key() == Qt::Key_Return || k->key() == Qt::Key_Enter) {
@@ -276,10 +291,13 @@ void Ribbon::updateLook() {
 void Ribbon::applyLook(int index, bool force) {
     const int line = lineHeight();
     if (index == lookIndex_ && line == appliedLine_ && !force) return;
+    if (index != lookIndex_) iconCache_.clear();   // 지금 크기 것만 남긴다(검토 I7: 12단계 × 칩 21 × 32장이 다 쌓이면 수백 MB)
     lookIndex_ = index;
     appliedLine_ = line;
     const RibbonLook L = looks().at(index);
     for (const Chip& c : chips_) drawChip(c, L);
+    const int gh = kGroupPadTop + kCaptionHeight + kCaptionGap + chipHeight(L) + kGroupPadBottom;   // 묶음 높이를 같게 — 입면 묶음 이름이 내려가지 않음(검토 UI 2)
+    for (const QString& id : order_) groups_[id].frame->setFixedHeight(gh);
     setFixedHeight(sizeHint().height());
     updateGeometry();
 }

@@ -8,6 +8,7 @@
 #include <QWidget>
 #include "icons.hpp"
 
+class QAbstractButton;
 class QAction;
 class QEvent;
 class QFrame;
@@ -43,6 +44,8 @@ public:
     void setGroupDim(const QString& id, bool dim);
     QFrame* group(const QString& id) const;
     QList<QToolButton*> chips() const;
+    /// 감사용: 이 단추가 리본 칩이면 아이콘 이름, 아니면 빈 글
+    QString chipIconName(const QAbstractButton* b) const;
 
     RibbonLook look() const;
     int lookIndex() const { return lookIndex_; }

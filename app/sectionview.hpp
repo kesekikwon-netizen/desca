@@ -59,6 +59,7 @@ public:
     void setResult(const asec::SectionResult& r, const QImage& img, double imgS0, double imgZ1Local, double imgRes, bool keepView);
     void clear();
     void setBusy(bool b) { busy_ = b; update(); }
+    void setDrawingHint(bool on) { drawingHint_ = on; update(); }   // 그리는 중 「A′를 찍으면 단면이 여기에 나옵니다」 띠(화판 2)
     void setStyle(const SectionStyle& s) { st_ = s; update(); }
     const SectionStyle& style() const { return st_; }
     bool hasResult() const { return has_; }
@@ -104,7 +105,7 @@ private:
     asec::SectionResult r_;
     QImage img_;
     double imgS0_ = 0, imgZ1_ = 0, imgRes_ = 0.01;  // z 는 로컬
-    bool has_ = false, busy_ = false;
+    bool has_ = false, busy_ = false, drawingHint_ = false;
     SectionStyle st_;
     Xf xf_;
     double zoomPending_ = 0;
