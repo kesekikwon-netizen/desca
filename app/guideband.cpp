@@ -38,8 +38,14 @@ GuideBand::GuideBand(QWidget* host) : QFrame(host), host_(host) {
     hide();
 }
 
+void GuideBand::bakeIcon() {
+    if (iconName_.isEmpty()) return;
+    iconDpr_ = devicePixelRatioF();
+    icon_->setPixmap(kerf::glyph(iconName_, 16, theme::Hand, iconDpr_));
+}
+
 void GuideBand::setTool(const QString& iconName, const QString& title) {
-    if (iconName != iconName_) { iconName_ = iconName; icon_->setPixmap(kerf::glyph(iconName, 16, theme::Hand, devicePixelRatioF())); }   // 같은 아이콘이면 SVG 를 다시 그리지 않음(검토 I3)
+    if (iconName != iconName_) { iconName_ = iconName; bakeIcon(); }   // 같은 아이콘이면 SVG 를 다시 그리지 않음(검토 I3)
     if (fullTitle_ == title) return;
     fullTitle_ = title; title_->setText(title);
     adjustSize(); place();
@@ -67,6 +73,7 @@ void GuideBand::setKeys(const QStringList& keys) {
 // 칩은 호스트 폭 안에 들어간다. 좁으면 ① 도구 이름을 단계만(「A′ 찾는 중」) ② 도구 이름 숨김(아이콘이 도구를 말한다) ③ 문장 줄임표 순서로 줄인다.
 // 되돌리기 · 다시는 오른쪽에 자리(reserveRight_)가 있으면 거기, 없으면 칩 아래로 간다(FloatButtons::place). 문장은 되도록 그대로 보인다(스펙 §5 · 검토 UI 3)
 void GuideBand::place() {
+    if (!iconName_.isEmpty() && !qFuzzyCompare(iconDpr_, devicePixelRatioF())) bakeIcon();   // 안전판(B5): 호스트 크기가 바뀔 때 구운 배율 ≠ 지금 배율이면 다시 굽는다
     const int hostW = std::max(160, host_->width() - 2 * kMargin);
     const int withBtns = std::max(160, hostW - reserveRight_);
     hint_->setText(fullHint_);
@@ -99,6 +106,12 @@ qint64 GuideBand::iconCacheKey() const { return icon_->pixmap().cacheKey(); }
 bool GuideBand::eventFilter(QObject* watched, QEvent* e) {
     if (watched == host_ && e->type() == QEvent::Resize) place();
     return QFrame::eventFilter(watched, e);
+}
+
+// 화면을 옮겨 배율이 바뀌면(QEvent::DevicePixelRatioChange, Qt 6.6+) 같은 아이콘 이름이라도 무조건 새 배율로 다시 굽는다 — 옛 장을 늘리면 흐림(B5)
+bool GuideBand::event(QEvent* e) {
+    if (e->type() == QEvent::DevicePixelRatioChange) bakeIcon();
+    return QFrame::event(e);
 }
 
 // ---------------------------------------------------------------- FloatButtons
