@@ -648,8 +648,25 @@ bool PlanView::screenRayLocal(const QPointF& sp, Vec3& o, Vec3& d) const {
     return d.x * d.x + d.y * d.y + d.z * d.z > 0;
 }
 
-// 단면선 위 m 숫자 글 간격(스펙 §5). 이 Task(감사 먼저)에서는 늘 1 m — 간격 규칙은 다음 Task
-int PlanView::tickLabelStepM() const { return 1; }
+// 숫자 글 간격 규칙(스펙 §5 · 요청 원문 「간격 × px/m ≥ 글 폭 + 8」): {1, 2, 5, 10} m 중 조건을 만족하는 가장 작은 값, 없으면 10.
+// 화면 글자 배치 규칙(입력이 Qt 글꼴로 잰 px)이라 core 가 아니라 여기(spec §2 R2.2 판정). 8 px 는 허용오차가 아니라 디자인 값
+static int pickTickLabelStep(double pxPerM, double labelPx) {
+    for (int s : {1, 2, 5, 10}) if (s * pxPerM >= labelPx + 8) return s;
+    return 10;
+}
+
+// 단면선 위 m 숫자 글 간격(스펙 §5): px/m = 화면 단면선 길이 ÷ L, 글 폭 = 가장 큰 m 값 「%1 m」(모노 11)
+int PlanView::tickLabelStepM() const {
+    if (!hasLine_ || width() <= 0 || height() <= 0) return 1;
+    const SectionFrame f(line_);
+    if (f.L <= 1e-6) return 1;
+    const double z = refZ() + center_.z;
+    const QPointF A = localToScreen(line_.a.x, line_.a.y, z), B = localToScreen(line_.b.x, line_.b.y, z);
+    const double pxPerM = std::hypot(B.x() - A.x(), B.y() - A.y()) / f.L;
+    const int maxM = std::max(1, int(std::floor(f.L - 1e-4)));
+    const double labelPx = QFontMetricsF(theme::monoFont(11)).horizontalAdvance(QStringLiteral("%1 m").arg(maxM));
+    return pickTickLabelStep(pxPerM, labelPx);
+}
 
 // 숫자 글 사각형: s = k·step(1 ≤ s < L)마다 눈금 중심에서 띠 반대쪽 16 px, 폭 = 글 폭 + 2(흰 테 1 px 양쪽), 높이 = 글꼴 높이 + 2.
 // paintOverlay 가 이 사각형 가운데에 글을 그리고, --ui-audit plan-tick 이 서로 겹치는 쌍을 센다(같은 함수라 판정 = 그림)
