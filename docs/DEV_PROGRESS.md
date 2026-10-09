@@ -26,7 +26,7 @@
 | 바뀐 파일(내용) | 단계별 커밋됨 — `git log --oneline 4422b4e..HEAD` · `origin/feature/design-v2`에 푸시 · CI: `.github/workflows/ci.yml` |
 | 빌드 | 성공 — `C:\dev\kerf-v4c` (§2) |
 | 시험 | `asec_tests` 135 통과 · 1 실패(알려진 `CoalescingWorker`, test_schedule.cpp:39) · 1 건너뜀 · `--ui-audit` RESULT ok · GitHub Actions(Linux · Windows) 통과 |
-| 최근 캡처 | `C:\dev\tmp\kerf-shots\work-v4d.png` · `draw-v4.png` · `C:\dev\tmp\ui\` (이 PC에만) |
+| 최근 캡처 | `C:\dev\tmp\kerf-shots\work-v4d.png` · `draw-v4.png` · `work-step0-fixed.png`(빨간선 전체 0–12, offscreen이라 평면은 빈 화면·한글 깨짐) · `C:\dev\tmp\ui\` (이 PC에만) |
 
 ## 2. 이 PC에서 빌드 · 실행 (검증된 명령)
 - **한글 경로 함정:** 저장소가 `C:\Users\권을\…`에 있으면 CMake가 부르는 `rc.exe` · `llvm-rc`가 멈춘다(실측 2회). 그래서 **정션 `C:\dev\desca` → 저장소**를 만들어 그 경로로 빌드한다(이미 있음: `New-Item -ItemType Junction -Path C:\dev\desca -Target <저장소>`).
