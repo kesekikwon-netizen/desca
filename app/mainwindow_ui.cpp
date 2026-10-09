@@ -139,6 +139,15 @@ int clippedLabels(QWidget* root, int* tipMissing) {
     }
     return n;
 }
+// 라벨 글을 width(px)에 맞게 줄임표로(QFontMetrics::elidedText — 넓으면 "…", 아니면 원래 글). 동적 속성 fullText = 전체 글(full 이 비면 text),
+// 줄였으면 툴팁 = 전체 글, 아니면 빈 툴팁 — 감사 clippedLabels 의 elide-tip-missing 이 읽는다. 머리 제목 · 정보 줄 · 홈 한 줄 글이 같이 쓴다
+void setElidedText(QLabel* l, const QString& text, Qt::TextElideMode mode, int width, const QString& full = QString()) {
+    const QString whole = full.isEmpty() ? text : full;
+    const QString shown = l->fontMetrics().elidedText(text, mode, std::max(0, width));
+    l->setProperty("fullText", whole);
+    l->setText(shown);
+    l->setToolTip(shown == whole ? QString() : whole);
+}
 
 QWidget* vbox(std::initializer_list<QWidget*> ws, int spacing = 3) {
     auto* w = new QWidget; auto* l = new QVBoxLayout(w); l->setContentsMargins(0, 0, 0, 0); l->setSpacing(spacing);
@@ -357,6 +366,7 @@ bool MainWindow::eventFilter(QObject* o, QEvent* e) {
             QPainterPath pp; pp.addRoundedRect(QRectF(w->rect()), rr, rr);
             w->setMask(QRegion(pp.toFillPolygon().toPolygon()));
         }
+        if (o == secTitleBar_) fitSectionHeader();   // 좁은 창: 단면 머리를 폭에 맞게 줄인다(스펙 §4 — 필터는 layout 의 doResize 보다 먼저 받는다)
     }
     if (e && (e->type() == QEvent::FocusIn || e->type() == QEvent::FocusOut) && o && o->isWidgetType() && o->inherits("QAbstractButton")) {
         auto* b = static_cast<QWidget*>(o);
@@ -463,7 +473,7 @@ QWidget* MainWindow::buildSectionFrame() {
     h->addStretch();
     // v4: 그릴 것 켜기·끄기 넷은 영향을 받는 이 머리에만(리본에서 뺐다). 같은 동작이라 키(I · L · V)와 상태를 같이 씀
     {
-        auto* box = new QWidget; box->setObjectName("viewToggles"); box->setAttribute(Qt::WA_StyledBackground);
+        auto* box = secToggles_ = new QWidget; box->setObjectName("viewToggles"); box->setAttribute(Qt::WA_StyledBackground);
         auto* bl = new QHBoxLayout(box); bl->setContentsMargins(2, 2, 2, 2); bl->setSpacing(2);
         const std::pair<const char*, theme::Ico> tg[] = {{"image", theme::Ico::Image}, {"line", theme::Ico::Line}, {"levels", theme::Ico::Levels}, {"fade", theme::Ico::Band}};
         for (const auto& [key, ico] : tg) {
@@ -473,7 +483,15 @@ QWidget* MainWindow::buildSectionFrame() {
             b->setAccessibleName(action(key)->text());
             bl->addWidget(b);
         }
-        h->addWidget(box); h->addSpacing(6);
+        h->addWidget(box);
+        // 좁은 창(스펙 §4 4단계): 상자 대신 「그릴 것 ▾」 메뉴 단추 하나 — 같은 QAction 넷이라 체크 상태 · 키 I · L · V 가 그대로(깊이 음영은 키가 없어 마우스로 닿아야 함)
+        secTogglesMenu_ = new QToolButton; secTogglesMenu_->setObjectName("secTogglesMenu"); secTogglesMenu_->setFocusPolicy(Qt::NoFocus); secTogglesMenu_->setAutoRaise(true);
+        secTogglesMenu_->setIcon(kerf::icon(QStringLiteral("layers"), 16, theme::Hand)); secTogglesMenu_->setIconSize(QSize(16, 16)); secTogglesMenu_->setProperty("iconName", QStringLiteral("layers"));
+        secTogglesMenu_->setPopupMode(QToolButton::InstantPopup);
+        secTogglesMenu_->setToolTip(QStringLiteral("그릴 것 켜기 · 끄기 — 입면 영상 · 잘린 선 · 레벨선 · 깊이 음영 (I · L · V)"));
+        { auto* m = new QMenu(secTogglesMenu_); for (const char* k : {"image", "line", "levels", "fade"}) m->addAction(action(k)); secTogglesMenu_->setMenu(m); }
+        secTogglesMenu_->hide();
+        h->addWidget(secTogglesMenu_); h->addSpacing(6);
     }
     // 세로:가로 — 누르면 화면 세로 과장(×1·×2·×5·×10, X 키로 돌아가며). 기복이 작으면 추천을 함께 보여 줌
     vexBtn_ = new QToolButton; vexBtn_->setObjectName("vexBtn"); vexBtn_->setFocusPolicy(Qt::NoFocus);
@@ -495,12 +513,13 @@ QWidget* MainWindow::buildSectionFrame() {
     auto mk = [&](theme::Ico ic, const QString& tip, std::function<void()> fn) {
         auto* a = new QAction(theme::icon(ic, 16), tip, this); a->setProperty("iconName", QString::fromLatin1(theme::iconName(ic)));
         QObject::connect(a, &QAction::triggered, this, fn);
-        h->addWidget(iconBtn(a));
+        auto* b = iconBtn(a); h->addWidget(b);
+        return b;
     };
     mk(theme::Ico::Fit, QStringLiteral("맞춤"), [this] { section_->fit(); section_->update(); });
     mk(theme::Ico::ZoomIn, QStringLiteral("확대"), [this] { section_->zoomBy(1.4); });
     mk(theme::Ico::ZoomOut, QStringLiteral("축소"), [this] { section_->zoomBy(1 / 1.4); });
-    mk(theme::Ico::Max, QStringLiteral("이 보기만 크게 / 나란히"), [this] { bool solo = action("view1")->isChecked(); action("view2")->setChecked(true); action("view1")->setChecked(!solo); });
+    secMaxBtn_ = mk(theme::Ico::Max, QStringLiteral("이 보기만 크게 / 나란히"), [this] { bool solo = action("view1")->isChecked(); action("view2")->setChecked(true); action("view1")->setChecked(!solo); });
     v->addWidget(secTitleBar_);
     auto* strip = infoStrip_ = new QWidget; strip->setObjectName("infoStrip"); strip->setAttribute(Qt::WA_StyledBackground); strip->setFixedHeight(26); strip->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     auto* sh = new QHBoxLayout(strip); sh->setContentsMargins(8, 0, 8, 0); sh->setSpacing(16);
@@ -579,6 +598,46 @@ void MainWindow::updateVexUi() {
     vexBtn_->setToolTip(tip);
     vexBtn_->setProperty("state", state);
     vexBtn_->style()->unpolish(vexBtn_); vexBtn_->style()->polish(vexBtn_);
+    fitSectionHeader();   // 「세로 ×10 ▾」처럼 글이 길어지면 머리를 다시 맞춘다(Review Focus 2)
+}
+
+// 단면 머리(스펙 §4 · 사용자 답 Q1 A): 머리 폭에 들어가는 가장 작은 단계를 고른다 — ① 「북쪽을 봄」 숨김 ② 「크게」 숨김 ③ 「세로 ×1 ▾」 아이콘만
+// ④ 켜기 · 끄기 상자 → 「그릴 것 ▾」 메뉴 단추 ⑤ 제목 줄임표(끝, 툴팁 전체). 제목 · 축척 칸 · 맞춤 · 확대 · 축소는 늘 보인다.
+// 크기 판단은 단계를 적용한 뒤 레이아웃 최소 폭 ≤ 머리 폭(숨긴 자식은 최소 폭에서 빠진다 — QWidgetItem::isEmpty). 앱 전체 필터의 Resize · updateHeader · updateVexUi 가 부른다
+void MainWindow::fitSectionHeader() {
+    if (!secTitleBar_ || !secTitle_ || !secTitleBar_->layout() || fittingHeader_) return;
+    fittingHeader_ = true;
+    QLayout* lay = secTitleBar_->layout();
+    const int avail = secTitleBar_->width();
+    auto apply = [&](int step) {
+        if (secFacing_) secFacing_->setVisible(step < 1);
+        if (secMaxBtn_) secMaxBtn_->setVisible(step < 2);
+        if (vexBtn_) vexBtn_->setToolButtonStyle(step < 3 ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
+        if (secToggles_) secToggles_->setVisible(step < 4);
+        if (secTogglesMenu_) secTogglesMenu_->setVisible(step >= 4);
+    };
+    secTitle_->setProperty("fullText", secTitleFull_); secTitle_->setText(secTitleFull_); secTitle_->setToolTip(QString());
+    int step = 0;
+    for (; step < 5; ++step) { apply(step); lay->activate(); if (lay->minimumSize().width() <= avail) break; }
+    if (step == 5) {   // ⑤ 남는 폭에 제목을 맞춘다 — 글 폭과 라벨 sizeHint 의 차(여백)는 되풀이해 흡수
+        apply(4);
+        int tw = secTitle_->fontMetrics().horizontalAdvance(secTitleFull_);
+        for (int pass = 0; pass < 4; ++pass) {
+            lay->activate();
+            const int over = lay->minimumSize().width() - avail;
+            if (over <= 0) break;
+            tw = std::max(24, tw - over);
+            setElidedText(secTitle_, secTitleFull_, Qt::ElideRight, tw);
+        }
+    }
+    secHeaderStep_ = step;
+    lay->activate();
+    fittingHeader_ = false;
+}
+
+void MainWindow::setSecTitleText(const QString& full) {
+    secTitleFull_ = full;
+    fitSectionHeader();
 }
 
 QString MainWindow::windowTitleCheck() const {
@@ -600,7 +659,7 @@ void MainWindow::updateHeader() {
     updateVexUi();
     const bool has = plan_ && plan_->hasLine();
     const QString monoB = QStringLiteral("<b style='font-family:Consolas,\"DejaVu Sans Mono\",monospace'>%1</b>");
-    secTitle_->setText(has ? QStringLiteral("%1 단면").arg(sectionName()) : QStringLiteral("단면"));
+    setSecTitleText(has ? QStringLiteral("%1 단면").arg(sectionName()) : QStringLiteral("단면"));
     if (plan_->drawMode()) {   // 그리는 중 판 · 정보 줄은 updateCtx 가 주인(검토 I2) — 옛 단면 수치가 새 선 것처럼 읽히지 않게 잘린 선 · 입면 글도 비움
         if (stripState_) stripState_->setText(QStringLiteral("단면선을 긋는 중 — 단면은 A′를 찍은 뒤 계산됩니다"));
         if (stripCut_) stripCut_->clear();
@@ -2215,8 +2274,8 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     const int narrowW = width(), narrowMinW = minimumSizeHint().width();
     const int planFits = src_ ? (plan_->contentFits() ? 1 : 0) : -1, secFits = section_->hasResult() ? (section_->contentFits() ? 1 : 0) : -1;
     measure(QStringLiteral("1280w"), true);
-    if (secTitle_) {   // 1280L: 40자 긴 단면 이름(Review Focus 1)
-        secTitle_->setText(QStringLiteral("%1 단면").arg(QStringLiteral("트렌치 3호 북벽 서쪽 끝 A–A′ (2026-10-09 다시 그음)")));
+    if (secTitle_) {   // 1280L: 40자 긴 단면 이름(Review Focus 1) — updateHeader 와 같은 길(setSecTitleText)
+        setSecTitleText(QStringLiteral("%1 단면").arg(QStringLiteral("트렌치 3호 북벽 서쪽 끝 A–A′ (2026-10-09 다시 그음)")));
         measure(QStringLiteral("1280L"), false);
         updateHeader();
     }

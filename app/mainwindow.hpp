@@ -243,6 +243,12 @@ private:
     QWidget *planTitle_ = nullptr, *secTitleBar_ = nullptr;
     QWidget* infoStrip_ = nullptr;             // 단면 머리 아래 정보 줄(계산 상태 · 잘린 선 · 입면 뒤 · 레벨선 범례)
     int secHeaderStep_ = 0, stripStep_ = 0;    // 좁은 창에서 머리 · 정보 줄을 줄인 단계(0 = 모두 보임, 스펙 §4 — --ui-audit 가 읽는다)
+    QString secTitleFull_;                     // 단면 머리 제목 전체 글(좁으면 fitSectionHeader 가 줄임표 + 툴팁)
+    QWidget* secToggles_ = nullptr;            // 켜기 · 끄기 넷 상자(viewToggles)
+    QToolButton *secTogglesMenu_ = nullptr, *secMaxBtn_ = nullptr;   // 좁을 때 넷을 접는 「그릴 것 ▾」 메뉴 단추 · 「크게」
+    bool fittingHeader_ = false;
+    void fitSectionHeader();                   // 스펙 §4 · Q1 A: 북쪽을 봄 → 크게 → 세로 아이콘만 → 토글을 메뉴로 → 제목 줄임표
+    void setSecTitleText(const QString& full); // 제목은 이 길로만(updateHeader · 감사 1280L)
     QComboBox* scaleCombo_ = nullptr;
     QLabel *lvLine_ = nullptr, *lvLabel_ = nullptr;
     QToolButton* depthChip_[5] = {};
