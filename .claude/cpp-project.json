@@ -12,7 +12,7 @@
   },
   "ui": {
     "framework": "qt-widgets",
-    "designSystem": "docs/design-v4/FINAL_PLAN.md",
+    "designSystem": "docs/design/DESIGN_SPEC.md",
     "themeFiles": ["app/theme.hpp"],
     "scenes": ["work", "draw", "start"],
     "windowSizes": ["1920x1040"]

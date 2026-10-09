@@ -228,11 +228,9 @@ C:\dev\kerf-v4c\asec_tests.exe
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.
 1. ~~E3 · E4~~ 끝. **B5** 해상도 · DPI(1280 · 1920 · 3440 · 3840 × 배율 1 · 2 감사, dpr 1.25 · 1.75, 창 최소 폭 ≤ 1280 강제, 창 줄일 때 자동 맞춤).
-2. 재검토(cpp · ui 3차) — 2차 지적 중 미룬 것은 장부 `Task R2` Ruling.
-3. **B5** 해상도 · DPI: 1280×800 · 1920×1040 · 3440×1440 · 3840×2160 × `QT_SCALE_FACTOR` 1 · 2 모두 `RESULT ok`(창 최소 폭은 1280 — `0f30c5a`), dpr 1.25 · 1.75 · 화면 옮김(`DevicePixelRatioChange`).
-4. **D2** 오른쪽 판 스펙 §4 · **D3** 단면 목록 줄(검토에서 미룬 것).
-5. **F** 잘린 돌 H · **G** 윤곽 O · **H** EPSG 매개변수 우선(5187) + 높이 의심 경고(시험 먼저) · **I** 문서 정리(v2 · v4 를 `desc/_old-design`, README, cpp-project.json).
-6. 재검토 결과(cpp-reviewer `a368b9d..0f30c5a` · ui-reviewer 캡처 4장) 반영. 브랜치 마무리는 `finishing-a-development-branch`, push 는 사용자 지시 때.
+   - **B5 는 팩토리 작업 `20261009-01-b5-dpi` 로 진행 중**(사용자 지시 2026-10-09 「지금 개발설정을 지켜가며 개발하라. 니맘대로하지말고」 + 선택 「B5 부터 팩토리로」 · 「CI 의 Linux 작업 삭제」). 명세 `factory/jobs/20261009-01-b5-dpi/spec.md`(AC1–AC11), worktree `C:\dev\kerf-wt\20261009-01-b5-dpi`, 브랜치 `factory/20261009-01-b5-dpi`(기준 `0f7fbfe`). 본 체크아웃에 있던 B5 RED 감사 코드는 `C:\dev\tmp\b5-red.patch` 로 빼고 `app/` 은 HEAD 로 되돌렸다 — **이 작업이 끝날 때까지 본 체크아웃의 `app/` 을 고치지 않는다.** 기준선(고치기 전) 감사: 8가지 모두 ok, 단 `--size 1280x800` 이 1591×800 으로 열림(새 판정으로 잡음). 사용자 지시 둘을 규칙으로: DEV_RULES R7.4(Windows 만) · R7.5(포터블 구조 유지, 전환은 요청 때만). 열린 질문 Q1(첫 창 1600×950 > 모니터)은 backlog #2. 병합 뒤 본 체크아웃에서 고칠 문서: `CLAUDE.md` CI 문장 · DEV_RULES R2.7 「dpr 1 · 1.5 · 2 · 3」 → 여섯 장 · `factory/project-profile.md` §3 Linux 줄 · SKILL §5-6. 다른 세션 미커밋: `CLAUDE.md` · `.claude/cpp-project.json` · `.claude/skills/verify/SKILL.md`(팩토리).
+2. **남은 단계는 모두 팩토리 작업으로**(사용자 /goal 2026-10-09 「남은 개발작업을 플랜을 나눠서 /factory 개발을 진행한다면?」) — 나눈 목록과 순서는 `factory/backlog.md` #3–#10: #3 D2 + D3(오른쪽 판 · 목록 줄) → #4 F1 + F2(잘린 돌 core + H 도구) → #5 F3(빗금 SVG · DXF 층) → #6 G1(윤곽 O 도구) → #7 G2(윤곽 층) → #8 H1 + H2(EPSG 5187 · 높이 의심) → #9 I1(문서 · 정리, 사용자가 본 저장소 문서를 커밋한 뒤) · #2(첫 창 크기) · #10(v4 잔여 13 · 15 · 16 · 16a · A2 — 스펙 대조 뒤 사용자 결정). 동시 1개, 작업마다 승인 보고서 → 사용자 승인 → 「병합」 말 뒤 병합. 팩토리 검토(검토자 넷)가 R6.1 의 cpp · ui 검토를 대신한다 — 2차 지적 중 미룬 것(장부 `Task R2` Ruling)은 #3 명세에 넣는다.
+3. 각 작업 병합 뒤 이 파일 §1 · §3 · §4 · §5 를 본 저장소에서 고친다(R4.1). push 는 사용자 지시 때(명령 §4 「푸시 해결」).
 
 ## 6. 기록 규칙
 - 단계를 마치면: §1 표(마지막 갱신 · 바뀐 파일 · 빌드 · 시험), §3 상태, §4에 새 기록(무엇을 · 확인 명령과 결과 · 판정 · 남은 문제), §5 다음 할 일.
