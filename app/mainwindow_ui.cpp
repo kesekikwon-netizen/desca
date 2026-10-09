@@ -167,6 +167,51 @@ QLabel* elideLab(QLabel* l, Qt::TextElideMode mode) {
     l->setProperty("fullText", l->text());
     return l;
 }
+// 이어서 작업 칸 줄(스펙 §7 · rework 2 UI B1 · correctness C4): 칸 이름은 줄이지 않는다. 칸 1–5(마지막 열림 · 수평 좌표계 · 높이 · 단면 · 도면)는 내용 폭,
+// 폴더 칸만 남는 폭을 받아 늘고 줄며 가운데 줄임표. 폴더 칸이 「C:…」도 못 담으면 칸 안 여백을 12 → 8 → 4 로 줄이고(값은 그대로),
+// 그래도 모자라면 좌표계 · 높이 값만 앞쪽부터 줄인다(번호 끝자리를 지킴 — 「…5186」). ccCells 는 가로 Ignored 라 이 폭들이 창 최소 폭을 밀지 않는다
+void fitHomeCells(QWidget* cells) {
+    struct C { QWidget* w; QLabel* cap; QLabel* val; };
+    QList<C> cs;
+    for (QObject* o : cells->children()) {
+        if (!o->isWidgetType()) continue;
+        auto* w = static_cast<QWidget*>(o);
+        QLayout* cl = w->layout();
+        if (!cl || cl->count() < 2 || !cl->itemAt(0)->widget() || !cl->itemAt(1)->widget() || !cl->itemAt(0)->widget()->inherits("QLabel") || !cl->itemAt(1)->widget()->inherits("QLabel")) continue;
+        cs.push_back({w, static_cast<QLabel*>(cl->itemAt(0)->widget()), static_cast<QLabel*>(cl->itemAt(1)->widget())});
+    }
+    if (cs.size() < 2) return;
+    auto textW = [](QLabel* l) { l->ensurePolished(); const QVariant f = l->property("fullText"); return l->fontMetrics().horizontalAdvance(f.isValid() ? f.toString() : l->text()); };
+    const QString ell(QChar(0x2026));
+    const int avail = cells->width();
+    QVector<int> width(cs.size());
+    int usePad = 4;
+    bool full = false;
+    for (int pad : {12, 8, 4}) {   // 칸 1–5 를 내용 폭 그대로 두고 폴더가 「C:…」를 담는 가장 큰 여백
+        int sum = 0;
+        for (int i = 1; i < cs.size(); ++i) { width[i] = std::max(textW(cs[i].cap), textW(cs[i].val)) + 2 * pad; sum += width[i]; }
+        const int folderMin = std::max(textW(cs[0].cap), cs[0].val->fontMetrics().horizontalAdvance(QStringLiteral("C:") + ell)) + 2 * pad;
+        usePad = pad;
+        if (avail - sum >= folderMin) { full = true; break; }
+    }
+    if (!full) {   // 여백 4 로도 모자람: 좌표계 · 높이(elideCode) 값만 「…」 + 끝 4자까지 줄인다
+        const int folderMin = std::max(textW(cs[0].cap), cs[0].val->fontMetrics().horizontalAdvance(QStringLiteral("C:") + ell)) + 2 * usePad;
+        int sum = 0; for (int i = 1; i < cs.size(); ++i) sum += width[i];
+        int deficit = folderMin - (avail - sum);
+        for (int i = 1; i < cs.size() && deficit > 0; ++i) {
+            if (!cs[i].val->property("elideCode").toBool()) continue;
+            const QVariant f = cs[i].val->property("fullText");
+            const QString s = f.isValid() ? f.toString() : cs[i].val->text();
+            const int minW = std::max(textW(cs[i].cap), cs[i].val->fontMetrics().horizontalAdvance(ell + s.right(4))) + 2 * usePad;
+            const int cut = std::min(deficit, std::max(0, width[i] - minW));
+            width[i] -= cut; deficit -= cut;
+        }
+    }
+    int used = 0;
+    for (int i = 1; i < cs.size(); ++i) used += width[i];
+    width[0] = std::max(0, avail - used);
+    for (int i = 0; i < cs.size(); ++i) { cs[i].w->layout()->setContentsMargins(usePad, 6, usePad, 6); cs[i].w->setFixedWidth(width[i]); }
+}
 // 홈 「처음 쓰는 키」 줄(스펙 §7): 폭이 모자라면 뒤 키 묶음부터 숨긴다(Ctrl+Z → Ctrl+P → O → H → 1–5 → S). 「처음 쓰는 키」 머리와 「모든 키 F1」은 남긴다
 void fitHomeKeys(QWidget* keys) {
     QLayout* lay = keys->layout();
@@ -402,6 +447,7 @@ bool MainWindow::eventFilter(QObject* o, QEvent* e) {
             setElidedText(l, l->property("fullText").toString(), Qt::TextElideMode(em.toInt()), l->contentsRect().width());
         }
         if (o->objectName() == QLatin1String("homeKeys")) fitHomeKeys(static_cast<QWidget*>(o));   // 키 줄은 뒤 키부터 숨김
+        if (o->objectName() == QLatin1String("ccCells")) fitHomeCells(static_cast<QWidget*>(o));   // 이어서 작업 칸: 칸 1–5 내용 폭 · 폴더만 늘고 줆
     }
     if (e && (e->type() == QEvent::FocusIn || e->type() == QEvent::FocusOut) && o && o->isWidgetType() && o->inherits("QAbstractButton")) {
         auto* b = static_cast<QWidget*>(o);
@@ -1399,6 +1445,7 @@ void MainWindow::rebuildStartPage() {
         bv->addWidget(top);
         bv->addStretch(1);   // 칸 줄은 카드 바닥에(스펙 §7: 칸 높이 48)
         auto* cells = new QWidget; cells->setObjectName("ccCells"); cells->setAttribute(Qt::WA_StyledBackground); cells->setFixedHeight(56); cells->setVisible(!f0.isEmpty());
+        cells->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);   // 칸 내용 폭이 창 최소 폭을 밀지 않게(1280 · 긴 이름)
         { auto* ch = new QHBoxLayout(cells); ch->setContentsMargins(0, 0, 0, 0); ch->setSpacing(0);
             const QString folder = f0.isEmpty() ? QStringLiteral("—") : QFileInfo(f0).absolutePath().split(QLatin1Char('/'), Qt::SkipEmptyParts).join(QStringLiteral(" › "));   // 화판: 역슬래시는 한글 글꼴에서 ₩ 로 보임
             const QString sheets = meta(f0, "sheets").toString();
@@ -1408,11 +1455,12 @@ void MainWindow::rebuildStartPage() {
             for (int i = 0; i < 6; ++i) {
                 auto* c = new QWidget; c->setObjectName(i ? "ccCell" : "ccCellFirst"); c->setAttribute(Qt::WA_StyledBackground);
                 auto* cv = new QVBoxLayout(c); cv->setContentsMargins(12, 6, 12, 6); cv->setSpacing(0);
-                cv->addWidget(elideLab(lab(ks[i], "cap"), Qt::ElideRight));
-                auto* vl = elideLab(lab(vs[i]), i == 0 ? Qt::ElideMiddle : Qt::ElideRight);   // 폴더(경로)는 가운데, 그 밖은 끝
+                cv->addWidget(lab(ks[i], "cap"));   // 칸 이름은 줄이지 않는다(스펙 §7 — 줄임표는 칸 값만, rework 2 UI B1)
+                auto* vl = elideLab(lab(vs[i]), i == 0 ? Qt::ElideMiddle : (i == 2 || i == 3) ? Qt::ElideLeft : Qt::ElideRight);   // 칸 폭은 fitHomeCells 가 정한다 — 폴더(경로)만 늘고 줄며 가운데 줄임표, 좌표계 · 높이는 줄여야 할 때 앞쪽부터(번호 끝자리 지킴)
+                if (i == 2 || i == 3) vl->setProperty("elideCode", true);
                 if (i == 3) { const QString hs = meta(f0, "heightState").toString(); if (hs == "warn") vl->setStyleSheet("color:#7A5A00;"); else if (hs == "error") vl->setStyleSheet("color:#A33B3B;"); }
                 cv->addWidget(vl);
-                ch->addWidget(c, i == 0 ? 2 : 1);
+                ch->addWidget(c);
             } }
         bv->addWidget(cells);
         h->addWidget(body, 1);
@@ -1506,8 +1554,12 @@ void MainWindow::rebuildStartPage() {
 
     // ---- 작업 순서 세 걸음(카드 없음): ✓ 끝 · ● 다음 · 숫자 나중
     auto* steps = new QWidget; { auto* sv = new QVBoxLayout(steps); sv->setContentsMargins(0, 0, 0, 0); sv->setSpacing(14);
-        auto* hd = new QHBoxLayout; hd->addStrut(32); hd->addWidget(lab(QStringLiteral("작업 순서"), "sectionHead")); hd->addStretch();   // 「최근 모델」 줄과 같은 높이
-        hd->addWidget(elideLab(lab(f0.isEmpty() ? QString() : QStringLiteral("%1 기준").arg(QFileInfo(f0).completeBaseName()), "cap"), Qt::ElideMiddle));
+        auto* hd = new QHBoxLayout; hd->addStrut(32); hd->addWidget(lab(QStringLiteral("작업 순서"), "sectionHead"));   // 「최근 모델」 줄과 같은 높이
+        {   // 「<모델> 기준」: 늘림 칸 대신 이 글이 남는 폭을 다 받고 오른쪽 정렬 — 앞에 늘림 칸이 있으면 Ignored 라벨이 폭 0 으로 사라졌다(rework 2 code B1). 긴 이름은 가운데 줄임표(창 최소 폭을 밀지 않음)
+            auto* basis = elideLab(lab(f0.isEmpty() ? QString() : QStringLiteral("%1 기준").arg(QFileInfo(f0).completeBaseName()), "cap"), Qt::ElideMiddle);
+            basis->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            hd->addWidget(basis, 1);
+        }
         sv->addLayout(hd);
         int done = 0;
         if (ok0) done = (meta(f0, "hasLine").toBool() || meta(f0, "count").toInt() > 0) ? 2 : 1;
