@@ -25,6 +25,7 @@
 
 ## 승인 뒤 변경
 - 승인 뒤 코드가 바뀌면 여기 적고 다시 검증 · 다시 승인(위 표에 새 줄).
+- 2026-10-10 12:10 승인 뒤 변경: worktree 에 feature/design-v2(`fa24bc1`) merge → 통합 커밋 `9a77d61`(충돌 없음 — 기준 뒤 본 브랜치의 코드 변경 없음, `docs/design/DESIGN_SPEC_v6.md` 새 파일 · factory/docs 기록뿐). 다시 돈 검증: `-Full -UiAudit on` V8 **RESULT PASS**(전체 시험 51339 통과 · 빌드 새 경고 0 · asec-section 54 · 8조합 `RESULT ok`) + `-UiSizes 1280x800,2560x1440 -UiScales 1,1.25,1.75` **RESULT PASS**(6조합 ok) — verify.md 해당 블록. 재승인: 사전 허가 R1.5(/goal) + 사용자 선택 「한 번 더 고친 뒤 병합 (추천)」 — 코드가 승인 SHA `02688be` 와 같음(`git diff 02688be 9a77d61 -- app core tests` 비어 있음).
 
 ## 병합 (사용자가 따로 「병합」을 말한 뒤에만)
 - 최신 대상 브랜치와 통합한 커밋 · 다시 돈 검증(verify.md 블록 시각):
