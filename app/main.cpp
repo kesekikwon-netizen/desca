@@ -43,6 +43,7 @@
 #include "mainwindow.hpp"
 #include "guideband.hpp"
 #include "cursors.hpp"
+#include "motion.hpp"
 #include "theme.hpp"
 
 using namespace asec;
@@ -140,20 +141,6 @@ static void runCutCheck(MainWindow& w, LogFn log) {
     }
 }
 
-#ifdef Q_OS_WIN
-// windows.h 를 끌어오면 min/max 매크로가 이 파일의 std::min 을 깨므로 필요한 함수 하나만 선언한다(user32 — Qt 가 이미 링크). SPI_GETCLIENTAREAANIMATION = 0x1042,
-// pvParam = BOOL 변수(TRUE = 애니메이션 켜짐) — Microsoft Learn 「SystemParametersInfoW」 · 「Client area animation parameter」
-extern "C" __declspec(dllimport) int __stdcall SystemParametersInfoW(unsigned uiAction, unsigned uiParam, void* pvParam, unsigned fWinIni);
-#endif
-// Windows 「애니메이션 효과」(설정 › 접근성 › 시각 효과)가 꺼져 있으면 여는 화면 모션을 건너뛰고 끝 장면만 보인다
-static bool clientAreaAnimationsOn() {
-#ifdef Q_OS_WIN
-    int on = 1;
-    if (SystemParametersInfoW(0x1042, 0, &on, 0)) return on != 0;
-#endif
-    return true;
-}
-
 // 여는 화면 창: 테두리 없는 맨 위 창, 화면 가운데. 전체 길이 MainWindow::kOpeningSplashMs(1 초). Esc · 클릭 = 건너뜀(끝 장면을 0.3 초 보이고 열림).
 // 시스템 애니메이션이 꺼져 있으면 처음부터 끝 장면 0.3 초
 class OpeningSplash : public QWidget {
@@ -166,7 +153,7 @@ public:
     // captureDir 이 있으면 장면 시각(120 · 400 · 700 · 1000 ms)마다 그 창을 직접 찍는다(시험용 --splash-live)
     void run(int ms, const QString& captureDir = QString(), int escAtMs = -1) {   // escAtMs ≥ 0 = 그 시각에 Esc 를 눌러 건너뛰기 시험(--splash-esc)
         total_ = ms;
-        if (!clientAreaAnimationsOn()) { finalOnly_ = true; skipMs_ = 300; skipClock_.start(); }
+        if (!motion::animationsOn()) { finalOnly_ = true; skipMs_ = 300; skipClock_.start(); }
         const int caps[] = {120, 400, 700, 1000};
         int nextCap = 0;
         clock_.start();
@@ -340,6 +327,8 @@ int main(int argc, char** argv) {
         fprintf(stdout, "splash-shot %s: %s (%dx%d) frames=%d total-ms=%d%s\n", ok ? "ok" : "FAILED", splashShot.toUtf8().constData(), sz.width(), sz.height(), frames, MainWindow::kOpeningSplashMs, timing ? "" : "  FAIL");
         return ok && timing ? 0 : 6;
     }
+    // 자동화(감사 · 캡처 · 내보내기 · 시험)는 늘 움직임 없이 돈다 — 시각이 결과를 흔들지 않게. 여는 화면은 이 아래에서 따로 판단한다
+    motion::setForcedOff(quit || !uiAuditDir.isEmpty() || !shot.isEmpty() || !startShot.isEmpty() || !sheetCheck.isEmpty() || !exports.isEmpty() || !sheetBatch.isEmpty() || undoTest || !ctxShot.isEmpty() || !dialogShot.isEmpty() || haveLine);
     MainWindow w;
     if (W > 0 && H > 0) { w.resize(W, H); w.setProperty("auditSize", QSize(W, H)); }   // --ui-audit env: 요청한 크기로 열렸는지(B5)
     if (file.isEmpty() && startShot.isEmpty() && shot.isEmpty() && !quit) {

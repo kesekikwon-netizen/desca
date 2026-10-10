@@ -409,12 +409,13 @@ void MainWindow::onSectionDone(SectionOutput&& out, uint64_t gen, bool final, co
     bool newest = gen == secWorker_->latestGen();
     if (!err.isEmpty()) { section_->setBusy(!newest); showStatus(err); return; }
     last_ = std::move(out);
+    const bool wasPreview = section_->hasResult() && !lastFinal_;   // 미리보기가 떠 있던 자리에 최종이 오면 영상만 크로스페이드
     lastFinal_ = final;
     (final ? secCounters_.finalsShown : secCounters_.previewsShown)++;
     secCounters_.lastMs = last_.msCollect + last_.msCut + last_.msImage; secCounters_.lastTris = last_.stats.triangles;
     section_->setStyle(secStyle());
     QImage secIm = toQImage(last_.image.img);
-    section_->setResult(last_.result, secIm, last_.image.s0, last_.image.z1, last_.image.res, !fitNextResult_);
+    section_->setResult(last_.result, secIm, last_.image.s0, last_.image.z1, last_.image.res, !fitNextResult_, final && wasPreview);
     if (plan_) plan_->setSectionPlane(secIm, last_.result.line, last_.image.s0, last_.image.z1, last_.image.res);
     if (fitNextResult_ && final) fitNextResult_ = false;
     section_->setBusy(!(final && newest));

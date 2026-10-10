@@ -1,5 +1,6 @@
 // 떠 있는 안내 · 단추 묶음 구현(디자인 v5 §5). 모양은 theme.hpp QSS(#guideBand · #floatButtons)가 그린다.
 #include "guideband.hpp"
+#include "motion.hpp"
 #include "icons.hpp"
 #include "theme.hpp"
 
@@ -57,6 +58,17 @@ void GuideBand::setHint(const QString& text) {
 }
 
 // 마우스가 움직일 때마다 불려도 라벨을 다시 만들지 않는다(검토 I3). 라벨은 한 번 만들어 글만 바꾸고, 남는 것은 숨긴다
+void GuideBand::setVisible(bool v) {
+    if (v) {
+        const bool was = isVisible() && !motion::fadingNow(this);
+        QFrame::setVisible(true);
+        if (!was) { place(); motion::fadeIn(this, motion::kChipIn, 8); }
+        return;
+    }
+    if (isVisible() && !isHidden()) { motion::fadeOutAndHide(this, motion::kChipIn); return; }
+    QFrame::setVisible(false);
+}
+
 void GuideBand::setKeys(const QStringList& keys) {
     if (keys == keys_) return;
     keys_ = keys;

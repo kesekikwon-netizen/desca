@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T11 커서 5종 끝**(도구를 든 동안 · 손잡이 위에서만 십자 + 배지, 핫스폿 논리 px 를 실제 Windows 에서 확인) → 다음 T12(G9) 모션 상수 · 전환 `app/motion.hpp`. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T12 모션 상수 한 곳 · 탭 크로스페이드 · 안내 칩 · 최종 교체 크로스페이드 끝**(나머지 전환은 대기 「모션 2」) → 다음 T13(G10) 제거 · 숨김 25. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -366,6 +366,15 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** `--cursor-sheet` 실제 창 플랫폼 · offscreen 모두 `n=21 bad=0 RESULT ok` · 눈으로 본 PNG(`C:\dev\tmp\ui3\cursors-final.png` — 배지 · 흰 테 · 굵은 Shift · 고리) · 감사 합성 10조합 + 1920 ×1.25 · ×1.75 + 실제 모델 + **실제 Windows 창 플랫폼** 결과는 아래 줄 · 단위 시험 `~CoalescingWorker*` 통과 · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0.
 - **판정(Ruling):** ① 잘린 돌(H)과 윤곽(O) 커서는 그림 · 시험까지만 — 도구(H · O)는 T21 에서 켜므로 PlanView 에서는 아직 안 씀. ② 계산 중 · 꺼진 영역 클릭 안내는 커서를 안 바꿈(캔버스 규칙 그대로) — 이미 상태줄 진행 막대가 있음. ③ 커서 그림은 offscreen 에서 글꼴이 없어 「A」 가 네모로 보이지만 실제 창 플랫폼 시트에서 글자가 나옴을 확인. ④ 감사의 배율 판정은 화면 배율이 하나라 「구운 배율 = 위젯 배율」만 잼 — 여러 배율의 모양은 `--cursor-sheet` 가 잼.
 - **남은 문제:** 없음(T11 끝). 다음 T12(G9) 모션 상수 · 전환 `app/motion.hpp`.
+
+### 2026-10-11 · Claude Code(Sonnet 5.5) — T12 (G9): 모션 상수 한 곳 · 탭 크로스페이드 · 안내 칩 · 최종 교체 크로스페이드
+- **원칙(캔버스 「모션」 화판):** 움직임은 신호이지 장식이 아니다 — 시간 · 곡선은 한 곳, UI 전환 ≤ 300 ms, OutCubic 하나, 바운스 없음, OS 「애니메이션 끄기」면 전부 즉시.
+- **시험 먼저(RED):** `--ui-audit motion durations-from-one-place max-ms ui-entries easing splash tab-fade chip-fade crossfade off-immediate` — 상수 표가 모두 300 ms 이하(UI 항목)이고 여는 화면 길이가 같은 상수 · 곡선이 OutCubic 인지 + 움직임을 켠 채로 탭 전환 · 안내 칩 · 최종 교체가 겹침(오버레이 · 투명 효과)을 만들고 끝나면 사라지는지, 끈 채로는 겹침 없이 즉시인지. 부품 스텁에서 `tab-fade=0 chip-fade=0 crossfade=0  FAIL`.
+- **무엇을:** `app/motion.{hpp,cpp}`(상수 23개 + `table()` · `easing()` · `animationsOn()`(강제 끔 > 설정 `ui/animations` > Windows 애니메이션 효과 `SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION)`) · `FadeStack`(`QStackedWidget` 대신 — `setCurrentIndex`를 가려 직전 그림을 겹쳐 kTab 동안 투명) · `fadeIn` · `fadeOutAndHide`(QGraphicsOpacityEffect + QVariantAnimation, 끝나면 효과를 지움)). `GuideBand::setVisible` 이 나타날 때 8 px 내려오며 fade in · 사라질 때 fade out. `SectionView::setResult(… , crossfade)` — 같은 단면선의 미리보기 → 최종이면 옛 영상을 깔고 새 영상이 kCrossfade 동안 섞여 들어옴(`paintSectionDoc` 에 옛 영상 · 알파 인자 추가). main.cpp 여는 화면의 OS 애니메이션 판정을 `motion::animationsOn()` 으로 모음(복제 삭제) · `kOpeningSplashMs = motion::kSplash` · 자동화 옵션이 있으면 `setForcedOff(true)`.
+- **고친 버그(시험 중):** `fadeOutAndHide` 가 `w->hide()` 를 불러 `setVisible` 을 덮어 쓴 `GuideBand` 가 다시 `fadeOutAndHide` 를 부르는 무한 되부름(릴리스 꼬리 호출로 멈춤처럼 보임, 감사가 90 초 넘게 안 끝남 — 표지 출력으로 `pump` 안임을 찾음) → `QWidget::setVisible(false)` 를 직접 호출.
+- **확인:** 감사 합성 10조합 + 1920 ×1.25 · ×1.75 + 실제 모델 + 실제 Windows 창 `RESULT ok`(아래 줄) · 단위 시험 · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0.
+- **판정(Ruling):** ① 구현한 것은 캔버스 표의 세 가지(탭 · 안내 칩 · 최종 교체)이고 나머지 전환은 대기 목록 「모션 2」로 미룸 — 상수는 이미 한 곳에 있어 붙이기만 하면 됨 — 틀리면: 마우스 위 · 토글 · 확대 보간 등이 아직 즉시. ② 휠 확대의 기존 부드러운 보간(설정 `view/smoothZoom`)은 그대로 둠(캔버스는 「휠 · 끌기는 즉시」지만 사용자가 지금 쓰는 동작을 이번에 바꾸지 않음) — 틀리면 휠이 약간 늦게 따라옴. ③ 자동화는 늘 움직임 꺼짐 — 감사 · 캡처가 시각에 흔들리지 않게(움직임 시험만 임시로 켬).
+- **남은 문제:** 「모션 2」(위 ①)만 — 대기 목록에 넣음. 다음 T13(G10) 제거 · 숨김 25.
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

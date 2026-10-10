@@ -19,6 +19,7 @@ class GuideBand : public QFrame {
 public:
     /// host = 화면 캔버스를 품은 위젯(이 위젯의 자식으로 떠 있는다)
     explicit GuideBand(QWidget* host);
+    void setVisible(bool v) override;   // 나타날 때 위에서 8 px 내려오며 fade in(motion::kChipIn), 사라질 때 fade out 만 — 움직임이 꺼지면 즉시
     void setTool(const QString& iconName, const QString& title);   // 「단면선 긋기 › A 찾는 중」
     void setHint(const QString& text);                              // 「평면에서 시작점 A를 클릭하세요」
     void setKeys(const QStringList& keys);                          // {"Shift", "Esc"} → 키 캡

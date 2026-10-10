@@ -9,6 +9,8 @@
 #include <QWheelEvent>
 #include <cmath>
 #include "theme.hpp"
+#include "motion.hpp"
+#include <QVariantAnimation>
 #include "asec/sheet.hpp"
 
 using namespace asec;
@@ -21,9 +23,22 @@ SectionView::SectionView(QWidget* parent) : QWidget(parent) {
 
 void SectionView::clear() { has_ = false; img_ = QImage(); update(); }
 
-void SectionView::setResult(const SectionResult& r, const QImage& img, double s0, double z1, double res, bool keepView) {
+bool SectionView::crossfadeActive() const { return fade_ && fade_->state() == QAbstractAnimation::Running; }
+
+void SectionView::setResult(const SectionResult& r, const QImage& img, double s0, double z1, double res, bool keepView, bool crossfade) {
     bool first = !has_;
     double oldL = has_ ? SectionFrame(r_.line).L : 0;
+    const bool sameLine = has_ && r_.line.a.x == r.line.a.x && r_.line.a.y == r.line.a.y && r_.line.b.x == r.line.b.x && r_.line.b.y == r.line.b.y;
+    if (crossfade && sameLine && !img_.isNull() && !img.isNull() && motion::animationsOn()) {   // 같은 단면선의 미리보기 → 최종: 영상만 섞는다(잘린 선 · 숫자는 즉시 — 정확한 값이 늦게 보이면 안 된다)
+        prevImg_ = img_; prevS0_ = imgS0_; prevZ1_ = imgZ1_; prevRes_ = imgRes_; fadeAlpha_ = 0.0;
+        if (!fade_) {
+            fade_ = new QVariantAnimation(this);
+            fade_->setEasingCurve(motion::easing());
+            QObject::connect(fade_, &QVariantAnimation::valueChanged, this, [this](const QVariant& v) { fadeAlpha_ = v.toReal(); update(); });
+            QObject::connect(fade_, &QVariantAnimation::finished, this, [this] { prevImg_ = QImage(); fadeAlpha_ = 1.0; update(); });
+        }
+        fade_->stop(); fade_->setDuration(motion::kCrossfade); fade_->setStartValue(0.0); fade_->setEndValue(1.0); fade_->start();
+    } else if (fade_) { fade_->stop(); prevImg_ = QImage(); fadeAlpha_ = 1.0; }
     r_ = r; img_ = img; imgS0_ = s0; imgZ1_ = z1; imgRes_ = res; has_ = true;
     double L = SectionFrame(r.line).L;
     if (first || !keepView || std::fabs(L - oldL) > 0.02 * std::max(L, oldL)) fit();
@@ -86,7 +101,7 @@ LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport) {
 
 void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const SectionXf& xf, double ui, const QImage& img, bool forExport,
                      const QString& footer, const SectionImgGeo* geo, bool busy_, bool titleRow, double contentDxPx, double contentDyPx,
-                     double viewZoom, double viewPanX, double viewPanY, SheetPaintProbe* probe) {
+                     double viewZoom, double viewPanX, double viewPanY, SheetPaintProbe* probe, const QImage* prevImg, const SectionImgGeo* prevGeo, double newAlpha) {
     const SectionResult& r_ = d.r;
     const SectionStyle& st_ = d.st;
     const SectionImgGeo ig = geo ? *geo : SectionImgGeo{d.imgS0, d.imgZ1, d.imgRes};
@@ -159,7 +174,11 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     if (st_.showImage && !img.isNull()) {
         QRectF tr(X(ig.s0), Y(ig.z1Local + oz), img.width() * ig.res * xf.ppm * viewZoom, img.height() * ig.res * ppmZ * viewZoom);
         if (probe) probe->image = tr;
-        p.setOpacity(st_.imageOpacity);
+        if (prevImg && !prevImg->isNull() && prevGeo && newAlpha < 1.0) {   // 크로스페이드: 옛 영상을 먼저 깔고 그 위에 새 영상이 newAlpha 로 섞여 들어온다
+            QRectF pt(X(prevGeo->s0), Y(prevGeo->z1Local + oz), prevImg->width() * prevGeo->res * xf.ppm * viewZoom, prevImg->height() * prevGeo->res * ppmZ * viewZoom);
+            p.setOpacity(st_.imageOpacity); p.drawImage(pt, *prevImg);
+        }
+        p.setOpacity(st_.imageOpacity * std::clamp(newAlpha, 0.0, 1.0));
         p.drawImage(tr, img);
         p.setOpacity(1.0);
     }
@@ -378,7 +397,8 @@ void SectionView::paintEvent(QPaintEvent*) {
         return;
     }
     SectionDoc d; d.r = r_; d.st = st_; d.imgS0 = imgS0_; d.imgZ1 = imgZ1_; d.imgRes = imgRes_;
-    paintSectionDoc(p, d, rect(), xf_, 1.0, img_, false, QString(), nullptr, busy_, false);
+    const SectionImgGeo prevGeo{prevS0_, prevZ1_, prevRes_};
+    paintSectionDoc(p, d, rect(), xf_, 1.0, img_, false, QString(), nullptr, busy_, false, 0, 0, 1, 0, 0, nullptr, prevImg_.isNull() ? nullptr : &prevImg_, prevImg_.isNull() ? nullptr : &prevGeo, fadeAlpha_);
     if (drawingHint_) {   // 그리는 중(화판 2): 옛 단면은 그대로 두고 위에 안내 띠만 — 다시 긋는 동안 비교하려면 보여야 한다(판정)
         const QString t = QStringLiteral("A′를 찍으면 단면이 여기에 나옵니다");
         p.setFont(theme::uiFont(12));

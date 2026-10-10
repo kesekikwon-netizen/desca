@@ -50,7 +50,7 @@ struct SheetPaintProbe {
 void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const SectionXf& xf, double ui, const QImage& img, bool forExport,
                      const QString& footer, const SectionImgGeo* geo = nullptr, bool busy = false, bool titleRow = true,
                      double contentDxPx = 0, double contentDyPx = 0, double viewZoom = 1, double viewPanX = 0, double viewPanY = 0,
-                     SheetPaintProbe* probe = nullptr);
+                     SheetPaintProbe* probe = nullptr, const QImage* prevImg = nullptr, const SectionImgGeo* prevGeo = nullptr, double newAlpha = 1.0);   // prevImg = 크로스페이드 중 아직 보이는 옛 영상(그 위에 새 영상이 newAlpha 로 섞여 들어온다)
 /// 레벨선 간격(화면 4 px / 인쇄 0.5 mm 보다 촘촘하면 솎음). ui = DPI/96
 asec::LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport);
 /// 내보내기용 크기·변환(여백 포함, 영상 픽셀 1:1 정렬)
@@ -59,7 +59,8 @@ QSize sectionExportLayout(const SectionDoc& d, double ppm, double ui, SectionXf&
 class SectionView : public QWidget {
 public:
     explicit SectionView(QWidget* parent = nullptr);
-    void setResult(const asec::SectionResult& r, const QImage& img, double imgS0, double imgZ1Local, double imgRes, bool keepView);
+    void setResult(const asec::SectionResult& r, const QImage& img, double imgS0, double imgZ1Local, double imgRes, bool keepView, bool crossfade = false);   // crossfade = 미리보기 → 최종: 영상만 motion::kCrossfade 동안 섞는다(잘린 선은 즉시)
+    bool crossfadeActive() const;
     void clear();
     void setBusy(bool b) { busy_ = b; update(); }
     void setDrawingHint(bool on) { drawingHint_ = on; update(); }   // 그리는 중 「A′를 찍으면 단면이 여기에 나옵니다」 띠(화판 2)
@@ -115,6 +116,8 @@ private:
     SectionStyle st_;
     Xf xf_;
     double zoomPending_ = 0;
+    QImage prevImg_; double prevS0_ = 0, prevZ1_ = 0, prevRes_ = 0.01, fadeAlpha_ = 1.0;   // 미리보기 → 최종 크로스페이드(영상만)
+    class QVariantAnimation* fade_ = nullptr;
     QPointF zoomAnchor_;
     class QTimer* zoomTimer_ = nullptr;
     void applyZoomAt(const QPointF& at, double factor);

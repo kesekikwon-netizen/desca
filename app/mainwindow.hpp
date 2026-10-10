@@ -10,6 +10,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include "motion.hpp"
 #include "asec/engine.hpp"
 #include "asec/pointcloud.hpp"
 #include "asec/schedule.hpp"
@@ -28,6 +29,7 @@ class QDoubleSpinBox;
 class QSlider;
 class QTabBar;
 class QStackedWidget;
+namespace motion { class FadeStack; }
 class QToolButton;
 class QSplitter;
 class QCheckBox;
@@ -94,7 +96,7 @@ public:
     ~MainWindow() override;
 
     // ---- 작업(동기). 대화상자는 작업 스레드에서, 명령줄 자동화는 GUI 스레드에서 직접 호출 ----
-    static constexpr int kOpeningSplashMs = 1000;   // 여는 화면 전체 길이(ms) — 한 곳. OpeningSplash::run · --splash-live · --splash-shot 판정이 같은 값을 쓴다 (T3: 1000)
+    static constexpr int kOpeningSplashMs = motion::kSplash;   // 여는 화면 전체 길이(ms) — 한 곳. OpeningSplash::run · --splash-live · --splash-shot 판정이 같은 값을 쓴다 (T3: 1000)
     static QImage renderOpeningSplash(const QSize& size, double t = 1.0);   // t 0~1: 선 그림이 그려지는 정도(1 = 완성)
     static void paintOpeningSplash(QPainter& p, const QSize& size, double t);   // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs, 1 초)
     static bool loadScene(const QString& path, OpenedScene& out, QString* err, const std::function<void(double)>& progress = {});
@@ -197,7 +199,7 @@ private:
     QWidget* docTabsRow_ = nullptr;
     QLabel* docTabCorner_ = nullptr;
     int pendingSection_ = -1;           // 홈 썸네일로 연 뒤 고를 단면 번호(restoreModelState 가 씀)
-    QStackedWidget* body_ = nullptr;      // 0 시작 화면, 1 작업, 조판은 별도 위젯
+    motion::FadeStack* body_ = nullptr;      // 0 시작 화면, 1 작업, 조판은 별도 위젯 — 탭 전환은 크로스페이드(motion::kTab)
     QTabBar* viewTabs_ = nullptr;
     QWidget* sheetHost_ = nullptr;
     std::function<void()> embeddedSave_;

@@ -1810,7 +1810,7 @@ MainWindow::MainWindow() {
         th->addWidget(viewTabs_, 0, Qt::AlignBottom); th->addStretch(1);
         docTabCorner_ = new QLabel; docTabCorner_->setObjectName("docTabCorner"); th->addWidget(docTabCorner_, 0, Qt::AlignVCenter); }
     v->addWidget(docTabsRow_);
-    body_ = new QStackedWidget;
+    body_ = new motion::FadeStack;
     startPage_ = buildStartPage();
     body_->addWidget(startPage_);
     workArea_ = new QWidget; workArea_->setObjectName("workArea");
@@ -1897,7 +1897,7 @@ MainWindow::MainWindow() {
         action("draw")->setChecked(on);
         if (on) updateCtx(0, SectionLine{});
         guide_->setVisible(on); undoBtns_->setVisible(on);
-        if (on) { guide_->place(); undoBtns_->place(); }
+        if (on) { guide_->place(); undoBtns_->place(); motion::fadeIn(undoBtns_, motion::kUndoIn); }
         action("esc")->setEnabled(on);
         section_->setDrawingHint(on);   // 단면 화면 위 「A′를 찍으면 단면이 여기에 나옵니다」(화판 2)
         updateEnabled();                // 그리는 동안 도면 · 자료 내보내기 꺼짐(화판 2 · 검토 UI 5)
@@ -2318,6 +2318,47 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     L << QStringLiteral("ui-audit ribbon-tidy points-chips=%1 xyz-las-chips=%2 keys-in-view=%3 quit-ctrl-q=%4 about-in-keys=%5%6").arg(pointsChips).arg(xyzLasChips).arg(keysInView).arg(quitKey ? 1 : 0).arg(aboutLink).arg(tidyOk ? QString() : QStringLiteral("  FAIL"));
     ok &= tidyOk;
 
+    // 4j) 움직임(T12 · G9): 시간은 motion.hpp 한 곳의 표 · 곡선 OutCubic · UI 전환 300 ms 이하 · 탭 전환 · 안내 칩 · 최종 교체 크로스페이드는 켜졌을 때만 · 꺼지면(자동화 · 설정 · OS) 즉시
+    {
+        const auto& tb = motion::table();
+        int maxUi = 0, nUi = 0; for (const auto& e : tb) if (e.ui) { maxUi = std::max(maxUi, e.ms); ++nUi; }
+        const bool tableOk = !tb.isEmpty() && maxUi <= 300 && maxUi > 0 && MainWindow::kOpeningSplashMs == motion::kSplash && motion::easing().type() == QEasingCurve::OutCubic && motion::kSplash == 1000;
+        QSettings st; const QVariant keepAnim = st.value(QStringLiteral("ui/animations"));
+        motion::setForcedOff(false); st.setValue(QStringLiteral("ui/animations"), true);
+        const bool onNow = motion::animationsOn();
+        bool tabFade = false, chipFade = false, xFade = false, offClean = false;
+        if (body_ && body_->count() >= 2) {
+            const int cur = body_->currentIndex();
+            body_->setCurrentIndex(cur == 0 ? 1 : 0);
+            tabFade = body_->fading();
+            pump(motion::kTab + 150);
+            tabFade = tabFade && !body_->fading();
+            body_->setCurrentIndex(cur); pump(motion::kTab + 150);
+        }
+        if (guide_) {
+            const bool wasVis = guide_->isVisible();
+            guide_->hide(); guide_->setVisible(true);
+            chipFade = motion::fadingNow(guide_);
+            pump(motion::kChipIn + 150);
+            chipFade = chipFade && !motion::fadingNow(guide_);
+            if (!wasVis) { guide_->setVisible(false); pump(motion::kChipIn + 150); }
+        }
+        if (src_ && section_->hasResult()) {
+            const SectionDoc d0 = section_->doc();
+            section_->setResult(d0.r, d0.img, d0.imgS0, d0.imgZ1, d0.imgRes, true, true);
+            xFade = section_->crossfadeActive();
+            pump(motion::kCrossfade + 150);
+            xFade = xFade && !section_->crossfadeActive();
+        } else xFade = true;   // 결과가 없으면 판정할 것이 없다
+        motion::setForcedOff(true);   // 꺼짐 = 즉시: 같은 전환이 겹침 없이 끝나야 한다
+        if (body_ && body_->count() >= 2) { const int cur = body_->currentIndex(); body_->setCurrentIndex(cur == 0 ? 1 : 0); offClean = !body_->fading() && motion::ms(motion::kTab) == 0; body_->setCurrentIndex(cur); }
+        if (keepAnim.isValid()) st.setValue(QStringLiteral("ui/animations"), keepAnim); else st.remove(QStringLiteral("ui/animations"));
+        const bool motionOk = tableOk && onNow && tabFade && chipFade && xFade && offClean;
+        L << QStringLiteral("ui-audit motion durations-from-one-place=%1 max-ms=%2 ui-entries=%3 easing=OutCubic splash=%4 tab-fade=%5 chip-fade=%6 crossfade=%7 off-immediate=%8%9")
+                 .arg(tableOk ? 1 : 0).arg(maxUi).arg(nUi).arg(motion::kSplash).arg(tabFade ? 1 : 0).arg(chipFade ? 1 : 0).arg(xFade ? 1 : 0).arg(offClean ? 1 : 0).arg(motionOk ? QString() : QStringLiteral("  FAIL"));
+        ok &= motionOk;
+    }
+
     // 4h) 거리 눈금(T10 · 사용자 요청 「입면 토층도 그려야 할 때가 있다 — 체크 표시를 볼 수 있게」): 입면 위에 세로 눈금(1 m · 5 m 굵게)을 그리고, D 키 · 단면 머리 아이콘 · 「그릴 것 ▾」 메뉴로 켜고 끈다(기본 켬)
     {
         const auto ti = act_.find(QStringLiteral("ticks"));
@@ -2347,7 +2388,8 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         for (const QString& k : table) if (!actual.contains(k)) extra << k;
         missing.sort(); extra.sort();
         std::unique_ptr<QDialog> kd(keysDialog());
-        kd->show(); pump(100);
+        kd->show();
+        pump(100);
         auto* kt = kd->findChild<QTableWidget*>(QStringLiteral("keysTable"));
         double contrast = 0; bool twoCol = kt && kt->columnCount() == 4;
         if (kt) {
