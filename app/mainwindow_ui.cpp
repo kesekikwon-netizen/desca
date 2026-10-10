@@ -994,12 +994,12 @@ QWidget* MainWindow::buildCoordBar() {
     info_ = new QLabel; info_->setObjectName("statusInfo"); info_->setVisible(false);
     h->addWidget(info_);
     progress_ = new QProgressBar; progress_->setTextVisible(false); progress_->setRange(0, 1000); progress_->setVisible(false); progress_->setFixedWidth(120); h->addWidget(progress_);
-    // 배지 둘: 「수평 EPSG:5186 ▾」(누르면 좌표계 상세) · 「높이 KVD1964 ▾」(누르면 높이 기준 지정). 흙색 테, 확인 전이면 노란 테 ▲
+    // 배지 둘: 「수평 EPSG:5187 · 동부원점(GRS80)」(표시만) · 「높이 KVD1964 ▾」(누르면 높이 기준 지정 — T8 에서 지움). 흙색 테, 확인 전이면 노란 테 ▲
     cellStart();
     srsLabel_ = new QToolButton; srsLabel_->setObjectName("statusBadge"); srsLabel_->setFocusPolicy(Qt::TabFocus);
-    srsLabel_->setText(QStringLiteral("수평 — ▾")); srsLabel_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon); srsLabel_->setProperty("state", "none");
+    srsLabel_->setFocusPolicy(Qt::NoFocus);   // 표시만(T4 · 사용자 결정: 좌표계는 모델마다 자동) — 누르는 단추가 아니라 Tab 도 서지 않는다. 설명은 툴팁 · 알림 띠 「자세히」
+    srsLabel_->setText(QStringLiteral("수평 —")); srsLabel_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon); srsLabel_->setProperty("state", "none"); srsLabel_->setProperty("static", true);
     srsLabel_->setIcon(kerf::icon(QStringLiteral("map"), 14, theme::ClayText)); srsLabel_->setIconSize(QSize(14, 14));
-    QObject::connect(srsLabel_, &QToolButton::clicked, this, [this] { dlgSrsDetails(); });
     h->addWidget(srsLabel_);
     h->addSpacing(8);
     heightBadge2_ = new QToolButton; heightBadge2_->setObjectName("statusBadge"); heightBadge2_->setFocusPolicy(Qt::TabFocus);
@@ -2392,11 +2392,13 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     for (auto* b : findChildren<QToolButton*>(QStringLiteral("statusBadge"))) if (b->isVisibleTo(this)) ++badges;
     L << QStringLiteral("ui-audit scale-controls=%1 status-badges=%2%3").arg(scales).arg(badges).arg(scales == 1 && badges == 2 ? QString() : QStringLiteral("  FAIL"));
     ok &= scales == 1 && badges == 2;
-    // 4b) 배지는 스펙 §6: 높이 24 · 둘 다 「… ▾」(검토 UI 7)
-    const bool badgeOk = srsLabel_ && heightBadge2_ && srsLabel_->height() == 24 && heightBadge2_->height() == 24
-                      && srsLabel_->text().endsWith(QChar(0x25BE)) && heightBadge2_->text().endsWith(QChar(0x25BE));
-    L << QStringLiteral("ui-audit status-badge height=%1,%2 caret=%3,%4%5").arg(srsLabel_ ? srsLabel_->height() : -1).arg(heightBadge2_ ? heightBadge2_->height() : -1)
-             .arg(srsLabel_ && srsLabel_->text().endsWith(QChar(0x25BE)) ? 1 : 0).arg(heightBadge2_ && heightBadge2_->text().endsWith(QChar(0x25BE)) ? 1 : 0).arg(badgeOk ? QString() : QStringLiteral("  FAIL"));
+    // 4b) 배지: 높이 24. 수평 배지는 표시만(누르는 것 아님 — 좌표계는 모델마다 자동 판별, 사용자 결정 2026-10-10): ▾ 없음 · 글은 「수평 EPSG:5187 · 동부원점(GRS80)」 한 줄. 높이 배지는 T8 까지 「… ▾」
+    const QString wantSrs = (src_ && srsReport_.desc.horizontalEpsg && !srsReport_.desc.horizontalShortKo().empty()) ? QStringLiteral("수평 ") + qs8(srsReport_.desc.horizontalShortKo()) : QString();
+    const bool srsStatic = srsLabel_ && srsLabel_->property("static").toBool() && !srsLabel_->text().endsWith(QChar(0x25BE)) && (wantSrs.isEmpty() || srsLabel_->text() == wantSrs);
+    const bool badgeOk = srsLabel_ && heightBadge2_ && srsLabel_->height() == 24 && heightBadge2_->height() == 24 && srsStatic && heightBadge2_->text().endsWith(QChar(0x25BE));
+    L << QStringLiteral("ui-audit status-badge height=%1,%2 caret=%3,%4 srs-static=%5 srs-text=%6%7").arg(srsLabel_ ? srsLabel_->height() : -1).arg(heightBadge2_ ? heightBadge2_->height() : -1)
+             .arg(srsLabel_ && srsLabel_->text().endsWith(QChar(0x25BE)) ? 1 : 0).arg(heightBadge2_ && heightBadge2_->text().endsWith(QChar(0x25BE)) ? 1 : 0).arg(srsStatic ? 1 : 0)
+             .arg(srsLabel_ ? srsLabel_->text() : QString()).arg(badgeOk ? QString() : QStringLiteral("  FAIL"));
     ok &= badgeOk;
 
     // 5) 그리는 동안 상태줄 「다음:」 문장이 없는가

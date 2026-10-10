@@ -164,6 +164,9 @@ QWidget#viewTitle QToolButton { padding: 2px; border-radius: 4px; }
 
 QToolButton#statusBadge, QToolButton#heightBadge { min-height: 22px; max-height: 22px; background: #FFFFFF; border: 1px solid #B5573A; border-radius: 8px; padding: 0 8px; font-size: 12px; font-weight: 700; color: #9C4A2F; }
 QToolButton#statusBadge:hover, QToolButton#heightBadge:hover { background: #F5F4ED; }
+QToolButton#statusBadge[static="true"]:hover { background: #FFFFFF; }
+QToolButton#statusBadge[static="true"][state="error"]:hover { background: #F3DEDA; }
+QToolButton#statusBadge[static="true"][state="none"]:hover { background: #F0EEE6; }
 QToolButton#statusBadge[state="warn"], QToolButton#heightBadge[state="warn"] { border-color: #7A5A00; color: #7A5A00; }
 QToolButton#statusBadge[state="error"], QToolButton#heightBadge[state="error"] { background: #F3DEDA; border-color: #A33B3B; color: #A33B3B; }
 QToolButton#statusBadge[state="none"], QToolButton#heightBadge[state="none"] { background: #F0EEE6; border-color: #DEDCD1; color: #73726C; font-weight: 400; }

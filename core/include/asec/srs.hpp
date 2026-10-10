@@ -39,6 +39,7 @@ struct SrsDesc {
     int verticalEpsg = 0;            // 수직 좌표계 EPSG(복합일 때). 타원체고는 0
     VertKind vertKind = VertKind::Unspecified;
     std::string horizontalName;      // 예: "KGD2002 / Central Belt 2010"
+    int horizontalNameEpsg = 0;      // 이름으로 먼저 찾은 EPSG(투영 매개변수가 다른 번호와 같아 horizontalEpsg 가 그쪽으로 바뀐 때만 — 툴팁에 「이름은 …」)
     std::string verticalName;        // 예: "KVD1964 height" / "ellipsoidal height (h)"
     std::string verticalDatum;       // VDATUM/VERT_DATUM 이름(예: "EGM96 geoid")
     std::string geoidModel;          // WKT2 GEOIDMODEL / WKT1 EXTENSION PROJ4_GRIDS / PARAMETERFILE(예: "egm96_15.gtx")
@@ -58,6 +59,8 @@ struct SrsDesc {
     bool known() const { return kind != SrsKind::None && kind != SrsKind::Unknown; }
     /// UI 한 줄: "수평 EPSG:5186 / 높이 타원체고(GRS80)"
     std::string labelKo() const;
+    /// 상태줄 · 도면 글용 수평 한 줄: "EPSG:5187 · 동부원점(GRS80)"(원점 이름 · 타원체는 내장 표에 있을 때만, 없으면 "EPSG:N", EPSG 를 모르면 "")
+    std::string horizontalShortKo() const;
     /// 수직 기준만: "타원체고(GRS80)" / "KVD1964 height (EPSG:5193)" / "SRS 에 명시 안 됨"
     std::string verticalKo() const;
     /// 파일용 짧은 ASCII 표기: "EPSG:5186 h=ellipsoidal(GRS 1980)" / "EPSG:5186+5193" / "ENU:37.5,127" / "unknown SRS"

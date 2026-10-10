@@ -336,7 +336,7 @@ SheetParams MainWindow::defaultSheetParams() const {
     if (current_ >= 0 && current_ < int(sections_.size()) && !sections_[size_t(current_)].note.empty())
         sp.title += QStringLiteral(" · ") + qs8(sections_[size_t(current_)].note);
     const SrsDesc& d = srsReport_.desc;
-    sp.srsLabel = d.horizontalEpsg ? QStringLiteral("수평 EPSG:%1").arg(d.horizontalEpsg) : (d.known() ? qs8(d.shortAscii()) : QStringLiteral("좌표계 없음"));
+    sp.srsLabel = d.horizontalEpsg ? QStringLiteral("수평 ") + qs8(d.horizontalShortKo()) : (d.known() ? qs8(d.shortAscii()) : QStringLiteral("좌표계 없음"));
     const VDatumInfo& vi = vdatumInfo(d.vdatum);
     int ve = d.verticalEpsg ? d.verticalEpsg : vi.epsg;
     const bool named = d.vdatum == VDatum::EGM96 || d.vdatum == VDatum::EGM2008 || d.vdatum == VDatum::KVD1964 || d.vdatum == VDatum::KNGeoid;

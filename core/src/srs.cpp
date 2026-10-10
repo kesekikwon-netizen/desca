@@ -352,7 +352,12 @@ void readHorizontal(const WktNode& n, SrsDesc& d) {
             if (r && findHoriz(r)) { d.horizontalEpsg = r; d.horizontalHow = "WKT REMARK"; e = r; }
         }
         if (const WktNode* rem2 = n.child("REMARK")) if (lower(rem2->str(0)).find("promoted to 3d") != std::string::npos) d.promotedTo3D = true;
-        if (!e) if (auto* h = findHorizByName(d.horizontalName)) { d.horizontalEpsg = h->epsg; d.horizontalHow = "이름"; e = h->epsg; }
+        if (!e) if (auto* h = findHorizByName(d.horizontalName)) {
+            d.horizontalEpsg = h->epsg; d.horizontalHow = "이름"; e = h->epsg;
+            // 이름은 East Belt(5183)인데 투영 값은 East Belt 2010(5187)인 모델이 실제로 있다(Production_1). 값이 좌표를 정하므로 이름과 값이 다르면 값이 이긴다(사용자 결정 2026-10-10 Q0)
+            if (d.hasTm && !tmMatches(d, *h))
+                for (auto& k : kHoriz) if (tmMatches(d, k)) { d.horizontalNameEpsg = h->epsg; d.horizontalEpsg = k.epsg; d.horizontalHow = "매개변수"; e = k.epsg; break; }
+        }
         if (!e && d.hasTm) for (auto& h : kHoriz) if (tmMatches(d, h)) { d.horizontalEpsg = h.epsg; d.horizontalHow = "매개변수"; e = h.epsg; break; }
         if (e && d.hasTm) {
             if (auto* h = findHoriz(e)) if (!tmMatches(d, *h))
@@ -570,6 +575,33 @@ std::string SrsDesc::labelKo() const {
     return h + " / 높이 " + verticalKo();
 }
 
+// 상태줄 · 도면 글용 수평 한 줄. 원점 이름은 내장 표(kHoriz)에 있는 번호만 — 이름으로 번호를 추측하지 않는다
+static const char* beltNameKo(int epsg) {
+    switch (epsg) {
+    case 5180: case 5185: return "서부원점";
+    case 5181: case 5186: return "중부원점";
+    case 5182: return "제주원점";
+    case 5183: case 5187: return "동부원점";
+    case 5184: case 5188: return "동해원점";
+    case 5179: return "UTM-K";
+    case 32651: return "UTM 51N";
+    case 32652: return "UTM 52N";
+    default: return "";
+    }
+}
+
+std::string SrsDesc::horizontalShortKo() const {
+    if (!horizontalEpsg) return std::string();
+    std::string r = "EPSG:" + std::to_string(horizontalEpsg);
+    const HorizEntry* h = findHoriz(horizontalEpsg);
+    const char* belt = beltNameKo(horizontalEpsg);
+    if (!h || !*belt) return r;
+    const char* ell = std::fabs(h->invF - GRS80_INVF) < 1e-6 ? "GRS80" : std::fabs(h->invF - WGS84_INVF) < 1e-6 ? "WGS84" : "";
+    r += std::string(" · ") + belt;
+    if (*ell) r += std::string("(") + ell + ")";
+    return r;
+}
+
 std::string SrsDesc::shortAscii() const {
     char b[160];
     switch (kind) {
@@ -590,6 +622,9 @@ std::string SrsDesc::tooltipKo() const {
     std::string t;
     if (!horizontalName.empty()) t += "수평 좌표계: " + horizontalName + "\n";
     if (horizontalEpsg) t += "EPSG:" + std::to_string(horizontalEpsg) + " (판별 근거: " + horizontalHow + ")\n";
+    if (horizontalNameEpsg && horizontalNameEpsg != horizontalEpsg)
+        t += "이름은 EPSG:" + std::to_string(horizontalNameEpsg) + "(" + horizontalName + ")이지만 투영 값(가산 동 " + std::to_string(int(std::lround(tmFE))) + " · 북 " + std::to_string(int(std::lround(tmFN))) +
+             ", 중앙자오선 " + std::to_string(int(std::lround(tmLon0))) + "°)이 EPSG:" + std::to_string(horizontalEpsg) + " 와 같아 값을 따랐습니다. 좌표는 값 그대로 계산합니다.\n";
     t += "높이 기준: " + verticalKo() + "\n";
     if (!verticalDatum.empty()) t += "수직 측지 기준: " + verticalDatum + "\n";
     if (!geoidModel.empty()) t += "지오이드 모델/격자: " + geoidModel + "\n";

@@ -229,3 +229,50 @@ TEST_CASE("SRS: Bentley GCS WKT1(3SM) — Origin Latitude·Scale Reduction 이�
     SrsInfo s; s.srs = kBentley3smWkt;
     CHECK(s.epsg() == 5186);
 }
+
+// ---- T4(G1): 이름 vs 투영 매개변수(사용자 결정 2026-10-10 Q0 — 모델마다 5186 · 5187 이 섞여 있고 매개변수가 이름을 이긴다) ----
+// Production_1(iTwin Capture, 3SM)의 SRS 원문 — 좌표계 정의만(좌표 없음). 이름은 「East Belt」(5183)인데 가산 북 600000 = East Belt 2010(5187). 이름 끝 공백 · Scale Reduction · Origin Latitude 이름도 실제 그대로
+static const char* kEastBeltNameParams5187 = R"WKT(COMPD_CS["Korea 2000 / East Belt ",PROJCS["Korea 2000 / East Belt ",GEOGCS["Korean2000.LL",DATUM["Korean2000",SPHEROID["GRS1980",6378137.000,298.25722210],TOWGS84[0.0000,0.0000,0.0000,-0.000000,-0.000000,-0.000000,0.00000000]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]],PROJECTION["Transverse Mercator"],PARAMETER["False Easting",200000.000],PARAMETER["False Northing",600000.000],PARAMETER["Scale Reduction",1.000000000000],PARAMETER["Central Meridian",129.00000000000000],PARAMETER["Origin Latitude",38.00000000000000],UNIT["Meter",1.00000000000000]],VERT_CS["Ellipsoid Height",VERT_DATUM["Ellipsoid",2002],UNIT["Meter",1.000000]]])WKT";
+
+TEST_CASE("SRS: 이름은 East Belt(5183) · 매개변수는 5187 → 매개변수가 이긴다 · 경고 없음 · 좌표 불변") {
+    SrsDesc d = describeSrs(kEastBeltNameParams5187);
+    CHECK(d.horizontalEpsg == 5187);
+    CHECK(d.horizontalHow == "매개변수");
+    CHECK(d.horizontalNameEpsg == 5183);
+    CHECK(d.warnings.empty());                       // 이름과 매개변수의 차이는 경고가 아니라 툴팁 · 판별 근거로
+    CHECK(d.tmFE == 200000); CHECK(d.tmFN == 600000); CHECK(d.tmLon0 == 129); CHECK(d.tmLat0 == 38); CHECK(d.tmK0 == 1);
+    CHECK(d.vertKind == VertKind::Ellipsoidal);
+    const std::string tip = d.tooltipKo();
+    CHECK(tip.find("5183") != std::string::npos);    // 「이름은 …(5183)」
+    CHECK(tip.find("5187") != std::string::npos);
+    SrsInfo s; s.srs = kEastBeltNameParams5187;
+    CHECK(s.epsg() == 5187);                          // GeoTIFF · DXF · LAS 가 읽는 번호
+    // 좌표 불변: 원점(가산 동 · 북) 점은 위도 38° · 경도 129° — 이름표가 바뀌어도 TM 계산은 WKT 매개변수 그대로
+    s.origin = Vec3(200000, 600000, 0); s.hasOrigin = true;
+    Box3 lb; lb.add(Vec3(-1, -1, 0)); lb.add(Vec3(1, 1, 1));
+    SrsReport r = analyzeSrs(s, lb);
+    REQUIRE(r.hasLatLon);
+    CHECK(r.lat == Approx(38.0).margin(1e-6)); CHECK(r.lon == Approx(129.0).margin(1e-6));
+}
+
+TEST_CASE("SRS: 이름이 5187 인데 매개변수는 5183(가산 북 500000) → 5183 · 이름과 매개변수가 같으면 이름 그대로 · 어느 표와도 안 맞으면 이름 번호 + 경고") {
+    const std::string to5183 = replaceAll(kEsri_5187, "PARAMETER[\"False_Northing\",600000.0]", "PARAMETER[\"False_Northing\",500000.0]");
+    REQUIRE(to5183 != std::string(kEsri_5187));
+    SrsDesc a = describeSrs(to5183);
+    CHECK(a.horizontalEpsg == 5183); CHECK(a.horizontalHow == "매개변수"); CHECK(a.horizontalNameEpsg == 5187); CHECK(a.warnings.empty());
+    SrsDesc same = describeSrs(kEsri_5187);
+    CHECK(same.horizontalEpsg == 5187); CHECK(same.horizontalHow == "이름"); CHECK(same.horizontalNameEpsg == 0); CHECK(same.warnings.empty());
+    const std::string odd = replaceAll(kEastBeltNameParams5187, "PARAMETER[\"False Northing\",600000.000]", "PARAMETER[\"False Northing\",123456.000]");
+    REQUIRE(odd != std::string(kEastBeltNameParams5187));
+    SrsDesc o = describeSrs(odd);
+    CHECK(o.horizontalEpsg == 5183); CHECK(o.horizontalHow == "이름"); CHECK(o.warnings.size() == 1);   // 표에 없는 매개변수 → 지금처럼 이름 번호 + 불일치 경고
+}
+
+TEST_CASE("SRS: 상태줄 · 도면용 수평 한 줄 — 원점 이름 · 타원체") {
+    CHECK(describeSrs(kEastBeltNameParams5187).horizontalShortKo() == "EPSG:5187 · 동부원점(GRS80)");
+    CHECK(describeSrs(kRealWkt).horizontalShortKo() == "EPSG:5186 · 중부원점(GRS80)");
+    CHECK(describeSrs("EPSG:5185").horizontalShortKo() == "EPSG:5185 · 서부원점(GRS80)");
+    CHECK(describeSrs("EPSG:32652").horizontalShortKo() == "EPSG:32652 · UTM 52N(WGS84)");
+    CHECK(describeSrs("EPSG:5174").horizontalShortKo() == "EPSG:5174");   // 내장 TM 표에 없는 번호는 번호만
+    CHECK(describeSrs("").horizontalShortKo().empty());
+}

@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T3 여는 화면 「T를 판다」 1.0 s 끝** → G0(이름 · 아이콘 · 여는 화면) 전부 끝. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 다음: T4(G1) 좌표계 5183 → 5187(advisor 먼저). 검토는 전부 끝난 뒤 한 번(사용자 지시) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T4 좌표계(투영 값이 이름을 이김 · 상태줄 배지 표시만) 끝** → 다음 T5(G2) 좌표 입력 · 단면 찾기 · 영어 병기 삭제. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시). 실제 모델 감사에 `home-clipped` 한 가지가 남음(R6b) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -279,7 +279,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **시험 먼저(RED):** `--ui-audit` 새 줄 `app-name title=… display=… home=…` — 창 제목 · 표시 이름 · 홈 이름 라벨이 `Trench` 이고 `Kerf` 가 없어야 ok. 변경 전 합성 모델 `title="Synthetic.3mx — Kerf 1.2.1" … FAIL`(EXIT 9).
 - **무엇을:** 창 제목 3곳 · 표시 이름(`window-title … appended=0` 규칙 유지) · 정보 창 · 홈 이름 라벨 · 단면 PNG 바닥글 · SVG/PDF 제작자 · `app.rc`(회사 · 설명 · 제품 이름) · `읽어보기.txt` · README 머리 · 내보낸 파일 안의 설명 글(GeoTIFF citation · 단면 GeoTIFF 설명 · LAS 생성 소프트웨어 · 기본 citation = `Trench …`). 형식 식별자(`ExcavSection.sections` 단면 목록 · `ExcavSection section image`)는 파일 호환 때문에 그대로.
 - **같이 고친 것(회귀):** 홈 이름 「Trench」가 「Kerf」보다 길어 1280 에서 이어서 작업 카드 칸이 줄임표 → `home-clipped` FAIL(합성 전부). 원인 = 부제 라벨의 QSS `border-left`+`padding-left` 가 sizeHint 에 여백을 더해(offscreen 에서 이름 240 px) 왼쪽 칸이 420 → 459. 해결 = 가름선을 라벨 테두리가 아니라 별도 `QFrame#homeSep`(1×24)으로, 부제를 `elideLab`(가로 Ignored · 줄임표 + 툴팁)로.
-- **확인:** 합성 모델 감사 10조합(1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2) 모두 `RESULT ok` · `app-name` 통과 · 빠른 시험 51325 통과 · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0. 실제 모델(Production_1.3sm)은 `app-name` 통과, `RESULT fail` 은 기존 두 가지(좌표계 5183 알림 띠 · 긴 경로 칸 줄임) — T4(G1) 에서 없어짐. 실제 화면 캡처 `C:\dev\tmp\elev-bug\t1-shots\`(Batang 에서 「Trench | 발굴 평·단면」 정상).
+- **확인:** 합성 모델 감사 10조합(1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2) 모두 `RESULT ok` · `app-name` 통과 · 빠른 시험 51325 통과 · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0. 실제 모델(Production_1.3sm)은 `app-name` 통과, `RESULT fail` 은 기존 두 가지(① 좌표계 5183 알림 띠 → T4(G1)에서 없어짐 ② 홈 긴 폴더 · EPSG 칸 줄임 `home-clipped` → **T4 로도 안 없어짐**, 별도 결함으로 backlog R6b). 실제 화면 캡처 `C:\dev\tmp\elev-bug\t1-shots\`(Batang 에서 「Trench | 발굴 평·단면」 정상).
 - **판정(Ruling):** ① 내부 식별자 유지(`SectionViewer.exe` · QSettings `ExcavSection/SectionViewer` · 캐시 경로) — 조직 · 앱 이름이 설정 위치와 3sm 변환 캐시(135 MB)를 정함, 바꾸면 최근 · 단면 목록이 사라져 보임 — 잘못이면: 폴더에 옛 이름이 보임. 캔버스의 「설정 이전」 문장 둘을 이에 맞게 고침. ② 버전은 1.2.1 그대로(릴리스 결정) — 캔버스의 「1.3」을 1.2.1 로 고침. ③ `app.rc` 의 `FILEVERSION` · 설치 파일 이름 · `app.manifest` 이름은 그대로.
 - **남은 문제:** 여는 화면 · 홈 아이콘 · .ico 는 아직 옛 그림 → T2 · T3. 캔버스 「여는 화면」 화판의 `rench` 글자 크기가 게시본에서 15 px 로 바뀌어 있음(내 원본은 230 px — 캔버스 편집기에서 바뀐 것으로 보여 되돌리지 않고 사용자에게 알림).
 
@@ -296,6 +296,14 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** GREEN `splash-shot … frames=4 total-ms=1000`(EXIT 0, 실제 창 플랫폼 — 글자 정상) · 네 장 눈 확인(`C:\dev\tmp\elev-bug\t3\sheet.png`: T 타일 + rench 가 Trench 로 읽힘) · `--splash-live` 실제 창이 1 002 ms 에 끝 장면, 프로세스 전체 1.1 s · `--splash-esc 100` 이 530 ms · `--splash-esc 400` 이 707 ms 에 닫힘(Esc + 300 ms 부근) · 파일로 열 때는 여는 화면 없음(코드 조건 그대로 `file.isEmpty()`) · 합성 감사 10조합 `RESULT ok` · 빠른 시험 51325 · `--sheet-check` · `--icon-sheet` · `--app-icon` · `--undo-test` EXIT 0.
 - **판정(Ruling):** ① 키 · 클릭 입력은 앱 시험 장치로만 확인(Esc 는 `keyPressEvent` 직접 호출) — 실제 키보드 · 마우스는 사용자가 한 번 눌러 봐야 함(플랫폼이 SplashScreen 창에 초점을 주는지는 Windows 에서 처음 한 번 확인 필요). ② 진행 막대는 실제 준비와 무관한 1 초 시계 — 준비가 더 걸리면 열기가 늦어질 뿐 막대는 끝에 머묾(옛 5 초도 같았음). ③ 상수 `kOpeningSplashMs` 가 5000 → 1000 이라 옛 `--splash-shot` 의 t = .2 · .45 · .7 중간 장면 이름이 바뀜(`_t12 · _t40 · _t70`).
 - **남은 문제:** 없음(T3 끝). 다음 T4(G1) 좌표계 — advisor 먼저.
+
+### 2026-10-11 · Claude Code(Sonnet 5.5, advisor Opus 5.5) — T4 (G1 · R6): 좌표계 — 투영 값이 이름을 이긴다 · 상태줄 배지 「수평 EPSG:5187 · 동부원점(GRS80)」
+- **원인(사용자 질문 「5187 · 5186 이라는 이상한 좌표계가 왜 나오나」):** Production_1.3sm 의 SRS 원문 이름은 「Korea 2000 / East Belt」(= EPSG:5183)인데 투영 값은 가산 북 600000 · 중앙자오선 129°(= East Belt **2010**, EPSG:5187). 옛 순서(WKT ID → REMARK → **이름** → 매개변수)가 이름만 보고 5183 으로 정한 뒤 「매개변수가 내장 값과 다르다」 경고 띠를 띄웠다.
+- **시험 먼저(RED):** `tests/test_srs.cpp` 3개 — 실제 SRS 원문(좌표 없는 정의만)으로 ① 이름 5183 · 값 5187 → `horizontalEpsg == 5187` · `horizontalHow == "매개변수"` · `horizontalNameEpsg == 5183` · 경고 0 · 툴팁에 5183 · 5187 · `SrsInfo::epsg() == 5187` · 원점(200000, 600000)의 위경도 38° · 129°(1e-6) ② 거꾸로(이름 5187 · 가산 북 500000 → 5183) · 이름과 값이 같으면 이름 그대로 · 표의 어느 것과도 안 맞으면 이름 번호 + 경고 1 ③ `horizontalShortKo()`(5187 동부원점 · 5186 중부원점 · 5185 서부원점 · 32652 UTM 52N(WGS84) · 5174 번호만 · 빈 값). 구현 전 `SRS:*` 15 assertion 실패. 앱 쪽은 감사 줄 `status-badge … srs-static=… srs-text=…` 를 먼저 바꿔 `caret=1,1 srs-static=0 … FAIL`(EXIT 9) 확인.
+- **무엇을:** core `readHorizontal` — 이름으로 번호를 찾은 경우에만(WKT ID · REMARK 로 정한 번호는 그대로) 값이 그 번호와 다르고 내장 표의 다른 번호와 같으면 값을 따른다(`SrsDesc::horizontalNameEpsg` 기록). 툴팁 한 문장 「이름은 EPSG:5183(…)이지만 투영 값(가산 동 · 북 · 중앙자오선)이 EPSG:5187 과 같아 값을 따랐습니다. 좌표는 값 그대로 계산합니다.」 새 `SrsDesc::horizontalShortKo()`("EPSG:5187 · 동부원점(GRS80)", 내장 표에 있는 번호만 원점 이름 · 타원체, 없으면 번호만). 앱: 상태줄 수평 배지는 **표시만**(누름 · ▾ · Tab 초점 없음 — 사용자 결정 「좌표계는 모델마다 자동 · 작게 표시만」), QSS `[static="true"]` 로 마우스를 올려도 안 바뀜, 도면 글 `sp.srsLabel` 도 같은 한 줄. 높이 배지는 T8 에서 지우므로 그대로(▾).
+- **확인:** `SRS:*` 10 케이스 151 assertion 통과 · 전체 `asec_tests` 51371 중 실패 1 = 알려진 `CoalescingWorker: 끄는 동안의 미리보기…` 뿐(`~CoalescingWorker*` 51360 통과) · 합성 감사 1280×800 ×1 · 1920×1040 ×1 · 3840×2160 ×2 `RESULT ok`(`srs-text=수평 EPSG:5186 · 중부원점(GRS80)`) · **실제 모델 Production_1.3sm** 1920: 배지 `수평 EPSG:5187 · 동부원점(GRS80)` · `icons-missing=0`(알림 띠 사라짐) · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0 · 실제 창 캡처 `C:\dev\tmp\elev-bug\t4\status.png`(배지 글 · ▾ 없음 확인).
+- **판정(Ruling):** ① REMARK · WKT ID 로 정한 번호는 건드리지 않음(명시 선언은 존중, 이름만 약한 단서) — 잘못이면: ID 와 값이 다른 파일은 경고 띠가 계속 뜸. ② 경고(알림 띠)는 지우지 않음 — 표의 어느 것과도 안 맞는 진짜 불일치 · 지리 좌표계는 계속 알려야 함. 이 모델의 띠만 사라짐. ③ 원점 이름은 내장 표에 있는 번호만(5174 등은 번호만) — 이름으로 번호를 짐작하지 않음. ④ 높이 배지 · 지정 창 삭제는 T8(G5) — 이번에는 수평 배지만.
+- **남은 문제:** 실제 모델 감사의 `home-clipped`(1280 에서 홈 표의 긴 폴더 「C: › Users › 권을」 · 「EPSG:5187」 칸 줄임)는 T4 와 무관한 기존 결함 → backlog R6b(T8 뒤 다시 재서 고침). T5(G2) 다음.
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

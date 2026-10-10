@@ -277,7 +277,7 @@ private:
     QLabel* secCount_ = nullptr;
     QLineEdit *cx_ = nullptr, *cy_ = nullptr, *cz_ = nullptr;
     QLabel *msg_ = nullptr, *info_ = nullptr;
-    QToolButton* srsLabel_ = nullptr;   // 상태줄 「수평 EPSG:5186 ▾」 배지(v5 C6) — 누르면 좌표계 상세
+    QToolButton* srsLabel_ = nullptr;   // 상태줄 「수평 EPSG:5187 · 동부원점(GRS80)」 배지 — 표시만(T4)
     void dlgSrsDetails();
     asec::SrsReport srsReport_;   // 열린 모델의 좌표계 점검(표시·경고)
     asec::Box3 sceneBounds_;      // 열린 모델 로컬 상자(좌표계 재점검용)
