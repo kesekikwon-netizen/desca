@@ -10,11 +10,11 @@ base_sha: d95706fb546576bc6fff9b7d5fbb14f3730dd162
 branch: factory/20261010-03-audit-tighten
 worktree: C:\dev\kerf-wt\20261010-03-audit-tighten
 build_dir: C:\dev\kerf-wt\20261010-03-audit-tighten-build
-head_sha:                 # verify.ps1 가 채운다(마지막 검증 때의 worktree HEAD)
-last_verify:              # verify.ps1 가 채운다: PASS|FAIL (시각)
+head_sha: d95706fb546576bc6fff9b7d5fbb14f3730dd162
+last_verify: PASS (2026-10-10 18:49)
 human_review_required:    # 사람 검토 필수 영역에 해당하면 그 이유(좌표계·단위·수직 기준·수치 알고리즘 / 파일 형식·호환 / 원본 덮어쓰기·삭제 / 빌드·의존성·패키징·CI / 비밀정보·권한)
 created: 2026-10-10 18:29
-updated: 2026-10-10 18:29
+updated: 2026-10-10 18:49
 ---
 # 20261010-03-audit-tighten — #3c 후속: 감사 판정 조이기 · 작은 정리(R1b)
 
