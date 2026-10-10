@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 먼저 할 일 (모든 세션 · 모든 계정)
 - **개발 규칙은 [`docs/DEV_RULES.md`](docs/DEV_RULES.md)(절대 준수, 사용자 지시 2026-10-09)가 정본이다.** 코드를 바꾸기 전에 읽고, 과제마다 그 체크리스트를 장부에 채운다. 다른 문서와 어긋나면 그 문서가 이긴다.
-- 지금 진행 중인 개발은 **Kerf 디자인 v5**다. 작업을 시작하기 전에 `docs/DEV_PROGRESS.md`를 끝까지 읽고 「다음 할 일」부터 이어서 한다.
+- 지금 진행 중인 개발은 **Trench 최종 디자인**(앱 이름 Kerf → Trench, 계획 `docs/superpowers/plans/2026-10-11-trench-final.md` T1–T22, 정본 글 `docs/design/TRENCH_FINAL_CANVAS_TEXT.md`)이다 — **T1–T12 끝, 다음 T13**(2026-10-11 다른 PC 로 이어받기). 작업을 시작하기 전에 `docs/DEV_PROGRESS.md`를 끝까지 읽고 §5 맨 위 「다른 PC 에서 이어받기」부터 따른다(그 아래 디자인 v5 · v6 문서는 Trench 가 덮어쓰지 않은 부분의 기준).
 - **단계 하나를 마칠 때마다 `docs/DEV_PROGRESS.md`를 고친다**(상태 표 · 기록 · 다음 할 일). 기록 없이 다음 단계로 가지 않는다.
 - 화면 기준은 `docs/design/DESIGN_SPEC.md`(v5, 화판 `docs/design/boards/kerf-design-v5.html`). v4 `docs/design-v4/FINAL_PLAN.md` · `Buttons1/2.dc.html`은 v5에 없는 내용만 참고한다(어긋나면 v5).
 - **디자인 v6 채택(사용자 2026-10-10 「전체 채택」):** `docs/design/DESIGN_SPEC_v6.md`는 v5 위에 겹쳐 읽는 변경분이다 — 어긋나면 v6이 이긴다. 각 항목은 해당 구현 작업(계획 `docs/superpowers/plans/2026-10-10-design-v6.md`)이 시작될 때 효력이 생기며, 진행 중인 팩토리 작업은 v5 본문으로 검증한다.

@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T12 모션 상수 한 곳 · 탭 크로스페이드 · 안내 칩 · 최종 교체 크로스페이드 끝**(나머지 전환은 대기 「모션 2」) → 다음 T13(G10) 제거 · 숨김 25. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **Trench 최종 디자인 T1–T12 끝 · 다른 PC 로 이어받기 위해 중단(사용자 지시) · 푸시함**. 다음 T13. 이어받는 법은 §5 맨 위 「▶ 2026-10-11 중단」 |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -377,6 +377,15 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **남은 문제:** 「모션 2」(위 ①)만 — 대기 목록에 넣음. 다음 T13(G10) 제거 · 숨김 25.
 
 ## 5. 다음 할 일 (위에서부터)
+> ### ▶ 2026-10-11 중단 · 다른 PC 에서 이어받기 (Trench 최종 디자인 구현, 계획 T1–T22 중 **T1–T12 끝**)
+> 사용자 지시로 이 PC 의 /goal 을 중지하고 다른 PC 에서 이어 한다. **새 세션은 이것만 따르면 된다:**
+> 1. `git fetch` · `git switch feature/design-v2` · `git pull` — 마지막 커밋 「모션 상수 한 곳 · 탭 크로스페이드 …(T12 · G9)」 뒤 인수 문서 커밋. 푸시 명령은 §4 「푸시 해결」(`git -c credential.helper= -c "credential.helper=!gh auth git-credential" push`).
+> 2. 이 파일 §1 · §4(맨 아래 T1–T12 기록: 시험 먼저 · 확인 · 판정) → **계획 `docs/superpowers/plans/2026-10-11-trench-final.md`**(T4–T22 표) → **정본 `docs/design/TRENCH_FINAL_CANVAS_TEXT.md`**(캔버스 「Trench 최종 디자인」 글 — Guide 화판의 G0–G20 이 작업 지시서, Cursors · Motion · Dialogs · Icons 화판이 세부). 그림이 필요하면 캔버스 https://claude.ai/artifact/St8M2cwJYYfPW9gcNDshRQ (같은 계정).
+> 3. **다음 작업 = T13(G10 · R10) 제거 · 숨김 25** → T14 도면 글 · 진북 화살(수렴각 core, advisor 먼저) → T15 DXF 단위 · 단면선 0.35 mm → T16 SVG 층 나눔 · 밑그림 잠금(advisor 먼저, 도면 판의 「그릴 것 ▾」 · 거리 눈금 끄는 칸 포함) → T17 범례 기호 · 표제란 조사명 · 유구 번호 → T18 저장 일부 실패 안내 → T19 밋밋함 보완 8 → T20 기준 화면 2560 · 첫 창 → T21 잘린 돌(H) · 윤곽(O) 도구 → T22 한글 경로 · CI · 문서 합침. 대기 「모션 2」(마우스 위 · 확대 보간 등)는 `factory/backlog.md`.
+> 4. 작업 방식(사용자 지시 그대로): superpowers 스킬(시험 먼저 RED → GREEN) · 복잡한 작업(좌표계 · DXF · SVG 층)은 advisor(Opus) 먼저 · 매 단계 **이름 지정한 파일만** 커밋(`git add -A` 금지, `design-v4/` · `dg/` · `image*.png` · `factory/jobs/20261010-03-audit-tighten/build.md` 는 올리지 않음) · 검토자 에이전트는 전부 끝난 뒤 한 번만 · 푸시 · 병합은 사용자가 말할 때만(이번 푸시는 사용자가 말했음).
+> 5. **새 PC 준비:** §2 의 빌드 정션(`C:\dev\desca` → 저장소) · Qt 6.8 이상(`setColorScheme` 때문) · 합성 모델 `asec-make-synthetic.exe C:\dev\kerf-synth` · **실제 모델 `Production_1.3sm`(사용자 다운로드 폴더 — 저장소에 없음, 사용자에게 받는다)** · 감사 매트릭스(1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2 + 1.25 · 1.75 + 실제 모델 + 실제 Windows 창 `--ui-audit`)는 이 파일 §4 각 기록의 「확인」 줄과 같다. 장부 `.superpowers/sdd/…/progress.md` 는 PC 에만 있으므로(`.gitignore`) 이 파일 §4 의 「판정」이 대신한다.
+> 6. 알려진 것: ① 실제 키보드로 여는 화면 Esc · 클릭은 사용자가 한 번 눌러 봐야 함(T3 판정 ①) ② 캔버스 질문 18–20(일러스트레이터 판 · A2/A1 · Strata 파일)은 R13 · 도면 용지 · 「자료」 정리 때 사용자 답 필요(추천대로 진행) ③ 푸시 전까지 원격에 없던 커밋이 많다 — 푸시 뒤 GitHub Actions(Windows) 결과를 `factory ci <sha>` 로 확인.
+
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.
 - **사용자가 직접 확인할 것(E4–E7, 1분 — 화면 조작 도구가 Kerf 창을 못 잡아 미실행):** 바탕화면 Kerf 로 합성 모델이나 실제 모델을 열고 ① 단면선 긋기(S) 중 평면 왼쪽 위 떠 있는 되돌리기 · 다시를 눌러 반응하는지 ② F11 로 전체화면 ↔ 원래 크기 ③ Ctrl+P 로 도면 탭을 연 뒤 Esc 로 무엇이 일어나는지 ④ 단면 머리 축척 칸에 「1:30」 을 쳐 Enter 하면 축척이 바뀌는지. 안 되는 것만 알려 주면 대기 목록에 넣는다.
 0. **(2026-10-10) 최종 점검 끝 · 사용자 결정 Q0–Q6 받음(모두 추천안, Q0 = 「모델마다 다르다」) → 정본 대기 목록 R0–R23(`factory/backlog.md` 맨 위 표).** 순서: R1(#3c) → R0(MSVC) → 최종 점검 worktree E4–E7 → R2 기준 화면 → R3–R9 화면 정리 · 좌표계 · 높이 · F1 · 눈금 → R10 제거 25 → R11–R15 도면(진북 화살 · DXF · 층 · 범례 · 표제란) → R16–R17 H · O → R18 저장 실패 안내 → R19–R20 기준 화면 다듬기 · 첫 창 → R21–R22 도구 · CI → R23 문서. (아래는 결정 전 기록)
