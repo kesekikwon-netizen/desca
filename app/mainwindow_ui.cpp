@@ -267,7 +267,7 @@ struct StateCmd : QUndoCommand {
 bool MainWindow::ViewState::operator==(const ViewState& o) const {
     auto eqL = [](const SectionLine& x, const SectionLine& y) { return x.a.x == y.a.x && x.a.y == y.a.y && x.b.x == y.b.x && x.b.y == y.b.y; };
     return hasLine == o.hasLine && (!hasLine || eqL(line, o.line)) && front == o.front && back == o.back && image == o.image && profile == o.profile &&
-           levels == o.levels && fade == o.fade && smooth == o.smooth && heightDecl == o.heightDecl && current == o.current;
+           levels == o.levels && fade == o.fade && smooth == o.smooth && current == o.current;
 }
 
 QAction* MainWindow::makeAction(const QString& key, const QString& ko, const QString& en, theme::Ico ico, const QString& shortcut, bool checkable) {
@@ -500,11 +500,9 @@ QFrame* MainWindow::buildNotice() {
     h->addWidget(ic);
     noticeText_ = new QLabel; noticeText_->setTextFormat(Qt::RichText); noticeText_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     h->addWidget(noticeText_, 1);
-    auto* set = new QPushButton(QStringLiteral("높이 기준 지정…")); set->setStyleSheet("QPushButton{padding:3px 12px;}");
     auto* more = new QPushButton(QStringLiteral("자세히")); more->setObjectName("quiet"); more->setStyleSheet("QPushButton{padding:3px 10px;}");
     auto* x = new QToolButton; x->setIcon(theme::icon(theme::Ico::Close, 16)); x->setAutoRaise(true); x->setToolTip(QStringLiteral("이 알림 닫기(좌표계 표시는 상태줄 오른쪽에 계속)"));
-    for (QWidget* b : {static_cast<QWidget*>(set), static_cast<QWidget*>(more), static_cast<QWidget*>(x)}) { b->setFocusPolicy(Qt::NoFocus); h->addWidget(b); }
-    QObject::connect(set, &QPushButton::clicked, this, [this] { dlgHeightDatum(); });
+    for (QWidget* b : {static_cast<QWidget*>(more), static_cast<QWidget*>(x)}) { b->setFocusPolicy(Qt::NoFocus); h->addWidget(b); }
     QObject::connect(more, &QPushButton::clicked, this, [this] { dlgSrsDetails(); });
     QObject::connect(x, &QToolButton::clicked, f, [f] { f->setVisible(false); });
     f->setVisible(false);
@@ -604,9 +602,6 @@ QWidget* MainWindow::buildSectionFrame() {
         vexBtn_->setMenu(m);
     }
     h->addWidget(vexBtn_); h->addSpacing(4);
-    heightBadge_ = new QToolButton; heightBadge_->setObjectName("heightBadge"); heightBadge_->setFocusPolicy(Qt::NoFocus);
-    QObject::connect(heightBadge_, &QToolButton::clicked, this, [this] { dlgHeightDatum(); });
-    heightBadge_->setParent(secTitleBar_); heightBadge_->hide();   // v4: 높이 배지는 상태줄 하나만(감사 2 · 17). 갱신 코드는 그대로 둠
     h->addSpacing(6);
     auto mk = [&](theme::Ico ic, const QString& tip, std::function<void()> fn) {
         auto* a = new QAction(theme::icon(ic, 16), tip, this); a->setProperty("iconName", QString::fromLatin1(theme::iconName(ic)));
@@ -646,30 +641,6 @@ void MainWindow::setActiveView(int vw) {
         t->setProperty("active", (t == planTitle_) == (vw == 0));
         t->style()->unpolish(t); t->style()->polish(t);
     }
-}
-
-// 높이 기준 짧은 이름(배지 · 홈 카드 · 최근 표가 함께 씀 — 검토 M12)
-QString MainWindow::heightDatumShort() const {
-    const SrsDesc& d = srsReport_.desc;
-    const VDatumInfo& vi = vdatumInfo(d.vdatum);
-    const bool named = d.vdatum == VDatum::EGM96 || d.vdatum == VDatum::EGM2008 || d.vdatum == VDatum::KVD1964 || d.vdatum == VDatum::KNGeoid;
-    return named && vi.shortName && *vi.shortName ? QString::fromUtf8(vi.shortName) : qs8(d.verticalKo());
-}
-
-QString MainWindow::heightBadgeText(QString* state, QString* tip) const {
-    if (!src_) { if (state) *state = "none"; if (tip) *tip = QStringLiteral("모델을 열면 높이 기준이 여기 보입니다"); return QStringLiteral("높이 —"); }
-    const SrsDesc& d = srsReport_.desc;
-    QString t, st = "ok";
-    const VDatumInfo& vi = vdatumInfo(d.vdatum);
-    const QString name = heightDatumShort();
-    const int ve = d.verticalEpsg ? d.verticalEpsg : vi.epsg;
-    if (!d.known()) { st = "error"; t = QStringLiteral("● 좌표계 없음"); }
-    else if (!d.heightDeclared && (d.vertKind == VertKind::Unspecified || (d.vertKind == VertKind::Ellipsoidal && d.promotedTo3D))) {
-        st = "warn"; t = d.vertKind == VertKind::Unspecified ? QStringLiteral("▲ 높이 기준 모름") : QStringLiteral("▲ 높이 타원체고 표기 · 확인");
-    } else t = QStringLiteral("높이 %1%2").arg(name, d.heightDeclared ? QStringLiteral(" · 지정함") : QString());   // 스펙 §6 「높이 KVD1964 ▾」 — EPSG 는 툴팁에
-    if (state) *state = st;
-    if (tip) *tip = QStringLiteral("%1\n%2%3누르면 「높이 기준 지정」(이름표만 바뀌고 Z 값은 그대로)").arg(qs8(srsReport_.labelKo), ve ? QStringLiteral("높이 EPSG:%1\n").arg(ve) : QString(), heightNote_.isEmpty() ? QString() : QStringLiteral("(%1)\n").arg(heightNote_));
-    return t;
 }
 
 void MainWindow::setVex(double v) {
@@ -812,13 +783,6 @@ void MainWindow::updateHeader() {
     if (!secTitle_) return;
     ++headerBatch_;   // 머리 맞춤은 이 함수가 끝날 때 한 번 — 제목 · 세로 글 · 방위 글을 다 바꾼 뒤(어느 return 길이든, qScopeGuard)
     const auto fitHeaderOnce = qScopeGuard([this] { if (--headerBatch_ == 0) fitSectionHeader(); });
-    QString st, tip;
-    QString bt = heightBadgeText(&st, &tip);
-    for (auto* b : {heightBadge_, heightBadge2_}) {
-        if (!b) continue;
-        b->setText(bt + QStringLiteral(" ▾")); b->setToolTip(tip); b->setProperty("state", st);   // 둘 다 「… ▾」(스펙 §6)
-        b->style()->unpolish(b); b->style()->polish(b);
-    }
     updateVexUi();
     const bool has = plan_ && plan_->hasLine();
     const QString monoB = QStringLiteral("<b style='font-family:Consolas,\"DejaVu Sans Mono\",monospace'>%1</b>");
@@ -988,26 +952,18 @@ QWidget* MainWindow::buildCoordBar() {
     info_ = new QLabel; info_->setObjectName("statusInfo"); info_->setVisible(false);
     h->addWidget(info_);
     progress_ = new QProgressBar; progress_->setTextVisible(false); progress_->setRange(0, 1000); progress_->setVisible(false); progress_->setFixedWidth(120); h->addWidget(progress_);
-    // 배지 둘: 「수평 EPSG:5187 · 동부원점(GRS80)」(표시만) · 「높이 KVD1964 ▾」(누르면 높이 기준 지정 — T8 에서 지움). 흙색 테, 확인 전이면 노란 테 ▲
+    // 수평 좌표계는 테두리 없는 작은 글 하나(T8 · 사용자 결정 2026-10-10 「좌표계는 표시만 작게」 · 높이는 앱 어디에도 안 씀 — 캔버스 Work 화판): 「수평 EPSG:5187 · 동부원점(GRS80)」
     cellStart();
-    srsLabel_ = new QToolButton; srsLabel_->setObjectName("statusBadge"); srsLabel_->setFocusPolicy(Qt::TabFocus);
-    srsLabel_->setFocusPolicy(Qt::NoFocus);   // 표시만(T4 · 사용자 결정: 좌표계는 모델마다 자동) — 누르는 단추가 아니라 Tab 도 서지 않는다. 설명은 툴팁 · 알림 띠 「자세히」
-    srsLabel_->setText(QStringLiteral("수평 —")); srsLabel_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon); srsLabel_->setProperty("state", "none"); srsLabel_->setProperty("static", true);
-    srsLabel_->setIcon(kerf::icon(QStringLiteral("map"), 14, theme::ClayText)); srsLabel_->setIconSize(QSize(14, 14));
+    srsLabel_ = new QLabel(QStringLiteral("수평 —")); srsLabel_->setObjectName("statusSrs"); srsLabel_->setProperty("state", "none"); srsLabel_->setContentsMargins(0, 0, 16, 0);
     h->addWidget(srsLabel_);
-    h->addSpacing(8);
-    heightBadge2_ = new QToolButton; heightBadge2_->setObjectName("statusBadge"); heightBadge2_->setFocusPolicy(Qt::TabFocus);
-    heightBadge2_->setIcon(theme::icon(theme::Ico::Height, 14)); heightBadge2_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);   // v4 D11
-    QObject::connect(heightBadge2_, &QToolButton::clicked, this, [this] { dlgHeightDatum(); });
-    h->addWidget(heightBadge2_);
     return w;
 }
 
 // 좌표계 상세(상태줄 「수평」 배지 · 알림 띠 「자세히」)
 void MainWindow::dlgSrsDetails() {
-    QString t = QStringLiteral("<b>%1</b><br><br>").arg(qs8(srsReport_.labelKo).toHtmlEscaped());
+    QString t = QStringLiteral("<b>%1</b><br><br>").arg(qs8(srsReport_.desc.horizontalLabelKo()).toHtmlEscaped());
     for (auto& w : srsReport_.warnings) t += QStringLiteral("▲ ") + qs8(w).toHtmlEscaped() + "<br>";
-    t += "<br><small>" + qs8(srsReport_.tooltipKo).toHtmlEscaped().replace("\n", "<br>") + "</small>";
+    t += "<br><small>" + qs8(srsReport_.horizontalTooltipKo).toHtmlEscaped().replace("\n", "<br>") + "</small>";
     QMessageBox mb(this); mb.setWindowTitle(QStringLiteral("좌표계 확인")); mb.setTextFormat(Qt::RichText); mb.setText(t); mb.exec();
 }
 
@@ -1243,7 +1199,6 @@ MainWindow::ViewState MainWindow::captureState() const {
     s.front = front_->value(); s.back = back_->value();
     s.image = action("image")->isChecked(); s.profile = action("line")->isChecked(); s.levels = action("levels")->isChecked();
     s.fade = action("fade")->isChecked(); s.smooth = action("smooth")->isChecked();
-    s.heightDecl = src_ ? int(src_->srs.heightDeclared) : 0;
     s.current = current_;
     return s;
 }
@@ -1258,7 +1213,6 @@ void MainWindow::applyState(const ViewState& s) {
     const std::pair<const char*, bool> toggles[] = {{"image", s.image}, {"line", s.profile}, {"levels", s.levels}, {"fade", s.fade}, {"smooth", s.smooth}};
     for (auto& [k, v] : toggles) action(k)->setChecked(v);   // applyingState_ 가 되돌리기 기록을 막음(단추 동기화는 신호로)
     section_->setStyle(secStyle());
-    if (src_ && int(src_->srs.heightDeclared) != s.heightDecl) setHeightDeclaration(VDatum(s.heightDecl), true);
     current_ = (s.current >= 0 && s.current < int(sections_.size())) ? s.current : current_;
     if (s.hasLine) { SectionLine l = s.line; l.front = s.front; l.back = s.back; plan_->setLine(l, true); }
     else { plan_->setLine(SectionLine(), false); section_->clear(); last_ = SectionOutput(); }
@@ -1357,10 +1311,6 @@ void MainWindow::saveModelState() {
         ++saved;
     }
     st.setValue(k + "srs", srsReport_.desc.horizontalEpsg ? QStringLiteral("EPSG:%1").arg(srsReport_.desc.horizontalEpsg) : qs8(srsReport_.desc.shortAscii()));
-    QString hs, tip; heightBadgeText(&hs, &tip);
-    QString ht;   // 홈 카드 · 최근 표의 「높이」 칸은 기준 이름만(배지 글 통째는 잘림 — 검토 UI 3)
-    ht = !srsReport_.desc.known() ? QStringLiteral("좌표계 없음") : hs == "warn" ? QStringLiteral("확인 전") : heightDatumShort();
-    st.setValue(k + "height", ht); st.setValue(k + "heightState", hs);
     st.setValue(k + "lastOpened", QDateTime::currentDateTime().toString(Qt::ISODate));
 }
 
@@ -1489,16 +1439,15 @@ void MainWindow::rebuildStartPage() {
         { auto* ch = new QHBoxLayout(cells); ch->setContentsMargins(0, 0, 0, 0); ch->setSpacing(0);
             const QString folder = f0.isEmpty() ? QStringLiteral("—") : QFileInfo(f0).absolutePath().split(QLatin1Char('/'), Qt::SkipEmptyParts).join(QStringLiteral(" › "));   // 화판: 역슬래시는 한글 글꼴에서 ₩ 로 보임
             const QString sheets = meta(f0, "sheets").toString();
-            const QStringList ks = {QStringLiteral("폴더"), QStringLiteral("마지막 열림"), QStringLiteral("수평 좌표계"), QStringLiteral("높이"), QStringLiteral("단면"), QStringLiteral("도면")};
-            const QStringList vs = {folder, f0.isEmpty() ? QStringLiteral("—") : ago(meta(f0, "lastOpened").toString()), dash(meta(f0, "srs").toString()), dash(meta(f0, "height").toString()),
+            const QStringList ks = {QStringLiteral("폴더"), QStringLiteral("마지막 열림"), QStringLiteral("수평 좌표계"), QStringLiteral("단면"), QStringLiteral("도면")};
+            const QStringList vs = {folder, f0.isEmpty() ? QStringLiteral("—") : ago(meta(f0, "lastOpened").toString()), dash(meta(f0, "srs").toString()),
                                     f0.isEmpty() ? QStringLiteral("—") : QStringLiteral("%1개").arg(cnt), sheets.isEmpty() ? QStringLiteral("—") : sheets};
-            for (int i = 0; i < 6; ++i) {
+            for (int i = 0; i < 5; ++i) {
                 auto* c = new QWidget; c->setObjectName(i ? "ccCell" : "ccCellFirst"); c->setAttribute(Qt::WA_StyledBackground);
                 auto* cv = new QVBoxLayout(c); cv->setContentsMargins(12, 6, 12, 6); cv->setSpacing(0);
                 cv->addWidget(lab(ks[i], "cap"));   // 칸 이름은 줄이지 않는다(스펙 §7 — 줄임표는 칸 값만, rework 2 UI B1)
-                auto* vl = elideLab(lab(vs[i]), i == 0 ? Qt::ElideMiddle : (i == 2 || i == 3) ? Qt::ElideLeft : Qt::ElideRight);   // 칸 폭은 fitHomeCells 가 정한다 — 폴더(경로)만 늘고 줄며 가운데 줄임표, 좌표계 · 높이는 줄여야 할 때 앞쪽부터(번호 끝자리 지킴)
-                if (i == 2 || i == 3) vl->setProperty("elideCode", true);
-                if (i == 3) { const QString hs = meta(f0, "heightState").toString(); if (hs == "warn") vl->setStyleSheet("color:#7A5A00;"); else if (hs == "error") vl->setStyleSheet("color:#A33B3B;"); }
+                auto* vl = elideLab(lab(vs[i]), i == 0 ? Qt::ElideMiddle : i == 2 ? Qt::ElideLeft : Qt::ElideRight);   // 칸 폭은 fitHomeCells 가 정한다 — 폴더(경로)만 늘고 줄며 가운데 줄임표, 좌표계 · 높이는 줄여야 할 때 앞쪽부터(번호 끝자리 지킴)
+                if (i == 2) vl->setProperty("elideCode", true);
                 cv->addWidget(vl);
                 ch->addWidget(c);
             } }
@@ -1535,7 +1484,7 @@ void MainWindow::rebuildStartPage() {
         h->addWidget(side); }
     g->addWidget(card, 0, 1, 1, 2);
 
-    // ---- 최근 모델: 머리 「최근 모델 n」 + 찾기, 삼선표(모델 · 상태 · 수평 · 높이 · 단면 · 마지막 열림), 도움말 한 줄
+    // ---- 최근 모델: 머리 「최근 모델 n」 + 찾기, 삼선표(모델 · 상태 · 수평 · 단면 · 마지막 열림), 도움말 한 줄
     auto* recent = new QWidget; { auto* rv = new QVBoxLayout(recent); rv->setContentsMargins(0, 0, 0, 0); rv->setSpacing(8);
         auto* hd = new QHBoxLayout; hd->setSpacing(8);
         hd->addWidget(lab(QStringLiteral("최근 모델"), "sectionHead")); hd->addWidget(lab(QString::number(rf.size()), "cap")); hd->addStretch();
@@ -1543,16 +1492,16 @@ void MainWindow::rebuildStartPage() {
         find->addAction(kerf::icon(QStringLiteral("search"), 14, theme::Faint), QLineEdit::LeadingPosition); find->setEnabled(!rf.isEmpty());
         hd->addWidget(find);
         rv->addLayout(hd);
-        auto* tbl = new QTableWidget(std::max<int>(1, int(rf.size())), 6); tbl->setObjectName("recentTable");
-        tbl->setHorizontalHeaderLabels({QStringLiteral("모델"), QStringLiteral("상태"), QStringLiteral("수평"), QStringLiteral("높이"), QStringLiteral("단면"), QStringLiteral("마지막 열림")});
+        auto* tbl = new QTableWidget(std::max<int>(1, int(rf.size())), 5); tbl->setObjectName("recentTable");
+        tbl->setHorizontalHeaderLabels({QStringLiteral("모델"), QStringLiteral("상태"), QStringLiteral("수평"), QStringLiteral("단면"), QStringLiteral("마지막 열림")});
         tbl->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
         tbl->verticalHeader()->setVisible(false); tbl->setEditTriggers(QAbstractItemView::NoEditTriggers); tbl->setSelectionBehavior(QAbstractItemView::SelectRows);
         tbl->setSelectionMode(QAbstractItemView::SingleSelection); tbl->setShowGrid(false); tbl->setFocusPolicy(Qt::TabFocus);
         tbl->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-        for (int c = 1; c < 6; ++c) tbl->horizontalHeader()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
+        for (int c = 1; c < 5; ++c) tbl->horizontalHeader()->setSectionResizeMode(c, QHeaderView::ResizeToContents);
         tbl->horizontalHeader()->setFixedHeight(28);
         tbl->verticalHeader()->setDefaultSectionSize(48);
-        if (rf.isEmpty()) { tbl->setItem(0, 0, new QTableWidgetItem(QStringLiteral("열어 본 모델이 여기에 쌓입니다"))); tbl->setSpan(0, 0, 1, 6); }
+        if (rf.isEmpty()) { tbl->setItem(0, 0, new QTableWidgetItem(QStringLiteral("열어 본 모델이 여기에 쌓입니다"))); tbl->setSpan(0, 0, 1, 5); }
         for (int i = 0; i < rf.size(); ++i) {
             const QString& f = rf[i];
             const bool ok = QFileInfo::exists(f);
@@ -1566,11 +1515,8 @@ void MainWindow::rebuildStartPage() {
             tbl->setItem(i, 1, new QTableWidgetItem(ok ? QStringLiteral("열 수 있음") : QStringLiteral("● 원본 없음")));
             if (!ok) tbl->item(i, 1)->setForeground(theme::Block);
             tbl->setItem(i, 2, new QTableWidgetItem(dash(meta(f, "srs").toString())));
-            auto* hi = new QTableWidgetItem(dash(meta(f, "height").toString()));
-            { const QString hs = meta(f, "heightState").toString(); if (hs == "warn") hi->setForeground(theme::Caution); else if (hs == "error") hi->setForeground(theme::Block); }
-            tbl->setItem(i, 3, hi);
-            auto* ci = new QTableWidgetItem(QString::number(meta(f, "count").toInt())); ci->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter); tbl->setItem(i, 4, ci);
-            auto* ai = new QTableWidgetItem(ago(meta(f, "lastOpened").toString())); ai->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter); tbl->setItem(i, 5, ai);
+            auto* ci = new QTableWidgetItem(QString::number(meta(f, "count").toInt())); ci->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter); tbl->setItem(i, 3, ci);
+            auto* ai = new QTableWidgetItem(ago(meta(f, "lastOpened").toString())); ai->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter); tbl->setItem(i, 4, ai);
         }
         QObject::connect(tbl, &QTableWidget::cellDoubleClicked, this, [this, rf](int r, int) { if (r < rf.size() && QFileInfo::exists(rf[r])) openFile(rf[r]); });
         QObject::connect(find, &QLineEdit::textChanged, tbl, [tbl, rf](const QString& t) {
@@ -1718,7 +1664,7 @@ QDialog* MainWindow::keysDialog() {
         {"1 2 3 4 5", "뒤 깊이 0.5 / 1 / 2 / 3 / 5 m (기본 3 m — 입면도용 배경)"}, {"[  ]", "평행 이동 −0.1 / +0.1 m (보는 쪽 +)"}, {"{  }", "평행 이동 −1 / +1 m"},
         {"X", "세로 과장 ×1 → ×2 → ×5 → ×10 (화면만 · 도면은 1:1)"},
         {"R", "방향 반전(A↔A′)"}, {"N", "새 단면 추가"}, {"I · L · V", "입면 영상 · 단면선 · 레벨선 켜기/끄기"},
-        {"Ctrl+Z / Ctrl+Y", "되돌리기 / 다시(단면선·두께·표시·높이 기준)"}, {"F11", "전체화면 / 원래 크기"}, {"Ctrl+Q", "끝내기"}, {"Ctrl+P", "도면 — 평면도 조판 또는 단면도 조판"},
+        {"Ctrl+Z / Ctrl+Y", "되돌리기 / 다시(단면선·두께·표시)"}, {"F11", "전체화면 / 원래 크기"}, {"Ctrl+Q", "끝내기"}, {"Ctrl+P", "도면 — 평면도 조판 또는 단면도 조판"},
         {"Ctrl+D · Ctrl+E", "단면 DXF · 단면 영상(GeoTIFF 포함)"}, {"F · T · + · −", "맞춤 · 위에서 · 확대 · 축소"}, {"Ctrl+1 · Ctrl+2", "평면 · 단면 보기 켜기/끄기"},
         {"F1", "이 표"}};
     for (auto& r : rows) {
@@ -1776,7 +1722,6 @@ MainWindow::MainWindow() {
     makeAction("fade", QStringLiteral("깊이 음영"), "Depth Shading", I::Band, QString(), true);
     action("fade")->setToolTip(QStringLiteral("깊이 음영 (Depth Shading) — 입면 영상에서 단면선보다 뒤에 있는 면일수록 옅게 그려 빨간 단면선이 잘 보이게 합니다(내보내기도 같음)"));
     makeAction("info", QStringLiteral("단면 정보"), "Section Info", I::Info);
-    makeAction("height", QStringLiteral("높이 기준 지정"), "Height Datum", I::Height);
     makeAction("view1", QStringLiteral("평면"), "Plan", I::View1, "Ctrl+1", true)->setChecked(true);
     makeAction("view2", QStringLiteral("단면"), "Section", I::View2, "Ctrl+2", true)->setChecked(true);
     makeAction("full", QStringLiteral("전체화면"), "Full Screen", I::Max, "F11");
@@ -1952,7 +1897,6 @@ MainWindow::MainWindow() {
     QObject::connect(action("smooth"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/smooth", on); requestSection(true); commitState(QStringLiteral("평활")); });
     QObject::connect(action("fade"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/depthFade", on); section_->setStyle(secStyle()); requestSection(true); commitState(QStringLiteral("깊이 음영")); });
     QObject::connect(action("info"), &QAction::triggered, this, [this] { dlgInfo(); });
-    QObject::connect(action("height"), &QAction::triggered, this, [this] { dlgHeightDatum(); });
     QObject::connect(action("view1"), &QAction::toggled, this, [this](bool on) {
         if (!on && !action("view2")->isChecked()) { action("view1")->setChecked(true); return; }
         planFrame_->setVisible(on);
@@ -2083,7 +2027,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             if (r.right() >= width() || r.bottom() >= height() || r.left() < 0 || r.top() < 0) { ++overflow; if (over.size() < 6) over << name; }   // right() = x + w − 1 이라 >= 라야 1 px 넘침도 잡힌다(B5 검토 N1)
         };
         for (auto* b : ribbon_->chips()) check(b, b->text());
-        check(srsLabel_, QStringLiteral("srs-badge")); check(heightBadge2_, QStringLiteral("height-badge"));
+        check(srsLabel_, QStringLiteral("srs-text"));
         check(docTabCorner_, QStringLiteral("doc-corner"));
         const int minW = minimumSizeHint().width();
         const QSize want = property("auditSize").toSize();   // main.cpp --size W×H (없으면 ① 건너뜀)
@@ -2292,20 +2236,18 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     L << QStringLiteral("ui-audit context-home enabled-wrong=%1%2").arg(ctxBad).arg(ctxBad ? QStringLiteral("  FAIL") : QString());
     ok &= ctxBad == 0;
 
-    // 4) 축척 칸 · 높이 배지는 화면에 하나씩
+    // 4) 축척 칸은 화면에 하나(T8: 상태줄 배지는 없음 — 수평 좌표계는 작은 글)
     int scales = 0, badges = 0;
     for (auto* c : findChildren<QComboBox*>()) if (c->isVisibleTo(this) && c->findText(QStringLiteral("맞춤")) >= 0) ++scales;
     for (auto* b : findChildren<QToolButton*>(QStringLiteral("statusBadge"))) if (b->isVisibleTo(this)) ++badges;
-    L << QStringLiteral("ui-audit scale-controls=%1 status-badges=%2%3").arg(scales).arg(badges).arg(scales == 1 && badges == 2 ? QString() : QStringLiteral("  FAIL"));
-    ok &= scales == 1 && badges == 2;
-    // 4b) 배지: 높이 24. 수평 배지는 표시만(누르는 것 아님 — 좌표계는 모델마다 자동 판별, 사용자 결정 2026-10-10): ▾ 없음 · 글은 「수평 EPSG:5187 · 동부원점(GRS80)」 한 줄. 높이 배지는 T8 까지 「… ▾」
-    const QString wantSrs = (src_ && srsReport_.desc.horizontalEpsg && !srsReport_.desc.horizontalShortKo().empty()) ? QStringLiteral("수평 ") + qs8(srsReport_.desc.horizontalShortKo()) : QString();
-    const bool srsStatic = srsLabel_ && srsLabel_->property("static").toBool() && !srsLabel_->text().endsWith(QChar(0x25BE)) && (wantSrs.isEmpty() || srsLabel_->text() == wantSrs);
-    const bool badgeOk = srsLabel_ && heightBadge2_ && srsLabel_->height() == 24 && heightBadge2_->height() == 24 && srsStatic && heightBadge2_->text().endsWith(QChar(0x25BE));
-    L << QStringLiteral("ui-audit status-badge height=%1,%2 caret=%3,%4 srs-static=%5 srs-text=%6%7").arg(srsLabel_ ? srsLabel_->height() : -1).arg(heightBadge2_ ? heightBadge2_->height() : -1)
-             .arg(srsLabel_ && srsLabel_->text().endsWith(QChar(0x25BE)) ? 1 : 0).arg(heightBadge2_ && heightBadge2_->text().endsWith(QChar(0x25BE)) ? 1 : 0).arg(srsStatic ? 1 : 0)
-             .arg(srsLabel_ ? srsLabel_->text() : QString()).arg(badgeOk ? QString() : QStringLiteral("  FAIL"));
-    ok &= badgeOk;
+    L << QStringLiteral("ui-audit scale-controls=%1 status-badges=%2%3").arg(scales).arg(badges).arg(scales == 1 && badges == 0 ? QString() : QStringLiteral("  FAIL"));
+    ok &= scales == 1 && badges == 0;
+    // 4b) 수평 좌표계 글(T8): 테두리 없는 작은 글 — 「수평 EPSG:5187 · 동부원점(GRS80)」 한 줄, ▾ 없음, 누르는 것 아님(좌표계는 모델마다 자동 판별 — 사용자 결정 2026-10-10)
+    const QString wantSrs = (src_ && srsReport_.desc.horizontalEpsg) ? qs8(srsReport_.desc.horizontalLabelKo()) : QString();
+    const bool srsTextOk = srsLabel_ && !srsLabel_->text().endsWith(QChar(0x25BE)) && (wantSrs.isEmpty() || srsLabel_->text() == wantSrs);
+    L << QStringLiteral("ui-audit status-srs height=%1 caret=%2 text=%3%4").arg(srsLabel_ ? srsLabel_->height() : -1).arg(srsLabel_ && srsLabel_->text().endsWith(QChar(0x25BE)) ? 1 : 0)
+             .arg(srsLabel_ ? srsLabel_->text() : QString()).arg(srsTextOk ? QString() : QStringLiteral("  FAIL"));
+    ok &= srsTextOk;
 
     // 4c) 지운 것(T5 · G2 · 사용자 결정 2026-10-10): 리본 오른쪽 끝 단추 칸 · 좌표 입력(리본 · 판 단추 · 그리는 중 Enter) · 단면 찾기(칸 · Ctrl+F) · 영어 병기 — 화면에도 동작 표에도 하나도 없어야 한다
     int removedCorner = int(findChildren<QToolButton*>(QStringLiteral("ribbonCorner")).size());
@@ -2342,6 +2284,22 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     const bool listReadoutOk = inspectorCount == 0 && roBox && readoutUnder && readoutEditable == 0 && (!src_ || !plan_->hasLine() || readoutRows >= 9);
     L << QStringLiteral("ui-audit inspector=%1 list-readout rows=%2 read-only=%3 under-list=%4%5").arg(inspectorCount).arg(readoutRows).arg(roBox && readoutEditable == 0 ? 1 : 0).arg(readoutUnder ? 1 : 0).arg(listReadoutOk ? QString() : QStringLiteral("  FAIL"));
     ok &= listReadoutOk;
+
+    // 4f) 높이 UI 삭제(T8 · G5 · 사용자 결정 2026-10-10 「높이 기준은 여기서 지정할 필요가 없다 — iTwin Capture 에서 이미 보정돼 들어온다」): 상태줄 높이 배지 · 지정 창 · 알림 띠의 지정 단추 ·
+    //     홈의 높이 칸 · F1 표의 높이 기준 글 · 동작 height 가 하나도 없고, 수평 좌표계는 테두리 없는 작은 글(캔버스 Work 화판)이다. 표고 숫자(Z · 표고 (m) 눈금)는 그대로
+    int heightUi = int(act_.count(QStringLiteral("height")));
+    for (auto* b : findChildren<QAbstractButton*>()) if (b->isVisibleTo(this) && (b->text().startsWith(QStringLiteral("높이")) || b->text().contains(QStringLiteral("높이 기준")))) ++heightUi;
+    for (auto* l : findChildren<QLabel*>()) if (l->isVisibleTo(this) && (l->text().startsWith(QStringLiteral("높이")) || l->text().contains(QStringLiteral("높이 기준")))) ++heightUi;
+    if (startPage_) for (auto* t : startPage_->findChildren<QTableWidget*>())
+        for (int c = 0; c < t->columnCount(); ++c) if (t->horizontalHeaderItem(c) && t->horizontalHeaderItem(c)->text() == QStringLiteral("높이")) ++heightUi;
+    { std::unique_ptr<QDialog> kd(keysDialog());
+      for (auto* t : kd->findChildren<QTableWidget*>())
+          for (int r = 0; r < t->rowCount(); ++r) for (int c = 0; c < t->columnCount(); ++c) if (t->item(r, c) && t->item(r, c)->text().contains(QStringLiteral("높이 기준"))) ++heightUi; }
+    const int statusBadgeCount = int(findChildren<QToolButton*>(QStringLiteral("statusBadge")).size());
+    const bool srsPlain = srsLabel_ && !srsLabel_->inherits("QToolButton");   // 테두리 단추가 아닌 글
+    const bool heightOk = heightUi == 0 && statusBadgeCount == 0 && srsPlain;
+    L << QStringLiteral("ui-audit height-ui=%1 status-badges=%2 srs-plain=%3%4").arg(heightUi).arg(statusBadgeCount).arg(srsPlain ? 1 : 0).arg(heightOk ? QString() : QStringLiteral("  FAIL"));
+    ok &= heightOk;
 
     // 5) 그리는 동안 상태줄 「다음:」 문장이 없는가
     int hint = -1, band = -1, guide2 = -1, compassOk = -1, noteOk = -1, drawRoOk = -1; QString guide2Why;
@@ -2610,9 +2568,9 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             if (!cw->isVisibleTo(startPage_)) continue;
             QList<int> ws;
             for (QObject* o : cw->children()) if (o->isWidgetType() && static_cast<QWidget*>(o)->isVisibleTo(cw)) ws << static_cast<QWidget*>(o)->width();
-            if (ws.size() == 6) {
+            if (ws.size() == 5) {   // 폴더 · 마지막 열림 · 수평 좌표계 · 단면 · 도면(T8: 높이 칸 없음)
                 bool ratio = std::abs(ws[0] - 2 * ws[1]) <= 2;
-                for (int i = 2; i < 6; ++i) ratio = ratio && std::abs(ws[i] - ws[1]) <= 1;
+                for (int i = 2; i < 5; ++i) ratio = ratio && std::abs(ws[i] - ws[1]) <= 1;
                 mode = ratio ? QStringLiteral("ratio") : QStringLiteral("content");
             }
         }

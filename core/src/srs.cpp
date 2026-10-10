@@ -497,7 +497,7 @@ SrsDesc describeSrs(const std::string& srs) {
         d.vdatum = v;
         if (!d.verticalEpsg && vdatumInfo(v).epsg) d.verticalEpsg = vdatumInfo(v).epsg;
         if (v == VDatum::Unknown)
-            d.warnings.push_back("높이 기준(" + (d.verticalName.empty() ? std::string("이름 없음") : d.verticalName) + ")을 내장 표에서 알아보지 못했습니다. 이름 그대로 표시합니다.");
+            d.heightWarnings.push_back("높이 기준(" + (d.verticalName.empty() ? std::string("이름 없음") : d.verticalName) + ")을 내장 표에서 알아보지 못했습니다. 이름 그대로 표시합니다.");
         break;
     }
     }
@@ -590,6 +590,17 @@ static const char* beltNameKo(int epsg) {
     }
 }
 
+std::string SrsDesc::horizontalLabelKo() const {
+    switch (kind) {
+    case SrsKind::None: return "좌표계 없음(로컬 좌표)";
+    case SrsKind::Unknown: return "좌표계 미상(해석 불가)";
+    case SrsKind::Enu: { char b[96]; std::snprintf(b, sizeof b, "로컬 ENU(%.6f, %.6f)", enuLat, enuLon); return b; }
+    default: break;
+    }
+    if (horizontalEpsg) return "수평 " + horizontalShortKo();
+    return "수평 " + (horizontalName.empty() ? std::string("?") : horizontalName) + "(EPSG 미확인)";
+}
+
 std::string SrsDesc::horizontalShortKo() const {
     if (!horizontalEpsg) return std::string();
     std::string r = "EPSG:" + std::to_string(horizontalEpsg);
@@ -618,13 +629,18 @@ std::string SrsDesc::shortAscii() const {
     return r;
 }
 
+// 이름으로 찾은 번호와 투영 값으로 정한 번호가 다를 때 한 문장(없으면 빈 글) — 전체 툴팁 · 수평 툴팁이 같이 씀
+static std::string nameVsValueNote(const SrsDesc& d) {
+    if (!d.horizontalNameEpsg || d.horizontalNameEpsg == d.horizontalEpsg) return std::string();
+    return "이름은 EPSG:" + std::to_string(d.horizontalNameEpsg) + "(" + d.horizontalName + ")이지만 투영 값(가산 동 " + std::to_string(int(std::lround(d.tmFE))) + " · 북 " + std::to_string(int(std::lround(d.tmFN))) +
+           ", 중앙자오선 " + std::to_string(int(std::lround(d.tmLon0))) + "°)이 EPSG:" + std::to_string(d.horizontalEpsg) + " 와 같아 값을 따랐습니다. 좌표는 값 그대로 계산합니다.\n";
+}
+
 std::string SrsDesc::tooltipKo() const {
     std::string t;
     if (!horizontalName.empty()) t += "수평 좌표계: " + horizontalName + "\n";
     if (horizontalEpsg) t += "EPSG:" + std::to_string(horizontalEpsg) + " (판별 근거: " + horizontalHow + ")\n";
-    if (horizontalNameEpsg && horizontalNameEpsg != horizontalEpsg)
-        t += "이름은 EPSG:" + std::to_string(horizontalNameEpsg) + "(" + horizontalName + ")이지만 투영 값(가산 동 " + std::to_string(int(std::lround(tmFE))) + " · 북 " + std::to_string(int(std::lround(tmFN))) +
-             ", 중앙자오선 " + std::to_string(int(std::lround(tmLon0))) + "°)이 EPSG:" + std::to_string(horizontalEpsg) + " 와 같아 값을 따랐습니다. 좌표는 값 그대로 계산합니다.\n";
+    t += nameVsValueNote(*this);
     t += "높이 기준: " + verticalKo() + "\n";
     if (!verticalDatum.empty()) t += "수직 측지 기준: " + verticalDatum + "\n";
     if (!geoidModel.empty()) t += "지오이드 모델/격자: " + geoidModel + "\n";
@@ -645,6 +661,24 @@ std::string SrsDesc::tooltipKo() const {
         t += "참고: 전 지구 지오이드(" + std::string(vdatumInfo(vdatum).shortName) + ") 기준 높이는 한국 정표고(KVD1964, 인천만 평균해수면)와 같지 않습니다. 기준점과 대조하세요.\n";
     if (vertKind == VertKind::Unspecified && known())
         t += "주의: 높이 기준이 SRS 에 없습니다. ContextCapture/iTwin 기본은 타원체고(Bentley 문서) — 기준점과 대조해 확인하세요.\n";
+    for (auto& w : warnings) t += "⚠ " + w + "\n";
+    for (auto& w : heightWarnings) t += "⚠ " + w + "\n";
+    if (!t.empty() && t.back() == '\n') t.pop_back();
+    return t;
+}
+
+// 수평만의 툴팁: 높이 줄 · 「높이 기준 지정」 안내 · 높이 변환 안 함 줄이 없다(앱은 높이를 다루지 않는다 — T8)
+std::string SrsDesc::horizontalTooltipKo() const {
+    std::string t;
+    if (!horizontalName.empty()) t += "수평 좌표계: " + horizontalName + "\n";
+    if (horizontalEpsg) t += "EPSG:" + std::to_string(horizontalEpsg) + " (판별 근거: " + horizontalHow + ")\n";
+    t += nameVsValueNote(*this);
+    if (hasTm) {
+        char b[200];
+        std::snprintf(b, sizeof b, "TM: 원점 위도 %.4f°, 중앙자오선 %.4f°, 축척 %.4f, 가산 동 %.0f / 북 %.0f\n", tmLat0, tmLon0, tmK0, tmFE, tmFN);
+        t += b;
+    }
+    if (axisNorthFirst) t += "SRS 공식 축 순서는 북(N)→동(E)이지만, 3MX 좌표는 x=동(E), y=북(N) 으로 저장됩니다. 화면 X=동, Y=북.\n";
     for (auto& w : warnings) t += "⚠ " + w + "\n";
     if (!t.empty() && t.back() == '\n') t.pop_back();
     return t;
@@ -671,6 +705,7 @@ SrsReport analyzeSrs(const SrsInfo& s, const Box3& lb) {
     SrsReport r;
     r.desc = s.describe();
     r.warnings = r.desc.warnings;
+    r.heightWarnings = r.desc.heightWarnings;   // 높이 안내는 따로(T8) — 앱은 보이지 않는다
     r.labelKo = r.desc.labelKo();
     // metadata.xml 과 대조(수평 EPSG 기준)
     if (!s.metadataSrs.empty() && !s.srs.empty()) {
@@ -678,10 +713,10 @@ SrsReport analyzeSrs(const SrsInfo& s, const Box3& lb) {
         if (m.horizontalEpsg && r.desc.horizontalEpsg && m.horizontalEpsg != r.desc.horizontalEpsg)
             r.warnings.push_back("3MX 의 SRS(EPSG:" + std::to_string(r.desc.horizontalEpsg) + ")와 metadata.xml(EPSG:" + std::to_string(m.horizontalEpsg) + ")이 다릅니다. 3MX 값을 씁니다.");
         if (!r.desc.heightDeclared && m.vertKind != r.desc.vertKind && m.vertKind != VertKind::Unspecified)
-            r.warnings.push_back("metadata.xml 의 높이 기준(" + m.verticalKo() + ")이 3MX(" + r.desc.verticalKo() + ")와 다릅니다. 3MX 값을 씁니다.");
+            r.heightWarnings.push_back("metadata.xml 의 높이 기준(" + m.verticalKo() + ")이 3MX(" + r.desc.verticalKo() + ")와 다릅니다. 3MX 값을 씁니다.");
     }
     if (r.desc.promotedTo3D && r.desc.vertKind == VertKind::Ellipsoidal && !r.desc.heightDeclared)
-        r.warnings.push_back("높이 기준 확인: iTwin 이 EPSG:" + std::to_string(r.desc.horizontalEpsg) +
+        r.heightWarnings.push_back("높이 기준 확인: iTwin 이 EPSG:" + std::to_string(r.desc.horizontalEpsg) +
                              " 을 3D 로 승격하면서 높이 축 이름을 '타원체고'로 붙였을 뿐입니다. 측량값을 그대로 넣었다면 Z는 측량 높이 기준(예: EGM96)입니다. "
                              "「높이 기준 지정」에서 EGM96 등으로 지정하세요(값은 바뀌지 않고 이름표만 바뀜).");
     if (s.srs.empty() && !s.metadataSrs.empty()) r.warnings.push_back("3MX 에는 SRS 가 없고 metadata.xml 에만 있습니다(" + s.metadataSrs.substr(0, 60) + ").");
@@ -715,14 +750,17 @@ SrsReport analyzeSrs(const SrsInfo& s, const Box3& lb) {
             r.warnings.push_back("모델 위치가 한국 범위 밖입니다 — 좌표계·축 순서 확인 필요.");
         }
     }
-    std::string t = r.desc.tooltipKo();
+    std::string t = r.desc.tooltipKo(), th = r.desc.horizontalTooltipKo();   // t = 전체(개발 도구용), th = 수평만(앱)
     char b[256];
+    auto both = [&](const char* x) { t += x; th += x; };
     std::snprintf(b, sizeof b, "\nSRSOrigin = %.3f, %.3f, %.3f%s", s.origin.x, s.origin.y, s.origin.z, s.hasOrigin ? "" : " (없음)");
-    t += b;
-    if (r.hasLatLon) { std::snprintf(b, sizeof b, "\n모델 중심 ≈ 위도 %.5f°, 경도 %.5f° (x=동, y=북 으로 역계산)", r.lat, r.lon); t += b; }
-    if (lb.valid()) { std::snprintf(b, sizeof b, "\n로컬 좌표 최대 |x|,|y| = %.1f m → float32 간격 %.3f mm", r.maxLocalXY, r.float32StepMm); t += b; }
-    for (size_t i = r.desc.warnings.size(); i < r.warnings.size(); ++i) t += "\n⚠ " + r.warnings[i];
+    both(b);
+    if (r.hasLatLon) { std::snprintf(b, sizeof b, "\n모델 중심 ≈ 위도 %.5f°, 경도 %.5f° (x=동, y=북 으로 역계산)", r.lat, r.lon); both(b); }
+    if (lb.valid()) { std::snprintf(b, sizeof b, "\n로컬 좌표 최대 |x|,|y| = %.1f m → float32 간격 %.3f mm", r.maxLocalXY, r.float32StepMm); both(b); }
+    for (size_t i = r.desc.warnings.size(); i < r.warnings.size(); ++i) both(("\n⚠ " + r.warnings[i]).c_str());
+    for (size_t i = r.desc.heightWarnings.size(); i < r.heightWarnings.size(); ++i) t += "\n⚠ " + r.heightWarnings[i];
     r.tooltipKo = t;
+    r.horizontalTooltipKo = th;
     return r;
 }
 

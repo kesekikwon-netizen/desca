@@ -133,7 +133,7 @@ QString coordText(double v, double step) {
 }
 
 struct SheetChrome {
-    QString title, srs, height, date, facing, kind, paper, pageTag;
+    QString title, srs, date, facing, kind, paper, pageTag;
     double denom = 40;
     bool showTitle = true;
 };
@@ -172,12 +172,11 @@ void paintSheetChrome(QPainter& p, const SheetLayout& L, double k, const SheetCh
     p.drawRect(lg);
     p.setFont(fSmall);
     p.setPen(theme::Ink);
-    const double row = lg.height() / 4.0;
+    const double row = lg.height() / 3.0;   // 범례 줄: 범례 · 축척 · 좌표계(높이 줄은 T8 에서 없앰)
     p.drawText(QRectF(lg.left() + 1.5 * k, lg.top(), lg.width() - 3 * k, row), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("범례  ·  %1").arg(c.kind));
     p.drawText(QRectF(lg.left() + 1.5 * k, lg.top() + row, lg.width() - 3 * k, row), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("축척  %1").arg(denomText(c.denom)));
     p.setFont(fMono);
     p.drawText(QRectF(lg.left() + 1.5 * k, lg.top() + row * 2, lg.width() - 3 * k, row), Qt::AlignLeft | Qt::AlignVCenter, c.srs);
-    p.drawText(QRectF(lg.left() + 1.5 * k, lg.top() + row * 3, lg.width() - 3 * k, row), Qt::AlignLeft | Qt::AlignVCenter, c.height);
     if (!c.showTitle) return;
     QRectF tb(m.titleX * k, m.titleY * k, m.titleW * k, m.titleH * k);
     p.setPen(QPen(theme::Ink, 0.25 * k));
@@ -196,7 +195,7 @@ void paintSheetChrome(QPainter& p, const SheetLayout& L, double k, const SheetCh
     p.setFont(fSmall);
     p.setPen(theme::Ink2);
     QString l1 = QStringLiteral("축척 %1 · %2 · %3 · %4").arg(denomText(c.denom), c.paper, c.facing, c.date);
-    QString l2 = QStringLiteral("%1 · %2").arg(c.srs, c.height);
+    QString l2 = c.srs;
     p.drawText(QRectF(tb.left() + 2 * k, tb.top() + rowH * 1.3, tb.width() - 4 * k, rowH * 0.85), Qt::AlignLeft | Qt::AlignVCenter, l1);
     p.drawText(QRectF(tb.left() + 2 * k, tb.top() + rowH * 2.15, tb.width() - 4 * k, rowH * 0.85), Qt::AlignLeft | Qt::AlignVCenter, l2);
     // 막대는 범례 상자 왼쪽 공간(≈ 48 mm)에 들어가는 가장 긴 1·2·5×10ⁿ m
@@ -304,7 +303,7 @@ void MainWindow::paintSheet(QPainter& p, const SectionDoc& doc0, const SheetPara
     const QRectF area(frame.left(), frame.top(), frame.width(), (L.titleY - L.frameY) * k);
     paintSectionDoc(p, doc, area, xf, ui, img, true, QString(), &geo, false, false, 0, 0, 1, 0, 0, probe);
     SheetChrome ch;
-    ch.title = sp.title; ch.srs = sp.srsLabel; ch.height = sp.heightLabel; ch.date = sp.date; ch.facing = sp.facing;
+    ch.title = sp.title; ch.srs = sp.srsLabel; ch.date = sp.date; ch.facing = sp.facing;
     ch.kind = QStringLiteral("단면도"); ch.paper = paperLabel(sp.spec); ch.denom = sp.spec.denom; ch.showTitle = sp.withTitle;
     if (sp.split && G.L.cols * G.L.rows > 1) ch.pageTag = QStringLiteral("%1 / %2").arg(page + 1).arg(G.L.cols * G.L.rows);
     paintSheetChrome(p, L, k, ch);
@@ -336,12 +335,7 @@ SheetParams MainWindow::defaultSheetParams() const {
     if (current_ >= 0 && current_ < int(sections_.size()) && !sections_[size_t(current_)].note.empty())
         sp.title += QStringLiteral(" · ") + qs8(sections_[size_t(current_)].note);
     const SrsDesc& d = srsReport_.desc;
-    sp.srsLabel = d.horizontalEpsg ? QStringLiteral("수평 ") + qs8(d.horizontalShortKo()) : (d.known() ? qs8(d.shortAscii()) : QStringLiteral("좌표계 없음"));
-    const VDatumInfo& vi = vdatumInfo(d.vdatum);
-    int ve = d.verticalEpsg ? d.verticalEpsg : vi.epsg;
-    const bool named = d.vdatum == VDatum::EGM96 || d.vdatum == VDatum::EGM2008 || d.vdatum == VDatum::KVD1964 || d.vdatum == VDatum::KNGeoid;
-    QString vn = named && vi.shortName && *vi.shortName ? QString::fromUtf8(vi.shortName) : qs8(d.verticalKo());
-    sp.heightLabel = QStringLiteral("높이 %1%2%3").arg(vn, ve ? QStringLiteral(" (EPSG:%1)").arg(ve) : QString(), d.heightDeclared ? QStringLiteral(" · 지정") : QString());
+    sp.srsLabel = d.horizontalEpsg ? QStringLiteral("수평 ") + qs8(d.horizontalShortKo()) : (d.known() ? qs8(d.shortAscii()) : QStringLiteral("좌표계 없음"));   // 높이 글은 도면 어디에도 안 넣는다(T8)
     if (section_->hasResult()) {
         sp.facing = qs8(facingKo(sectionAzimuthDeg(section_->doc().r.line)));
         SectionDoc doc = section_->doc();
@@ -482,7 +476,7 @@ void MainWindow::paintPlanSheet(QPainter& p, const PlanSheetParams& sp, double p
     p.setBrush(Qt::NoBrush);
     p.drawRect(plot);
     SheetChrome ch;
-    ch.title = sp.title; ch.srs = sp.srsLabel; ch.height = sp.heightLabel; ch.date = sp.date;
+    ch.title = sp.title; ch.srs = sp.srsLabel; ch.date = sp.date;
     ch.facing = QStringLiteral("북이 위"); ch.kind = QStringLiteral("평면도"); ch.paper = paperLabel(sp.spec);
     ch.denom = sp.spec.denom; ch.showTitle = true;
     if (sp.split && L.cols * L.rows > 1) ch.pageTag = QStringLiteral("%1 / %2").arg(page + 1).arg(L.cols * L.rows);
@@ -607,7 +601,7 @@ bool MainWindow::exportPlanSheet(MeshSource& src, const PlanSheetParams& p, cons
     if (sp.format == 0) {
         QPdfWriter w(path);
         w.setResolution(int(std::lround(sp.dpi)));
-        w.setTitle(QStringLiteral("%1 — %2 · %3").arg(sp.title, sp.srsLabel, sp.heightLabel));
+        w.setTitle(QStringLiteral("%1 — %2").arg(sp.title, sp.srsLabel));
         w.setCreator(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
         QPageSize ps(sp.spec.paper == Paper::A3 ? QPageSize::A3 : QPageSize::A4);
         w.setPageLayout(QPageLayout(ps, sp.spec.landscape ? QPageLayout::Landscape : QPageLayout::Portrait, QMarginsF(0, 0, 0, 0), QPageLayout::Millimeter));
@@ -647,8 +641,8 @@ bool MainWindow::exportPlanSheet(MeshSource& src, const PlanSheetParams& p, cons
         }
     }
     if (msg) {
-        *msg = QStringLiteral("%1\n\n평면도 · %2 · %3 · %4쪽\n단면선 없음 · 나침반 · 바깥 좌표 · 범례 · 자\n%5 · %6")
-                   .arg(files.join(", "), paperLabel(sp.spec), denomText(sp.spec.denom)).arg(pages).arg(sp.srsLabel, sp.heightLabel);
+        *msg = QStringLiteral("%1\n\n평면도 · %2 · %3 · %4쪽\n단면선 없음 · 나침반 · 바깥 좌표 · 범례 · 자\n%5")
+                   .arg(files.join(", "), paperLabel(sp.spec), denomText(sp.spec.denom)).arg(pages).arg(sp.srsLabel);
     }
     return true;
 }
@@ -728,7 +722,7 @@ bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const Shee
     if (p.format == 0) {
         QPdfWriter w(path);
         w.setResolution(int(std::lround(p.dpi)));
-        w.setTitle(QStringLiteral("%1 — %2 · %3").arg(p.title, p.srsLabel, p.heightLabel));
+        w.setTitle(QStringLiteral("%1 — %2").arg(p.title, p.srsLabel));
         w.setCreator(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
         QPageSize ps(p.spec.paper == Paper::A3 ? QPageSize::A3 : QPageSize::A4);
         w.setPageLayout(QPageLayout(ps, p.spec.landscape ? QPageLayout::Landscape : QPageLayout::Portrait, QMarginsF(0, 0, 0, 0), QPageLayout::Millimeter));
@@ -768,10 +762,10 @@ bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const Shee
         }
     }
     if (msg) {
-        *msg = QStringLiteral("%1\n\n%2 · %3 · %4쪽%5\n%6 · %7")
+        *msg = QStringLiteral("%1\n\n%2 · %3 · %4쪽%5\n%6")
                    .arg(files.join(", "), paperLabel(p.spec), denomText(p.spec.denom)).arg(pages)
                    .arg(!G.L.fits && !p.split ? QStringLiteral(" (넘친 부분은 잘림)") : QString())
-                   .arg(p.srsLabel, p.heightLabel);
+                   .arg(p.srsLabel);
         if (usedRes > 0) *msg += QStringLiteral("\n입면 영상 %1 mm/px").arg(usedRes * 1000, 0, 'f', 2);
     }
     return true;
@@ -1132,9 +1126,6 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
             else { c.link = st->split ? QStringLiteral("한 장으로") : QStringLiteral("나눠서 %1장").arg(a.splitSheets); c.fn = [=] { st->split = !st->split; (*refresh)(); }; }
             items.push_back(c);
         } else items.push_back({true, QStringLiteral("%1 한 장에 들어갑니다 — 단면 %2 × %3 m").arg(paperLabel(st->spec)).arg(G.lenM, 0, 'f', 2).arg(G.heightM, 0, 'f', 2), QString(), nullptr});
-        { QString hs; heightBadgeText(&hs, nullptr);
-          if (hs == "ok") items.push_back({true, QStringLiteral("%1 — 표제란에 들어갑니다").arg(st->heightLabel), QString(), nullptr});
-          else items.push_back({false, QStringLiteral("높이 기준 확인 전 — 표제란에 ▲ 로 표시됩니다"), QStringLiteral("지정…"), [this] { dlgHeightDatum(); }}); }
         { const std::vector<SGap> gaps = profileGaps(doc.r.profile, SectionFrame(doc.r.line).L);
           double gl = 0; for (const SGap& gp : gaps) gl += gp.s1 - gp.s0;
           if (gaps.empty()) items.push_back({true, QStringLiteral("빈 구간 없음 · 잘린 돌은 H 도구에서(F 단계)"), QString(), nullptr});
@@ -1148,7 +1139,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         bPdf->setVisible(st->format != 0);
         QString hn = st->format == 4 ? QStringLiteral("그리기용 빈 층 DRAW_SOIL · DRAW_OUTLINE 2개 · 밑그림은 잠금. ")
                      : st->format == 1 ? QStringLiteral("DXF 는 모델 공간 %1 (용지 · 표제란 없이, 레벨선 · A/A′ 포함). 빈 층 2개. ").arg(denomText(st->spec.denom)) : QString();
-        fmtRow->setToolTip(hn + QStringLiteral("높이 기준 %1이 표제란(PDF 는 문서 제목에도)에 들어갑니다.").arg(st->heightLabel.mid(3)));
+        fmtRow->setToolTip(hn);
         baseEl->setEnabled(st->showBaseline);
         pv->update();
     };
@@ -1559,7 +1550,6 @@ PlanSheetParams MainWindow::defaultPlanSheetParams() const {
     if (!plan_->viewRectLocal(sp.area)) { sp.wholeModel = true; if (src_) sp.area = src_->bounds; }
     SheetParams sec = defaultSheetParams();
     sp.srsLabel = sec.srsLabel;
-    sp.heightLabel = sec.heightLabel;
     sp.date = sec.date;
     sp.title = QFileInfo(path_).completeBaseName();
     if (sp.title.isEmpty()) sp.title = QStringLiteral("평면도");
@@ -1970,6 +1960,20 @@ bool MainWindow::runSheetCheck(const QString& outDir, QString* log) {
     lines << QStringLiteral("sheet-check plan move=12mm chrome-fixed=%1 label-values-changed=%2").arg(chrome).arg(changed);
     lines << QStringLiteral("sheet-check scale-step plan=%1 section=%2").arg(ps).arg(ss);
     flag(ps == 10 && ss == 10);
+    {   // 도면 어디에도 높이 글이 없다(T8): 단면 SVG 의 표제란 · 범례에서 「높이」 글을 센다
+        int heightLines = -1;
+        if (hasSection() && src_) {
+            SheetParams hp = defaultSheetParams(); hp.format = 4;
+            const QString hf = QDir(outDir).filePath(QStringLiteral("height-probe.svg"));
+            QString hm;
+            if (exportSectionSvg(sectionDoc(), *src_, hp, hf, &hm)) {
+                QFile sf(hf);
+                if (sf.open(QIODevice::ReadOnly)) heightLines = QString::fromUtf8(sf.readAll()).count(QStringLiteral(">높이"));
+            }
+        }
+        lines << QStringLiteral("sheet-check height-lines=%1").arg(heightLines);
+        flag(heightLines == 0);
+    }
     lines << QStringLiteral("sheet-check RESULT %1").arg(ok ? "ok" : "fail");
     QFile out(QDir(outDir).filePath(QStringLiteral("sheet-check.txt")));
     if (out.open(QIODevice::WriteOnly | QIODevice::Text)) out.write((lines.join('\n') + '\n').toUtf8());

@@ -173,10 +173,11 @@ TEST_CASE("analyzeSrs: 실제 모델 원점 → 제주, 축 순서 정상 / x·y
     SrsInfo s; s.srs = kRealWkt; s.origin = Vec3(148093, 98119, 0); s.hasOrigin = true; s.metadataSrs = "EPSG:5186";
     Box3 lb; lb.add(Vec3(-150, -120, 20)); lb.add(Vec3(160, 130, 60));
     SrsReport r = analyzeSrs(s, lb);
-    // iTwin "Promoted to 3D" → 타원체고 표기 확인 안내 1개만
-    REQUIRE(r.warnings.size() == 1);
-    CHECK(r.warnings[0].find("높이 기준 확인") != std::string::npos);
-    CHECK(r.warnings[0].find("EGM96") != std::string::npos);
+    // iTwin "Promoted to 3D" → 타원체고 표기 확인 안내는 높이 안내 쪽에 1개(T8: 앱은 높이를 다루지 않아 알림 띠에 올리지 않는다)
+    CHECK(r.warnings.empty());
+    REQUIRE(r.heightWarnings.size() == 1);
+    CHECK(r.heightWarnings[0].find("높이 기준 확인") != std::string::npos);
+    CHECK(r.heightWarnings[0].find("EGM96") != std::string::npos);
     CHECK(r.desc.promotedTo3D);
     CHECK(r.hasLatLon);
     CHECK(r.lat == Approx(33.476).margin(0.01)); CHECK(r.lon == Approx(126.442).margin(0.01));
@@ -186,8 +187,9 @@ TEST_CASE("analyzeSrs: 실제 모델 원점 → 제주, 축 순서 정상 / x·y
 
     SrsInfo sw = s; sw.origin = Vec3(98119, 148093, 0);
     SrsReport r2 = analyzeSrs(sw, lb);
-    REQUIRE(r2.warnings.size() == 2);
-    CHECK(r2.warnings[1].find("축 순서") != std::string::npos);
+    REQUIRE(r2.warnings.size() == 1);
+    CHECK(r2.warnings[0].find("축 순서") != std::string::npos);
+    CHECK(r2.heightWarnings.size() == 1);
 
     SrsInfo z; z.srs = "EPSG:5186"; z.origin = Vec3(); z.hasOrigin = true;
     Box3 big; big.add(Vec3(148000, 98000, 20)); big.add(Vec3(148300, 98300, 60));
@@ -275,4 +277,32 @@ TEST_CASE("SRS: 상태줄 · 도면용 수평 한 줄 — 원점 이름 · 타�
     CHECK(describeSrs("EPSG:32652").horizontalShortKo() == "EPSG:32652 · UTM 52N(WGS84)");
     CHECK(describeSrs("EPSG:5174").horizontalShortKo() == "EPSG:5174");   // 내장 TM 표에 없는 번호는 번호만
     CHECK(describeSrs("").horizontalShortKo().empty());
+}
+
+// ---- T8(G5): 높이 안내는 따로 — 앱이 높이를 다루지 않으므로 알림 띠 · 수평 툴팁에 높이 글이 새지 않는다
+TEST_CASE("SRS: 높이 안내는 heightWarnings 로 따로 · 수평 툴팁에는 높이 글이 없다") {
+    SrsInfo s; s.srs = kRealWkt; s.origin = Vec3(148093, 98119, 0); s.hasOrigin = true;
+    Box3 lb; lb.add(Vec3(-150, -120, 20)); lb.add(Vec3(160, 130, 60));
+    SrsReport r = analyzeSrs(s, lb);
+    for (auto& w : r.warnings) CHECK(w.find("높이") == std::string::npos);          // 수평 쪽 경고에는 높이 글 없음
+    const std::string h = r.horizontalTooltipKo;
+    CHECK(h.find("EPSG:5186") != std::string::npos);
+    CHECK(h.find("SRSOrigin = 148093.000") != std::string::npos);
+    CHECK(h.find("높이") == std::string::npos);                                     // 「높이 기준 지정」 안내 · 높이 기준 줄 · 높이 변환 안 함 줄 모두 없음
+    CHECK(h.find("지정") == std::string::npos);
+    CHECK(r.tooltipKo.find("높이 기준") != std::string::npos);                       // 개발 도구용 전체 툴팁은 그대로
+    // 이름과 값이 다른 모델(Production_1)도 수평 툴팁에 이름 · 5183 · 5187 문장은 있고 높이 글은 없다
+    SrsDesc d = describeSrs(kEastBeltNameParams5187);
+    CHECK(d.horizontalTooltipKo().find("5183") != std::string::npos);
+    CHECK(d.horizontalTooltipKo().find("5187") != std::string::npos);
+    CHECK(d.horizontalTooltipKo().find("높이") == std::string::npos);
+}
+
+TEST_CASE("SRS: horizontalLabelKo — 수평만의 한 줄(높이 글 없음)") {
+    CHECK(describeSrs(kRealWkt).horizontalLabelKo() == "수평 EPSG:5186 · 중부원점(GRS80)");
+    CHECK(describeSrs(kEastBeltNameParams5187).horizontalLabelKo() == "수평 EPSG:5187 · 동부원점(GRS80)");
+    CHECK(describeSrs("EPSG:5174").horizontalLabelKo() == "수평 EPSG:5174");
+    CHECK(describeSrs("").horizontalLabelKo() == "좌표계 없음(로컬 좌표)");
+    CHECK(describeSrs(kRealWkt).horizontalLabelKo().find("높이") == std::string::npos);
+    CHECK(describeSrs("EPSG:5186+5193").horizontalLabelKo() == "수평 EPSG:5186 · 중부원점(GRS80)");   // 복합 좌표계도 수평만
 }

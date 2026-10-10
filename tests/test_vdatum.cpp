@@ -75,7 +75,7 @@ TEST_CASE("수직 기준: WKT2 GEOIDMODEL(KNGeoid18) 은 KVD1964 보다 우선, 
     SrsDesc b = describeSrs(u);
     CHECK(b.vdatum == VDatum::Unknown);
     CHECK(b.verticalKo() == "Local site datum height");
-    bool warned = false; for (auto& x : b.warnings) warned |= x.find("Local site datum height") != std::string::npos;
+    bool warned = false; for (auto& x : b.heightWarnings) warned |= x.find("Local site datum height") != std::string::npos;   // T8: 높이 안내는 heightWarnings
     CHECK(warned);
 }
 
@@ -142,6 +142,7 @@ TEST_CASE("높이 기준 지정: iTwin 타원체고 표기 모델을 EGM96 으�
     SrsReport r = analyzeSrs(s, lb);
     CHECK(r.labelKo == "수평 EPSG:5186 / 높이 EGM96 지오이드 기준 높이 (EPSG:5773) [사용자 지정]");
     CHECK(r.warnings.empty());  // 안내 사라짐
+    CHECK(r.heightWarnings.empty());
     CHECK(r.desc.heightDeclared);
     CHECK(r.desc.srsVerticalKo == "타원체고(GRS80)");
     CHECK(r.tooltipKo.find("SRS 원래 표기: 타원체고(GRS80)") != std::string::npos);
@@ -159,8 +160,8 @@ TEST_CASE("높이 기준 지정: iTwin 타원체고 표기 모델을 EGM96 으�
     CHECK(s.describe().labelKo() == "수평 EPSG:5186 / 높이 KVD1964 정표고(인천만 평균해수면) (EPSG:5193) [사용자 지정]");
     s.heightDeclared = VDatum::EGM2008; CHECK(s.verticalEpsg() == 3855);
     s.heightDeclared = VDatum::Ellipsoidal; CHECK(s.verticalEpsg() == 0); CHECK(s.describe().vertKind == VertKind::Ellipsoidal);
-    CHECK(analyzeSrs(s, lb).warnings.empty());  // 타원체고로 확인했으면 안내 없음
-    s.heightDeclared = VDatum::None; CHECK(analyzeSrs(s, lb).warnings.size() == 1);
+    CHECK(analyzeSrs(s, lb).heightWarnings.empty());  // 타원체고로 확인했으면 안내 없음
+    s.heightDeclared = VDatum::None; CHECK(analyzeSrs(s, lb).heightWarnings.size() == 1);   // T8: 높이 안내는 heightWarnings
     // 복합 SRS(EPSG:5186+5193) 를 EGM96 으로 지정 → 원래 표기 보존
     SrsInfo c; c.srs = "EPSG:5186+5193"; c.heightDeclared = VDatum::EGM96;
     CHECK(c.describe().srsVerticalAscii == "EPSG:5193");

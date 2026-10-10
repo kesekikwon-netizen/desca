@@ -18,7 +18,7 @@ Kerf 창을 Strata 창과 **같은 쌓임 · 같은 리본 · 같은 탭 · 같�
 | C3 | 홈 = Strata 뼈대(이름 · 설명 · 단추 둘 \| 이어서 작업 카드 \| 최근 표 \| 오른쪽 「작업 순서」 세 걸음 \| 맨 아래 「처음 쓰는 키」) | v4 홈(끌어 놓기 칸) |
 | C4 | 그리는 동안 안내 = 평면 화면 왼쪽 위 **떠 있는 칩** 36 px + 되돌리기 · 다시 73×36. 리본 아래 도구 줄(`ctxBar`)은 없앤다 | v4 단계 8 |
 | C5 | 도면 오른쪽 판 320 = Strata 부품(항목 타일 · 축척 격자 · 종이 아래 도구 줄) + 「도면 점검」 덩어리. 주 단추 「n장 SVG 저장」 + 보조 「PDF」. 방위는 「진북」 하나 | v4 단계 11 일부 |
-| C6 | 상태줄 32 px: 왼쪽 한 문장 \| X · Y · Z \| **「수평 5186 · 중부원점 ▾」 「높이 KVD1964 ▾」** 흙색 테 배지 둘 | v4 단계 7 |
+| C6 | 상태줄 32 px: 왼쪽 한 문장 \| X · Y · Z \| **「수평 EPSG:5187 · 동부원점(GRS80)」** 테두리 없는 작은 글 하나(T8 2026-10-11: 높이 배지 삭제 · 수평은 표시만) | v4 단계 7 |
 | C7 | 아이콘 = **Lucide SVG**(24 격자 · 선 2). Strata에 있는 것은 파일 재사용, Kerf 전용은 같은 규격으로 새로. 코드로 그리던 81개는 버린다 | v4 D11 · 단계 3a |
 | L | 단면도 레벨선 굵기 **10 cm = 0.2 pt · 50 cm = 0.5 pt**(1 pt = 25.4/72 mm). 숫자는 50 cm마다. 도면 판에 바꿀 수 있는 줄 하나. SVG · DXF · PDF 모두 같은 값 | 지금 mm 고정값(0.2 · 0.35 mm) |
 
@@ -102,7 +102,7 @@ Kerf 창을 Strata 창과 **같은 쌓임 · 같은 리본 · 같은 탭 · 같�
 
 ## 6. 상태줄(C6)
 
-왼쪽 x 16 「다음 할 일」 한 문장 12 `Muted`. 오른쪽 셀(1×16 `Line`으로 나눔, 양쪽 12): `X` 모노 12 폭 96 우정렬 \| `Y` \| `Z` 폭 64 \| 배지 둘: `#statusBadge` 24 px · `Action` 테 1 px · 글 `ClayText` #9C4A2F 700 · 둥글기 8 · 「수평 5186 · 중부원점 ▾」, 「높이 KVD1964 ▾」(높이 EPSG 번호 · 지정 출처는 툴팁, 홈 카드 · 최근 표의 「높이」 칸도 기준 이름만). 모델이 없으면 둘 다 회색 `none`. 높이가 확인 전이면 `Caution` 테 + ▲ 「높이 확인 전 ▾」. 배지를 누르면 좌표계 상세 / 높이 기준 지정.
+왼쪽 x 16 「다음 할 일」 한 문장 12 `Muted`. 오른쪽 셀(1×16 `Line`으로 나눔, 양쪽 12): `X` 모노 12 폭 96 우정렬 \| `Y` \| `Z` 폭 64 \| **수평 좌표계 글 하나**(`#statusSrs` — 테두리 · 배경 · ▾ 없음, 12 `Muted`, 오른쪽 여백 16): 「수평 EPSG:5187 · 동부원점(GRS80)」, 모델이 없으면 「수평 —」 회색 `none`, 경고가 있으면 `Caution` 글 · 좌표계를 모르면 `Block` 글. 마우스를 올리면 수평 툴팁(이름 · 판별 근거 · 이름과 값이 다를 때 한 문장 · TM 값 · 원점 · 모델 중심 위경도 — 높이 글 없음). **높이는 앱 · 도면 어디에도 쓰지 않는다**(사용자 결정 2026-10-10 — iTwin Capture 에서 이미 보정돼 들어온다): 높이 배지 · 「높이 기준 지정」 창 · 알림 띠의 지정 단추 · 홈의 「높이」 칸 · 도면의 범례 · 표제란 · PDF 제목의 높이 글 · 도면 점검의 높이 항목이 없다. 표고 숫자(Z 칸 · 「표고 (m)」 눈금 · 지표/바닥 EL.)는 파일 값 그대로. 감사 `height-ui=0 status-badges=0 srs-plain=1` · `sheet-check height-lines=0`.
 
 ## 7. 홈(C3)
 
@@ -118,7 +118,7 @@ Kerf 창을 Strata 창과 **같은 쌓임 · 같은 리본 · 같은 탭 · 같�
   - **도면 정보**: 도면명 칸 · 용지 [A4 \| A3] [가로 \| 세로] · 「축척 1 :」 모노 칸 + 「맞춤 1:26」 조용한 링크 + 「적용」 · 격자 4열 24 px 모노 `10 20 30 40 / 50 100 200 500`(고른 값 `Oat` + `Ink` 테; 10단위 규칙은 칸 입력에서 그대로).
   - **선 · 글자**(단면도): 레벨선 「10 cm」 `0.2 pt` 「50 cm」 `0.5 pt`(모노 칸 72, 단위 `Faint`) · 숫자 「50 cm마다 · 해발 EL.」 · 빗금 [45° \| 검은 칠 \| 점묘] + `1.0 mm`. (평면도): 좌표 숫자 「그림 칸 밖 · 4 m마다 · 모노」 · 진북 `28 mm` 「글자는 「진북」만」.
   - **형식** [SVG \| DXF \| PDF \| PNG \| TIFF] + 칸 「그리기용 빈 층 2 · 밑그림 잠금」.
-  - **도면 점검 · 고른 n장 · 저장을 막지 않음**: `Card` 상자, 항목마다 ✓(`Done`) 또는 ▲(`Caution`) + 문장 + 고치는 곳 링크(`ClayText` 밑줄). 항목: 축척이 용지에 들어가는가 · 높이 기준 이름(표제란 · 범례에 들어감) · 빈 구간 / 잘린 돌 확인 · 평면도: 그림 칸에 단면선 없음 · 진북 있음 · 파일 이름(`모델_도면_1-축척.svg`, 같은 이름은 `_2`).
+  - **도면 점검 · 고른 n장 · 저장을 막지 않음**: `Card` 상자, 항목마다 ✓(`Done`) 또는 ▲(`Caution`) + 문장 + 고치는 곳 링크(`ClayText` 밑줄). 항목: 축척이 용지에 들어가는가 · 빈 구간 / 잘린 돌 확인 · 평면도: 그림 칸에 단면선 없음 · 진북 있음 · 파일 이름(`모델_도면_1-축척.svg`, 같은 이름은 `_2`).
   - 맨 아래 `Line` 위: 조용한 「☆ 이 설정을 기본으로」 \| **흙색 「n장 SVG 저장」** + 「PDF」(2장 이상이면 PDF 꺼짐).
 - 레벨선 굵기: 내보내기(SVG · DXF · PDF · PNG · TIFF)와 미리보기 모두 10 cm 선 = `levelMinorPt`(기본 0.2), 50 cm 선 = `levelMajorPt`(기본 0.5). 종이 위 mm = pt × 25.4 / 72. 설정은 QSettings `sheet/levelMinorPt` · `sheet/levelMajorPt`에 저장, 「이 설정을 기본으로」로 기본값 갱신.
 - 상태줄: 「도면 — 고른 n장 · 다 되면 「SVG 저장」 · 돌아가기는 「단면」 탭 또는 Esc」.
@@ -128,10 +128,10 @@ Kerf 창을 Strata 창과 **같은 쌓임 · 같은 리본 · 같은 탭 · 같�
 - H: 단면 화면에서 잘린 선 위 두 점(s0 · s1, 가장 가까운 잘린 선 점에 붙음) → 아래 경계 점들(클릭) → Enter = `closeCutRegion` + `hatchPolygon`(45° · 종이 위 1.0 mm · 선 0.13 mm) → 빗금 미리보기. 종류 돌 · 기와 · 유물 · 기타(오른쪽 클릭), Del 지우기, 되돌리기. 저장: 모델별 · 단면별(설정 JSON, s · z). 단면선이 바뀌면 그 영역은 「다시 확인」(흐린 빗금 + ▲). 그리는 순서 레벨선 → 영상 → **빗금** → 단면선. SVG · DXF 층 `SECTION_CUT_FILL` · `SECTION_CUT_OUTLINE`. 도면 점검 항목 「빗금 — 다시 확인할 영역 n곳」.
 - O: 평면에서 국소 기복 보기(켜기 · 끄기, 반경 0.5 m) + 후보 윤곽(기준 3 cm) 점선 → 클릭으로 받아들임 · 점 끌어 고침 · 손으로 찍기(Shift = 가장자리). 종류 4. 모델별 저장(실좌표). SVG · DXF 층 `PLAN_OUTLINE_STONE` · `_TILE` · `_ARTIFACT` · `_OTHER`. PDF · PNG 평면도에는 넣지 않는다.
 
-## 10. 좌표계 · 높이 이름표(2026-10-09 Production_1.3sm에서 발견)
+## 10. 좌표계 이름표(2026-10-09 Production_1.3sm에서 발견 · 높이는 2026-10-11 T8 에서 앱에서 뺌)
 
 - WKT 이름과 투영 매개변수가 다르면 **매개변수가 이긴다**: 「Korea 2000 / East Belt」 + 가산 북 600,000 → EPSG:**5187**(East Belt 2010), 경고 「이름은 East Belt(5183)지만 매개변수는 East Belt 2010(5187)입니다 — 5187로 표시합니다」. 표제란 · GeoTIFF · DXF가 모두 5187을 쓴다.
-- 파일이 「타원체고」라 적었는데 한국 안(위도 33–39 · 경도 124–132)에서 높이 평균이 15 m 아래면 ▲ 「타원체고로 적혀 있지만 값은 해발(평균해면)로 보입니다 — 높이 기준을 지정하세요」. 값은 바꾸지 않는다.
+- 높이(수직 기준) 이름표는 앱에서 다루지 않는다(T8): 「높이 기준 지정」 · 높이 의심 경고 · 저장된 지정값 읽기 모두 없음(예전에 저장된 지정값은 설정에 그대로 두되 적용하지 않는다). 내보내기의 표고 값은 파일 그대로이고, core 의 높이 해석(`VDatum` · `applyHeightDeclaration` · `heightWarnings`)은 개발 도구(`asec-info`) · MDL 재사용을 위해 남는다.
 
 ## 11. 아이콘(C7)
 
@@ -144,9 +144,9 @@ Kerf 창을 Strata 창과 **같은 쌓임 · 같은 리본 · 같은 탭 · 같�
 
 ## 12. `--ui-audit` 기대값(v5)
 
-`tabs=0`(리본 탭 없음) · `doctabs=홈,단면[,도면]` · `ribbon height=118 groups=6 more=0 look=50` · `chips-clay=1`(단면 탭) · `ctxbar=0` · `guide-band=1`(그리기 중) · `status-badges=2` · `scale-controls=1` · `dup 0` · `icons-missing=0` · `tooltip-missing=0` · `RESULT ok`. 창 폭 1280에서는 규칙(창 폭에 들어가는 가장 큰 크기)이 정한 값을 적고 바닥 24 를 지킨다(`narrow rule-at-1280 look=… actual-look=…`, 상수 `kNarrowFloor`; 실측 20(v5) → 24(T5) → 32 글자 숨김(T6) — 글자가 보이는 32 는 need32 = 1296 라 1280 에 16 px 모자람). 점검 줄: `ribbon-tidy points-chips=1 xyz-las-chips=0 keys-in-view=1 quit-ctrl-q=1 about-in-keys=1` · `elev-row2 … smooth=1 menu-chip=…`.
+`tabs=0`(리본 탭 없음) · `doctabs=홈,단면[,도면]` · `ribbon height=118 groups=6 more=0 look=50` · `chips-clay=1`(단면 탭) · `ctxbar=0` · `guide-band=1`(그리기 중) · `status-badges=0` · `scale-controls=1` · `dup 0` · `icons-missing=0` · `tooltip-missing=0` · `RESULT ok`. 창 폭 1280에서는 규칙(창 폭에 들어가는 가장 큰 크기)이 정한 값을 적고 바닥 24 를 지킨다(`narrow rule-at-1280 look=… actual-look=…`, 상수 `kNarrowFloor`; 실측 20(v5) → 24(T5) → 32 글자 숨김(T6) — 글자가 보이는 32 는 need32 = 1296 라 1280 에 16 px 모자람). 점검 줄: `ribbon-tidy points-chips=1 xyz-las-chips=0 keys-in-view=1 quit-ctrl-q=1 about-in-keys=1` · `elev-row2 … smooth=1 menu-chip=…`.
 
-- 검토 반영(2026-10-09): `dup-icons=0` · `context-home enabled-wrong=0`(홈에서 단면 · 자료 · 도면 꺼짐, 「닫기」 살아 있음, `updateEnabled()` 뒤에도) · `status-badge height=24,24 caret=0,1 srs-static=1`(T4 · T5 로 `filter-persists` · 좌표 입력 줄은 없어짐) · `guide-step2=1`(A′ 단계 칩 안에 다 들어감 · 되돌리기 칸과 안 겹침 · 문장 스펙 그대로). 리본은 고정값 대신 규칙(`lookIndex == chooseLook(lookWidths, width)` · 높이 = sizeHint, 1920 이상이면 타일 50 · 글자 · 118). 좁은 창 항목은 맨 끝(offscreen 은 resize 복원이 안 됨). 판 폭 348 · 272 고정, 머리 · 정보 줄은 가로 최소 폭을 밀지 않음(창 최소 폭 1280).
+- 검토 반영(2026-10-09): `dup-icons=0` · `context-home enabled-wrong=0`(홈에서 단면 · 자료 · 도면 꺼짐, 「닫기」 살아 있음, `updateEnabled()` 뒤에도) · `status-srs … caret=0`(T4 · T8: 수평 좌표계는 테두리 없는 글, 높이 배지 없음)(T5 로 `filter-persists` · 좌표 입력 줄은 없어짐) · `guide-step2=1`(A′ 단계 칩 안에 다 들어감 · 되돌리기 칸과 안 겹침 · 문장 스펙 그대로). 리본은 고정값 대신 규칙(`lookIndex == chooseLook(lookWidths, width)` · 높이 = sizeHint, 1920 이상이면 타일 50 · 글자 · 118). 좁은 창 항목은 맨 끝(offscreen 은 resize 복원이 안 됨). 판 폭 348 · 272 고정, 머리 · 정보 줄은 가로 최소 폭을 밀지 않음(창 최소 폭 1280).
 
 - 검토 2차 반영(2026-10-09): `ribbon-context dim-captions=0 elev-center-dy≤3` · `compass-hit=1`(오른쪽 아래 「진북」에서만 눌림) · `draw-step2-note=1`(A′ 단계 목록 아래 수치 「A 찍음 · 끝점 A′를 찍으세요」) · `guide-step2 … title=1`(단계 이름은 평면 폭에 들어가면 보임) · `sheet-discard=1`(도면 탭 닫은 뒤 탭 2 · 조판 위젯 · 저장 함수 없음) · `square-borders=0`. 글자 체계는 11 · 12 · 13 · 20(판 머리 13/700 `viewTitleText`, 오른쪽 판 이름 명조 20 `inspName`, 나침반 「진북」 11, 홈 빈 상태 20). 네 판 모두 32 px 머리(`viewTitle`) + 안쪽 여백 16. 키보드 초점 테는 모든 단추에 Tab 으로 왔을 때만(`[kbdFocus="true"]:focus`, 앱 전체 이벤트 필터).
 

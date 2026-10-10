@@ -103,7 +103,6 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
   화면·DXF 제목·GeoTIFF 수직 GeoKey 4096·LAS·JSON(`vertical_declared_by_user`, `vertical_srs_original`)에 반영.
   모델별로 QSettings(`heightDatum/<경로 해시>`)에 저장. iTwin 이 2D EPSG 를 '3D 로 승격'해 '타원체고'로 표기한 모델은
   노란 안내(측량값을 그대로 넣었다면 Z 는 측량 높이 기준, 예: EGM96)를 띄우고, 지정한 적 있으면 마지막 지정값(`height/lastDeclared`)을 기본으로 적용.
-  자동화: `--height-datum srs|ellipsoidal|egm96|egm2008|kvd1964|kngeoid`(저장 안 함).
 - 지오이드 변환 틀(GeoidModel/GridGeoidModel(GTX)/GeoidRegistry/convertHeight)은 있으나 UI·자동 변환 없음, 격자 미동봉
   (후보: EGM96 15′ 격자 — NGA 공개, 재배포 조건 미검증).
 - 복합 EPSG 는 수평/수직을 나눠 GeoTIFF GeoKey 3072/4096, LAS GeoKeyDirectory VLR 에 기록.

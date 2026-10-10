@@ -160,14 +160,10 @@ QWidget#infoStrip QLabel { font-size: 12px; color: #3D3D3A; }
 QWidget#viewBar { background: #F5F4ED; border-bottom: 1px solid #DEDCD1; }
 QWidget#viewTitle QToolButton { padding: 2px; border-radius: 4px; }
 
-QToolButton#statusBadge, QToolButton#heightBadge { min-height: 22px; max-height: 22px; background: #FFFFFF; border: 1px solid #B5573A; border-radius: 8px; padding: 0 8px; font-size: 12px; font-weight: 700; color: #9C4A2F; }
-QToolButton#statusBadge:hover, QToolButton#heightBadge:hover { background: #F5F4ED; }
-QToolButton#statusBadge[static="true"]:hover { background: #FFFFFF; }
-QToolButton#statusBadge[static="true"][state="error"]:hover { background: #F3DEDA; }
-QToolButton#statusBadge[static="true"][state="none"]:hover { background: #F0EEE6; }
-QToolButton#statusBadge[state="warn"], QToolButton#heightBadge[state="warn"] { border-color: #7A5A00; color: #7A5A00; }
-QToolButton#statusBadge[state="error"], QToolButton#heightBadge[state="error"] { background: #F3DEDA; border-color: #A33B3B; color: #A33B3B; }
-QToolButton#statusBadge[state="none"], QToolButton#heightBadge[state="none"] { background: #F0EEE6; border-color: #DEDCD1; color: #73726C; font-weight: 400; }
+QLabel#statusSrs { color: #5E5D59; font-size: 12px; }
+QLabel#statusSrs[state="warn"] { color: #7A5A00; }
+QLabel#statusSrs[state="error"] { color: #A33B3B; }
+QLabel#statusSrs[state="none"] { color: #73726C; }
 QToolButton#vexBtn { background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 0px 6px; font-size: 12px; color: #3D3D3A; }
 QToolButton#vexBtn:hover { border-color: #C2C0B6; }
 QToolButton#vexBtn::menu-indicator { image: none; width: 0px; }
@@ -246,7 +242,6 @@ QToolButton#homeBtn:disabled, QPushButton#homeBtn:disabled { color: #696862; bac
 QLineEdit#homeFind:disabled { background: #F0EEE6; color: #73726C; border-color: #DEDCD1; }
 QPushButton[kbdFocus="true"]:focus { border: 2px solid #141413; padding: 5px 15px; }
 QPushButton#primary[kbdFocus="true"]:focus { border: 2px solid #141413; }
-QToolButton#statusBadge[kbdFocus="true"]:focus { border: 2px solid #141413; }
 QListWidget#sectionList:focus { border: 1px solid #141413; border-radius: 8px; }
 QLabel#sheetName { font-family: Batang, "Noto Serif KR", "Malgun Gothic"; font-size: 20px; font-weight: 500; color: #141413; }
 QToolButton#sheetTile { min-width: 64px; max-width: 64px; min-height: 46px; max-height: 46px; padding: 0; border: 1px solid #DEDCD1; border-radius: 8px; background: #FFFFFF; font-size: 11px; color: #141413; }

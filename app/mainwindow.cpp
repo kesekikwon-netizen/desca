@@ -243,7 +243,7 @@ void MainWindow::updateEnabled() {
     if (!section_ || !plan_ || !front_ || !back_) return;
     const bool sc = bool(src_), sec = section_->hasResult(), busy = taskBusy_;
     const bool home = ribbonCtx_ == 0, secCtx = ribbonCtx_ == 1, drawing = plan_->drawMode();
-    for (const char* k : {"fit", "top", "zoomin", "zoomout", "height"}) action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
+    for (const char* k : {"fit", "top", "zoomin", "zoomout"}) action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
     action("close")->setEnabled(sc && !busy);
     for (const char* k : {"draw", "addsec"}) action(k)->setEnabled(sc && !busy && secCtx);
     for (const char* k : {"flip", "clear", "move"}) action(k)->setEnabled(sc && plan_->hasLine() && secCtx);
@@ -311,20 +311,7 @@ void MainWindow::applyScene(OpenedScene&& s) {
     else plan_->setScene(std::move(s.display), s.center, s.bounds, src_->srs);
     streaming_ = !s.streamRoots.empty();
     sceneBounds_ = s.bounds; sceneWarnings_ = s.warnings;
-    // 높이 기준 지정: 모델별 저장값 → 없으면 iTwin '3D 승격·타원체고' 표기일 때만 마지막 지정값(사용자 표준, 예: EGM96)
-    heightNote_.clear();
-    {
-        QSettings st;
-        QString key = heightSettingsKey(path_);
-        SrsDesc raw = describeSrs(src_->srs.srs);
-        if (st.contains(key)) {
-            src_->srs.heightDeclared = vdatumFromKey(st.value(key).toString().toStdString());
-            if (src_->srs.heightDeclared != VDatum::None) heightNote_ = QStringLiteral("이 모델에 저장된 지정값");
-        } else if (raw.promotedTo3D && raw.vertKind == VertKind::Ellipsoidal && st.contains("height/lastDeclared")) {
-            VDatum d = vdatumFromKey(st.value("height/lastDeclared").toString().toStdString());
-            if (d != VDatum::Unknown && d != VDatum::None) { src_->srs.heightDeclared = d; heightNote_ = QStringLiteral("마지막 지정값을 기본으로 적용"); }
-        }
-    }
+    // 높이 기준은 앱에서 다루지 않는다(T8 · 사용자 결정 2026-10-10): 예전에 저장된 모델별 지정값 · 마지막 지정값은 설정에 그대로 두되 읽어 적용하지 않는다
     refreshSrs();
     info_->setText(streaming_ ? QStringLiteral("%1%2 · LOD 스트리밍").arg(kind_, s.layers > 1 ? QStringLiteral(" · 레이어 %1개").arg(s.layers) : QString())
                               : QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
@@ -332,12 +319,9 @@ void MainWindow::applyScene(OpenedScene&& s) {
     showStart(false);
     addRecent(path_);
     restoreModelState();
-    QString note = srsReport_.desc.heightDeclared ? QStringLiteral(" · 높이 기준 %1 (%2 — 값 변환 없음, 바꾸려면 「높이 기준 지정」)").arg(qs(vdatumInfo(srsReport_.desc.vdatum).shortName), heightNote_)
-                 : srsReport_.desc.vertKind == VertKind::Ellipsoidal ? QStringLiteral(" · 높이 '타원체고' 표기 — 측량값을 그대로 넣었다면 「높이 기준 지정」으로 측량 높이 기준(예: EGM96) 지정")
-                 : srsReport_.desc.vertKind == VertKind::Unspecified ? QStringLiteral(" · 높이 기준이 SRS 에 없음 — 기준점과 대조하세요") : QString();
     showStatus(plan_->hasLine() ? QStringLiteral("마지막 단면선을 되살렸습니다 — 다음: 뒤 깊이(1–5) 또는 Ctrl+P 도면")
                                 : QStringLiteral("열림. 다음: 「단면선」(S)으로 평면에서 시작점 A, 끝점 A′ 를 클릭하세요"));
-    msg_->setToolTip(QStringLiteral("열림") + note);
+    msg_->setToolTip(QStringLiteral("열림"));
     updateEnabled();
     updateHeader();
     saveModelState();
@@ -824,7 +808,7 @@ void MainWindow::dlgPlan() {
         int epsg = src_->srs.epsg();
         calc->setText(QStringLiteral("픽셀 크기(지상 해상도) <b>%1 mm</b> · 영상 <b>%2 × %3 px</b> (%4 m × %5 m)<br>좌표계 %6 · GeoKey + ModelTiepoint + ModelPixelScale, .tfw 함께")
                           .arg(mm(res)).arg(W, 0, 'f', 0).arg(H, 0, 'f', 0).arg(w, 0, 'f', 2).arg(h, 0, 'f', 2)
-                          .arg(epsg > 0 ? qs(src_->srs.describe().labelKo()) : QStringLiteral("⚠ EPSG 미확인 — ") + qs(src_->srs.describe().labelKo())));
+                          .arg(epsg > 0 ? qs(src_->srs.describe().horizontalLabelKo()) : QStringLiteral("⚠ EPSG 미확인 — ") + qs(src_->srs.describe().horizontalLabelKo())));
     };
     QObject::connect(area, &QComboBox::currentIndexChanged, d.get(), [&](int) { upd(); });
     sr = addScaleRows(f, "plan", 100, 200, upd);
@@ -861,7 +845,7 @@ void MainWindow::dlgPoints(int presetFormat) {
     auto* rgb = new QCheckBox(QStringLiteral("텍스처에서 색(RGB) 추출")); rgb->setChecked(true);
     f->addRow(QString(), rgb);
     calc->setText(QStringLiteral("최고 해상도(잎) 타일의 꼭짓점 · 좌표 = 로컬 + SRSOrigin (실좌표 %1)<br>타일 경계의 같은 점은 한 번만 기록. 큰 모델은 수 분 걸릴 수 있습니다.")
-                      .arg(qs(src_->srs.describe().labelKo())));
+                      .arg(qs(src_->srs.describe().horizontalLabelKo())));
     if (d->exec() != QDialog::Accepted) return;
     QSettings().setValue("points/spacingIdx", sp->currentIndex());
     PointParams p;
@@ -920,7 +904,7 @@ void MainWindow::dlgInfo() {
         .arg(r.rawSegments).arg(r.profile.size()).arg(nc).arg(nv)
         .arg(last_.image.img.w).arg(last_.image.img.h).arg(mm(last_.image.res))
         .arg(int(last_.msCollect)).arg(int(last_.msCut)).arg(int(last_.msImage))
-        .arg(qs(r.srs.describe().labelKo())).arg(r.srs.origin.x, 0, 'f', 3).arg(r.srs.origin.y, 0, 'f', 3).arg(r.srs.origin.z, 0, 'f', 3);
+        .arg(qs(r.srs.describe().horizontalLabelKo())).arg(r.srs.origin.x, 0, 'f', 3).arg(r.srs.origin.y, 0, 'f', 3).arg(r.srs.origin.z, 0, 'f', 3);
     QMessageBox mb(this); mb.setWindowTitle(QStringLiteral("단면 정보 (Section Info)")); mb.setTextFormat(Qt::RichText); mb.setText(t); mb.exec();
 }
 
@@ -1036,9 +1020,8 @@ void MainWindow::applySrsReport() {
     bool warn = !r.warnings.empty();
     // 상태줄: 수평 좌표계만 짧게(높이는 옆 배지). 경고는 한 줄 알림 띠(「자세히」에 전체)
     const SrsDesc& d = r.desc;
-    QString hz = d.horizontalEpsg ? qs(d.horizontalShortKo()) : (d.known() ? qs(d.shortAscii()) : QStringLiteral("좌표계 없음"));   // 「EPSG:5187 · 동부원점(GRS80)」 — 표시만(▾ 없음)
-    srsLabel_->setText(QStringLiteral("수평 %1").arg(hz));
-    srsLabel_->setToolTip(qs(r.tooltipKo));
+    srsLabel_->setText(qs(d.horizontalLabelKo()));   // 「수평 EPSG:5187 · 동부원점(GRS80)」 — 표시만(테두리 · ▾ 없음, 높이 글 없음 — T8)
+    srsLabel_->setToolTip(qs(r.horizontalTooltipKo));
     srsLabel_->setProperty("state", !d.known() ? "error" : (warn ? "warn" : "ok"));
     srsLabel_->style()->unpolish(srsLabel_); srsLabel_->style()->polish(srsLabel_);
     if (warn) {
@@ -1046,7 +1029,7 @@ void MainWindow::applySrsReport() {
         if (int dot = first.indexOf(QStringLiteral("니다.")); dot > 0) first = first.left(dot + 3);   // 첫 문장만(전체는 「자세히」)
         noticeText_->setText(QStringLiteral("<b>%1</b> &nbsp;%2%3").arg(d.known() ? QStringLiteral("좌표계 확인") : QStringLiteral("좌표계 없음"),
             first.toHtmlEscaped(), r.warnings.size() > 1 ? QStringLiteral(" <span style='color:#5E5D59'>(외 %1건)</span>").arg(r.warnings.size() - 1) : QString()));
-        noticeText_->setToolTip(qs(r.labelKo));
+        noticeText_->setToolTip(qs(r.horizontalTooltipKo));
         notice_->setProperty("level", d.known() ? "caution" : "block");
         notice_->style()->unpolish(notice_); notice_->style()->polish(notice_);
     }
@@ -1054,104 +1037,12 @@ void MainWindow::applySrsReport() {
     updateHeader();
 }
 
-// ---------------------------------------------------------------- 높이 기준 지정(이름표만, 값 변환 없음)
+// ---------------------------------------------------------------- 좌표계 다시 점검
 void MainWindow::refreshSrs() {
     if (!src_) return;
     srsReport_ = analyzeSrs(src_->srs, sceneBounds_);
     for (auto& w : sceneWarnings_) srsReport_.warnings.push_back(w);   // 병합 3MX 레이어 경고 등
     applySrsReport();
-}
-
-void MainWindow::setHeightDeclaration(VDatum v, bool persist) {
-    if (!src_ || taskBusy_) return;
-    secFloorGen_ = secWorker_->cancelAll();
-    src_->srs.heightDeclared = v;
-    heightNote_ = v == VDatum::None ? QString() : QStringLiteral("사용자 지정");
-    if (persist) {
-        QSettings st;
-        st.setValue(heightSettingsKey(path_), QString::fromLatin1(vdatumKey(v)));
-        st.setValue(heightSettingsKey(path_) + "_path", QFileInfo(path_).absoluteFilePath());
-        if (v != VDatum::None) st.setValue("height/lastDeclared", QString::fromLatin1(vdatumKey(v)));
-    }
-    refreshSrs();
-    last_.result.srs.heightDeclared = v;           // 표시 중인 단면(제목·내보내기)도 즉시
-    if (section_->hasResult()) requestSection(true);
-    const SrsDesc& d = srsReport_.desc;
-    showStatus(v == VDatum::None ? QStringLiteral("높이 기준: SRS 표기 그대로 (%1)").arg(qs(d.verticalKo()))
-                                 : QStringLiteral("높이 기준을 %1(으)로 지정 — 이름표만 바뀌고 Z 값은 그대로입니다").arg(qs(vdatumInfo(v).nameKo)));
-}
-
-QDialog* MainWindow::heightDatumDialog() {
-    if (!src_) return nullptr;
-    SrsDesc raw = describeSrs(src_->srs.srs);
-    auto* d = new QDialog(this);
-    d->setWindowTitle(QStringLiteral("높이 기준 지정"));
-    d->setFixedWidth(560);
-    auto* v = new QVBoxLayout(d);
-    v->setContentsMargins(24, 20, 24, 20);
-    v->setSpacing(10);
-    auto* q = new QLabel(QStringLiteral("이 모델의 높이는 어느 기준입니까?"));
-    QFont serif;
-    serif.setFamilies({QStringLiteral("Batang"), QStringLiteral("Noto Serif KR"), QStringLiteral("Malgun Gothic")});
-    serif.setPixelSize(20);
-    q->setFont(serif);
-    q->setWordWrap(true);
-    v->addWidget(q);
-    auto* hint = new QLabel(QStringLiteral("Z 값은 바꾸지 않고 이름표만 바꿉니다. 이 이름이 도면 범례·표제란과 상태줄에 들어갑니다."));
-    hint->setWordWrap(true);
-    hint->setObjectName("hint");
-    v->addWidget(hint);
-    struct Row { VDatum datum; QString title; QString note; bool recommend; };
-    std::vector<Row> rows;
-    rows.push_back({VDatum::None, QStringLiteral("파일 표기 그대로 — %1").arg(qs(raw.verticalKo())),
-                    raw.promotedTo3D ? QStringLiteral("iTwin이 EPSG:%1을 3D로 올리며 붙인 이름").arg(raw.horizontalEpsg) : QStringLiteral("파일에 적힌 높이 이름"), false});
-    for (VDatum vd : declarableVDatums()) {
-        const VDatumInfo& in = vdatumInfo(vd);
-        QString title = in.epsg ? QStringLiteral("%1  EPSG:%2").arg(qs(in.nameKo)).arg(in.epsg) : qs(in.nameKo);
-        bool rec = raw.promotedTo3D && vd == VDatum::EGM96;
-        rows.push_back({vd, title, rec ? QStringLiteral("측량 높이를 그대로 넣은 경우") : QString(), rec});
-    }
-    auto* group = new QButtonGroup(d);
-    int cur = 0;
-    for (int i = 0; i < int(rows.size()); ++i) if (rows[size_t(i)].datum == src_->srs.heightDeclared) cur = i;
-    for (int i = 0; i < int(rows.size()); ++i) {
-        auto* rb = new QRadioButton(rows[size_t(i)].recommend ? rows[size_t(i)].title + QStringLiteral("    추천") : rows[size_t(i)].title);
-        rb->setChecked(i == cur);
-        group->addButton(rb, i);
-        v->addWidget(rb);
-        if (!rows[size_t(i)].note.isEmpty()) {
-            auto* n = new QLabel(rows[size_t(i)].note);
-            n->setObjectName("faint");
-            n->setContentsMargins(22, 0, 0, 4);
-            v->addWidget(n);
-        }
-    }
-    auto* foot = new QHBoxLayout;
-    foot->addStretch();
-    auto* cancel = new QPushButton(QStringLiteral("취소"));
-    auto* ok = new QPushButton(QStringLiteral("지정"));
-    ok->setObjectName("primary");
-    ok->setDefault(true);
-    foot->addWidget(cancel);
-    foot->addWidget(ok);
-    v->addLayout(foot);
-    QObject::connect(cancel, &QPushButton::clicked, d, &QDialog::reject);
-    QObject::connect(ok, &QPushButton::clicked, d, [this, d, group, rows] {
-        int id = group->checkedId();
-        if (id < 0) { d->reject(); return; }
-        setHeightDeclaration(rows[size_t(id)].datum, true);
-        commitState(QStringLiteral("높이 기준"));
-        saveModelState();
-        d->accept();
-    });
-    return d;
-}
-
-void MainWindow::dlgHeightDatum() {
-    QDialog* d = heightDatumDialog();
-    if (!d) return;
-    d->exec();
-    d->deleteLater();
 }
 
 // ---------------------------------------------------------------- 커서 정밀 Z(잎 메시, CPU double)
@@ -1177,13 +1068,12 @@ void MainWindow::requestPick(const QPointF& screen) {
 }
 
 void MainWindow::showZSource(ZSource s, const QString& detail) {
-    QString v = qs(srsReport_.desc.verticalKo());
     const char* shortK = s == ZSource::LeafSurface ? "잎 표면" : s == ZSource::LeafWithFallback ? "표면·일부 대체" : s == ZSource::Coarse ? "대략" : s == ZSource::SectionCursor ? "단면 커서" : "—";
     zSrc_->setText(s == ZSource::None ? QStringLiteral("—") : QString::fromUtf8(shortK));
     bool coarse = s == ZSource::Coarse || s == ZSource::LeafWithFallback;
     zSrc_->setProperty("coarse", coarse);
     zSrc_->style()->unpolish(zSrc_); zSrc_->style()->polish(zSrc_);
-    QString tip = QStringLiteral("Z 출처: %1\n높이 기준: %2 (모델 SRS 그대로, 변환 없음)").arg(qs(zSourceKo(s)), v);
+    QString tip = QStringLiteral("Z 출처: %1 (모델 값 그대로, 변환 없음)").arg(qs(zSourceKo(s)));
     if (!detail.isEmpty()) tip += "\n" + detail;
     if (srsReport_.precisionWarning) tip += QStringLiteral("\n⚠ 로컬 좌표가 커서 메시 좌표 간격이 약 %1 mm 입니다(float32).").arg(srsReport_.float32StepMm, 0, 'f', 1);
     zSrc_->setToolTip(tip);

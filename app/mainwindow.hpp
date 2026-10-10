@@ -72,7 +72,7 @@ struct SheetParams {
     bool showBaseline = false; double baselineEl = 0;
     double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기 pt(10 cm · 50 cm) — 디자인 v5 결정 L
     int hatchKind = 0; double hatchMm = 1.0;         // 잘린 돌 빗금: 0 45° · 1 검은 칠 · 2 점묘, 간격 mm(스펙 §8 — F 단계가 씀)
-    QString heightLabel, srsLabel, facing, date;
+    QString srsLabel, facing, date;
     double imgDxMm = 0, imgDyMm = 0;   // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
 };
 /// 평면도 조판. 그림 칸은 정사영상만(단면선 없음). 바깥 좌표·나침반·범례·자는 단면도 조판과 같은 자리.
@@ -83,7 +83,7 @@ struct PlanSheetParams {
     bool split = false;
     bool wholeModel = false;    // false = 지금 왼쪽 화면
     asec::Box3 area;             // 로컬 XY
-    QString title, heightLabel, srsLabel, date;
+    QString title, srsLabel, date;
     double imgDxMm = 0, imgDyMm = 0;   // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
 };
 struct PointParams { asec::PointFormat format = asec::PointFormat::XYZ; int area = 0; double spacing = 0; bool rgb = true; asec::Box3 box; };
@@ -127,8 +127,6 @@ public:
     SheetParams defaultSheetParams() const;
     PlanSheetParams defaultPlanSheetParams() const;
     void dlgChooseSheet();                            // 평면 / 단면 조판 고르기
-    void dlgHeightDatum();
-    QDialog* heightDatumDialog();
     void dlgSheet();                                   // 단면도 조판
     void dlgPlanSheet();                               // 평면도 조판
     QDialog* buildSheetDialog(SheetParams& io, bool& accepted);   // 자동화(창 캡처)에서도 씀
@@ -234,7 +232,6 @@ private:
     QFrame* notice_ = nullptr;
     QLabel* noticeText_ = nullptr;
     QLabel *secTitle_ = nullptr, *secFacing_ = nullptr;
-    QToolButton *heightBadge_ = nullptr, *heightBadge2_ = nullptr;
     QToolButton* vexBtn_ = nullptr;
     int vexSuggest_ = 1; double vexRelief_ = 0;
     void updateVexUi();
@@ -278,12 +275,11 @@ private:
     QLabel* secCount_ = nullptr;
     QLineEdit *cx_ = nullptr, *cy_ = nullptr, *cz_ = nullptr;
     QLabel *msg_ = nullptr, *info_ = nullptr;
-    QToolButton* srsLabel_ = nullptr;   // 상태줄 「수평 EPSG:5187 · 동부원점(GRS80)」 배지 — 표시만(T4)
+    QLabel* srsLabel_ = nullptr;   // 상태줄 「수평 EPSG:5187 · 동부원점(GRS80)」 배지 — 표시만(T4)
     void dlgSrsDetails();
     asec::SrsReport srsReport_;   // 열린 모델의 좌표계 점검(표시·경고)
     asec::Box3 sceneBounds_;      // 열린 모델 로컬 상자(좌표계 재점검용)
     std::vector<std::string> sceneWarnings_;  // 열 때 경고(병합 레이어 등)
-    QString heightNote_;          // 높이 기준 지정 출처 안내(모델별 저장 / 마지막 지정값)
     QProgressBar* progress_ = nullptr;
     QDoubleSpinBox *front_ = nullptr, *back_ = nullptr;
     QSlider* opacity_ = nullptr;                 // 영상 불투명도 — 리본 입면 아래 줄(정본, secStyle 이 읽음)
@@ -296,12 +292,12 @@ private:
     bool drawEnded_ = false;      // 방금 그리기를 마침(다음 단면 결과를 맞춤으로)
     bool highContrast_ = false;
     bool fitNextResult_ = false;
-    // ---- 되돌리기: 단면선·두께·표시·높이 기준·현재 단면 스냅숏
+    // ---- 되돌리기: 단면선·두께·표시·현재 단면 스냅숏
 public:
     struct ViewState {
         asec::SectionLine line; bool hasLine = false; double front = 0, back = 0.5;
         bool image = true, profile = true, levels = true, fade = false, smooth = false;
-        int heightDecl = 0; int current = 0;
+        int current = 0;
         bool operator==(const ViewState& o) const;
     };
     ViewState captureState() const;
@@ -346,8 +342,6 @@ private:
     void setBackDepth(double v);
     void updateDepthChips();
     void applyHighContrast(bool on);
-    QString heightBadgeText(QString* state, QString* tip) const;
-    QString heightDatumShort() const;   // 높이 기준 짧은 이름(배지 · 홈 카드 공통)
     std::map<QString, QAction*> act_;
 
     std::shared_ptr<asec::MeshSource> src_;
@@ -398,9 +392,5 @@ private:
     SectionStyle secStyle() const;
     void report(bool ok, const QString& m);
     void applySrsReport();
-public:
-    /// 높이 기준 지정(이름표만, 값 변환 없음). persist = 모델별 설정 + 마지막 지정값 저장
-    void setHeightDeclaration(asec::VDatum v, bool persist);
-private:
     void refreshSrs();
 };

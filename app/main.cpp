@@ -2,10 +2,9 @@
 //   SectionViewer [파일.3mx|.obj] [--line AX AY BX BY] [--local] [--front m] [--back m] [--size WxH] [--tab N]
 //                 [--shot out.png] [--export-png f] [--export-tiff f] [--export-geotiff f] [--export-dxf f] [--dxf3d]
 //                 [--export-plan f] [--plan-view] [--export-xyz f] [--export-las f] [--area whole|band|view] [--spacing m] [--norgb]
-//                 [--scale N] [--dpi N] [--log f] [--perf-log f.csv] [--pick X Y]... [--hover] [--height-datum KEY] [--quit]
+//                 [--scale N] [--dpi N] [--log f] [--perf-log f.csv] [--pick X Y]... [--hover] [--quit]
 //   --wheel-test: 평면·단면 휠 확대/축소(커서 고정 오차 px, 애니메이션 시간, 프레임) + 레벨선 간격 기록
 //   --depth-fade on|off: 입면 깊이 음영(기본 설정값)
-//   --height-datum KEY: 높이 기준 지정(이름표만, 값 변환·저장 없음) srs|ellipsoidal|egm96|egm2008|kvd1964|kngeoid
 //   --pick X Y: 그 실좌표(--local 이면 로컬)에서 잎 메시 연직 정밀 피킹 → 로그(Z, 출처, 시간)
 //   --hover: 평면 보기 가운데로 마우스 이동을 흉내 → 좌표줄 Z 와 Z 출처(대략 → 잎 표면)를 로그
 //   --perf-log: 평면 보기 카메라 경로(맞춤→확대→이동→축소)를 재생하며 프레임마다 시간·LOD 상태를 CSV 로 기록
@@ -232,7 +231,7 @@ int main(int argc, char** argv) {
     int sheetWheel = 0;
     int sheetPick = -1;   // --sheet-pick N: 조판 탭 왼쪽 도면 목록 N 번째 줄을 누름(0 = 평면도)
     bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
-    QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, uiAuditDir, sheetBatch;
+    QString file, shot, logPath, perfPath, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, uiAuditDir, sheetBatch;
     QString iconSheetPng; bool iconSheet = false;
     int splashEsc = -1;   // --splash-esc N: 여는 화면을 띄우고 N ms 에 Esc 를 눌러 건너뛰는지 잰다(종료 6 = 늦게 닫힘)
     QString appIconDir;   // --app-icon DIR: 앱 아이콘 PNG 다섯 장을 쓰고 눈 검사(실패 종료 코드 12)
@@ -253,7 +252,6 @@ int main(int argc, char** argv) {
         auto nx = [&]() { return i + 1 < a.size() ? a[++i] : QString(); };
         if (s == "--line" && i + 4 < a.size()) { ax = a[i + 1].toDouble(); ay = a[i + 2].toDouble(); bx = a[i + 3].toDouble(); by = a[i + 4].toDouble(); i += 4; haveLine = true; }
         else if (s == "--local") local = true;
-        else if (s == "--height-datum") heightDatum = nx();
         else if (s == "--depth-fade") depthFade = nx();
         else if (s == "--wheel-test") wheelTest = true;
         else if (s == "--front") front = nx().toDouble();
@@ -280,7 +278,6 @@ int main(int argc, char** argv) {
         else if (s == "--plan-pitch") pitchArg = nx().toDouble();
         else if (s == "--settings") nx();
         else if (s == "--export-dialog-shot") dialogShot = nx();
-        else if (s == "--datum-shot") datumShot = nx();
         else if (s == "--ctx-shot") ctxShot = nx();
         else if (s == "--app-icon") appIconDir = nx();
         else if (s == "--splash-esc") splashEsc = nx().toInt();
@@ -379,11 +376,6 @@ int main(int argc, char** argv) {
     auto tApply = std::chrono::steady_clock::now();
     auto msSince = [](std::chrono::steady_clock::time_point t) { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count(); };
     w.applyScene(std::move(sc));
-    if (!heightDatum.isEmpty()) {   // 높이 기준 지정(이름표만, 저장 안 함). 키: srs|ellipsoidal|egm96|egm2008|kvd1964|kngeoid
-        VDatum d = heightDatum == "srs" ? VDatum::None : vdatumFromKey(heightDatum.toStdString());
-        if (d == VDatum::Unknown) log("height-datum: unknown key " + heightDatum);
-        else w.setHeightDeclaration(d, false);
-    }
     if (front >= 0 || back >= 0) w.setThickness(front >= 0 ? front : w.frontDepth(), back >= 0 ? back : w.backDepth());  // 성능 기록(단면 끌기)도 이 두께로
     if (!depthFade.isEmpty()) w.setDepthFade(depthFade != "off" && depthFade != "0");
     {
@@ -664,16 +656,6 @@ int main(int argc, char** argv) {
         } else m = "unknown export kind";
         log(QStringLiteral("export-%1 %2: %3").arg(kind, ok ? "ok" : "FAILED", QString(m).replace('\n', " | ")));
         if (!ok) rc = 4;
-    }
-    if (!datumShot.isEmpty() && w.source()) {
-        std::unique_ptr<QDialog> dlg(w.heightDatumDialog());
-        if (dlg) {
-            dlg->show();
-            processFor(400);
-            bool ok = dlg->grab().save(datumShot);
-            log(QStringLiteral("datum-shot %1: %2").arg(ok ? "ok" : "FAILED", datumShot));
-            dlg->close();
-        }
     }
     if (!dialogShot.isEmpty() && w.hasSection()) {   // 도면 창 캡처(넘침 경고가 보이게 기본 1:40 A4 가로)
         SheetParams sp = w.defaultSheetParams();

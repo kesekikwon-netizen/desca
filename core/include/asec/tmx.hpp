@@ -38,7 +38,9 @@ struct SrsReport {
     SrsDesc desc;
     std::string labelKo;                 // "수평 EPSG:5186 / 높이 타원체고(GRS80)"
     std::string tooltipKo;               // 여러 줄(원점·위경도·정밀도·경고 포함)
-    std::vector<std::string> warnings;   // desc.warnings + 원점·정밀도·축 순서·metadata 불일치
+    std::vector<std::string> warnings;   // desc.warnings + 원점·정밀도·축 순서·metadata 불일치(수평 쪽)
+    std::vector<std::string> heightWarnings;  // desc.heightWarnings + metadata 높이 기준 불일치 + iTwin 3D 승격 안내(T8: 앱은 보이지 않음)
+    std::string horizontalTooltipKo;     // 높이 글 없는 수평 툴팁(+ SRSOrigin · 모델 중심 위경도 · 정밀도 · 수평 경고)
     bool hasLatLon = false; double lat = 0, lon = 0;  // 모델 중심의 대략 위경도(TM 역계산, x=E y=N)
     double maxLocalXY = 0;               // 로컬 |x|,|y| 최대(m)
     double float32StepMm = 0;            // 그 크기에서 float32 간격(mm)

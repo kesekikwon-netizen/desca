@@ -54,11 +54,14 @@ struct SrsDesc {
     bool hasTm = false;
     double tmLat0 = 0, tmLon0 = 0, tmK0 = 1, tmFE = 0, tmFN = 0, tmA = 6378137.0, tmInvF = 298.257222101;
     double bboxS = 0, bboxW = 0, bboxN = 0, bboxE = 0; bool hasBbox = false;  // WKT USAGE BBOX(위도·경도)
-    std::vector<std::string> warnings;  // 사용자에게 보여 줄 경고(한국어)
+    std::vector<std::string> warnings;  // 사용자에게 보여 줄 경고(한국어) — 수평 좌표계 · 원점 · 축 순서 등
+    std::vector<std::string> heightWarnings;  // 높이(수직 기준)에 관한 안내 — 앱은 높이를 다루지 않아 알림 띠에 올리지 않는다(T8). 개발 도구(info)는 그대로 출력
 
     bool known() const { return kind != SrsKind::None && kind != SrsKind::Unknown; }
     /// UI 한 줄: "수평 EPSG:5186 / 높이 타원체고(GRS80)"
     std::string labelKo() const;
+    /// 수평만의 한 줄 이름표(화면 · 도면 · 정보 글): "수평 EPSG:5187 · 동부원점(GRS80)" / "수평 이름(EPSG 미확인)" / "좌표계 없음(로컬 좌표)" / "좌표계 미상(해석 불가)" / "로컬 ENU(위도, 경도)" — 높이 글 없음
+    std::string horizontalLabelKo() const;
     /// 상태줄 · 도면 글용 수평 한 줄: "EPSG:5187 · 동부원점(GRS80)"(원점 이름 · 타원체는 내장 표에 있을 때만, 없으면 "EPSG:N", EPSG 를 모르면 "")
     std::string horizontalShortKo() const;
     /// 수직 기준만: "타원체고(GRS80)" / "KVD1964 height (EPSG:5193)" / "SRS 에 명시 안 됨"
@@ -67,6 +70,8 @@ struct SrsDesc {
     std::string shortAscii() const;
     /// 툴팁: 이름·판별 근거·축 순서·경고·주의(높이 변환 안 함 등) 여러 줄
     std::string tooltipKo() const;
+    /// 수평만의 툴팁(이름 · 판별 근거 · 이름과 값이 다를 때 한 문장 · TM 값 · 축 순서) — 높이 글 없음. 앱의 상태줄 글이 씀(T8)
+    std::string horizontalTooltipKo() const;
 };
 
 /// SRS 문자열 해석(빈 문자열 = None)

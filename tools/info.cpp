@@ -70,6 +70,7 @@ int main(int argc, char** argv) {
     std::printf("로컬 최대   %.1f m → float32 간격 %.4f mm\n", rep.maxLocalXY, rep.float32StepMm);
     if (!src.srs.metadataSrs.empty()) std::printf("metadata    %s\n", src.srs.metadataSrs.c_str());
     for (auto& x : rep.warnings) std::printf("경고        %s\n", x.c_str());
+    for (auto& x : rep.heightWarnings) std::printf("경고(높이)   %s\n", x.c_str());
     for (auto& x : src.scene.warnings) std::printf("경고        %s\n", x.c_str());
     csv.add("open_ms", openMs, "ms"); csv.addS("srs_label", rep.labelKo); csv.add("horizontal_epsg", rep.desc.horizontalEpsg, "");
     csv.add("layers", double(src.scene.layers.size()), "");
