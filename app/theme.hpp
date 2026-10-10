@@ -69,6 +69,9 @@ inline QString arrowImagePath(const QColor& c, const QString& name) {
 }
 
 inline QString styleSheet(bool highContrast = false) {
+    // MSVC C2026: 원시 문자열 한 조각은 8 000 바이트 이하(MSVC 는 이어 붙이기 전 조각 하나가 약 16 KB, u"" 문자열은 그 절반에서 멈춘다).
+    // 늘어나면 QSS 의 빈 줄 하나를 `)" R"(` 만 있는 줄로 바꿔 나눈다 — 빈 줄이 아닌 곳에서 나누면 줄바꿈이 하나 더 생긴다.
+    // 출처: Microsoft C++ 문서 「Compiler Error C2026」.
     QString s = QStringLiteral(R"(
 QMainWindow, QWidget#central, QWidget#workArea { background: #FAF9F5; }
 QWidget { color: #141413; font-size: 13px; }
@@ -118,7 +121,7 @@ QToolButton#viewToggle { border: 1px solid transparent; border-radius: 4px; padd
 QToolButton#viewToggle:checked { background: #FFFFFF; border-color: #B0AEA5; }
 QToolButton#viewToggle:!checked { background: #F5F4ED; }
 QToolButton#viewToggle:hover { border-color: #C2C0B6; }
-
+)" R"(
 QToolButton { border: 1px solid transparent; border-radius: 4px; padding: 2px 6px; background: transparent; color: #141413; }
 QToolButton:hover { background: #F5F4ED; border-color: #C2C0B6; }
 QToolButton:pressed { background: #E8E6DC; }
@@ -198,7 +201,7 @@ QComboBox::down-arrow { image: url(%ARROW%); width: 10px; height: 10px; }
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { width: 0px; border: none; }
 QAbstractSpinBox { padding-right: 6px; }
 QComboBox QAbstractItemView { background: #FFFFFF; border: 1px solid #C2C0B6; border-radius: 6px; selection-background-color: #E3DACC; selection-color: #141413; outline: 0; }
-
+)" R"(
 QCheckBox, QRadioButton { spacing: 8px; }
 QCheckBox::indicator { width: 14px; height: 14px; border: 1px solid #87867F; border-radius: 3px; background: #FFFFFF; }
 QCheckBox::indicator:checked { background: #141413; border-color: #141413; image: url(%CHECK%); }
@@ -262,7 +265,7 @@ QGroupBox::title { subcontrol-origin: margin; left: 0; padding: 0 8px 0 0; color
 QLabel#calc { background: #FFFFFF; border: none; border-top: 1px solid #141413; border-bottom: 1px solid #DEDCD1; padding: 6px 2px; color: #141413; }
 QFrame#warnBox { background: #FFFFFF; border: 1px solid #C2C0B6; border-radius: 8px; }
 QFrame#warnBox QLabel { font-size: 12px; }
-
+)" R"(
 QFrame#notice { background: #FFFFFF; border: none; border-bottom: 1px solid #DEDCD1; }
 QFrame#notice[level="block"] { background: #F3DEDA; }
 QFrame#notice[level="block"] QLabel { color: #A33B3B; }
