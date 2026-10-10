@@ -17,7 +17,7 @@ cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release -DASEC_BUILD_APP=O
 ninja -C build-linux
 ./build-linux/asec_tests                      # Catch2 전체 (ctest 는 이것을 'core' 하나로 돌림)
 ./build-linux/asec_tests "[sheet]"            # 태그: [sheet] [backdepth] [cutplace] [real]
-./build-linux/asec_tests "레벨선: cm 정수 산술, 등급, 표기"   # 시험 이름 하나 (--list-tests 로 이름 확인)
+./build-linux/asec_tests "레벨선: cm 정수 산술*"   # 시험 하나: 이름 앞부분 + * (Catch2 는 쉼표를 OR 로 해석, --list-tests 로 이름 확인)
 
 ./build-linux.sh        # 앱 포함 전체 + 시험 + /tmp/asec-synthetic 합성 3MX (Qt6 dev, zlib 필요)
 ./build-win.sh [--no-package]   # Windows 교차 빌드 → dist/ (MinGW posix, Qt 6.8.3 mingw_64 = $QT_WIN, nsis, zip)
