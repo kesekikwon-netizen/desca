@@ -5,6 +5,8 @@
 #include "kerf_icons.hpp"
 
 #include <QDebug>
+#include <QDir>
+#include <QImage>
 #include <QPainter>
 #include <QPolygonF>
 #include <QPainterPath>
@@ -168,5 +170,61 @@ QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const 
         for (auto state : {QIcon::Off, QIcon::On})
             for (qreal d : iconDprs()) ic.addPixmap(chipPixmap(name, tile, glyphPx, kind, c, mode, state, d, caret), mode, state);
     return ic;
+}
+// ---- 앱 아이콘(T1 · T2 — 캔버스 Brand 화판) ----
+QPixmap appPixmap(int px, qreal dpr) {
+    // 크기별 SVG: 큰 것(> 32, 띠 넷) · 작은 것(17–32, 띠 둘 · 선 2.6) · 아주 작은 것(≤ 16, 슬롯 · 선 더 굵게) — 한 SVG 가 .ico 도 만든다(make_app_ico.py)
+    const kerficons::Svg* s = find(px <= 16 ? QStringLiteral("trench-tiny") : px <= 32 ? QStringLiteral("trench-small") : QStringLiteral("trench"));
+    QPixmap out = blank(px, dpr);
+    if (!s) return out;
+    QSvgRenderer r(QByteArray(s->svg));
+    if (!r.isValid()) return out;
+    QPixmap sq = blank(px, dpr);
+    { QPainter sp(&sq); sp.setRenderHint(QPainter::Antialiasing); r.render(&sp, QRectF(0, 0, px, px)); }
+    QPainter p(&out);   // 둥근 모서리(변의 23 %)로 깎는다 — 클립 대신 합성으로 가장자리도 부드럽게
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(Qt::NoPen); p.setBrush(Qt::black);
+    p.drawRoundedRect(QRectF(0, 0, px, px), px * 0.23, px * 0.23);
+    p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    p.drawPixmap(0, 0, sq);
+    // 크림 바탕에 놓였을 때 타일 윤곽이 보이게 안쪽 1 px 가는 테(캔버스 Brand 화판의 inset ring .12)
+    const qreal rw = std::max(1.0, px / 128.0);
+    p.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    p.setPen(QPen(QColor(20, 20, 19, 31), rw)); p.setBrush(Qt::NoBrush);
+    p.drawRoundedRect(QRectF(rw / 2, rw / 2, px - rw, px - rw), px * 0.23 - rw / 2, px * 0.23 - rw / 2);
+    return out;
+}
+
+QIcon appIcon() {
+    QIcon ic;
+    for (int px : {16, 24, 32, 48, 64, 128, 256})
+        for (qreal d : {1.0, 2.0}) ic.addPixmap(appPixmap(px, d));
+    return ic;
+}
+
+namespace {
+bool near(QRgb c, int r, int g, int b, int tol) {
+    return std::abs(qRed(c) - r) <= tol && std::abs(qGreen(c) - g) <= tol && std::abs(qBlue(c) - b) <= tol;
+}
+}  // namespace
+
+bool writeAppIcons(const QString& dir, QString* report) {
+    QDir().mkpath(dir);
+    QStringList bad;
+    int n = 0;
+    for (int px : {16, 24, 32, 48, 256}) {
+        ++n;
+        const QImage im = appPixmap(px, 1.0).toImage().convertToFormat(QImage::Format_ARGB32);
+        const bool saved = im.save(QStringLiteral("%1/app-%2.png").arg(dir).arg(px));
+        auto at = [&](double ux, double uy) { return im.pixel(std::clamp(int(ux / 24.0 * px), 0, px - 1), std::clamp(int(uy / 24.0 * px), 0, px - 1)); };
+        const bool corner = qAlpha(im.pixel(0, 0)) < 40 && qAlpha(im.pixel(px - 1, px - 1)) < 40;   // 둥근 모서리(투명)
+        const bool red = near(at(4.5, 8.0), 255, 0, 0, 40) && qAlpha(at(4.5, 8.0)) > 230;          // 지표 단면선(왼쪽)
+        const bool slot = near(at(12.0, 13.5), 250, 249, 245, 14);                                  // T 모양 빈 자리(크림)
+        const bool band = near(at(3.0, 19.0), 181, 87, 58, 40);                                     // 흙 띠(흙색)
+        if (!(saved && im.width() == px && corner && red && slot && band))
+            bad << QStringLiteral("%1(saved=%2 corner=%3 red=%4 slot=%5 band=%6)").arg(px).arg(int(saved)).arg(int(corner)).arg(int(red)).arg(int(slot)).arg(int(band));
+    }
+    if (report) *report = QStringLiteral("app-icon n=%1 bad=%2%3 dir=%4 RESULT %5").arg(n).arg(bad.size()).arg(bad.isEmpty() ? QString() : QStringLiteral(" [") + bad.join(QLatin1Char(' ')) + QLatin1Char(']')).arg(dir, bad.isEmpty() ? QStringLiteral("ok") : QStringLiteral("fail"));
+    return bad.isEmpty();
 }
 }  // namespace kerf

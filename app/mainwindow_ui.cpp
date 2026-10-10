@@ -1480,11 +1480,7 @@ void MainWindow::rebuildStartPage() {
     // ---- 왼쪽 위: 앱 아이콘 56 · 「Trench | 발굴 평·단면」 · 설명 · 「모델 열기 Ctrl+O」 「최근 ▾」 · 끌어 놓기 안내
     auto* hero = new QWidget; { auto* v = new QVBoxLayout(hero); v->setContentsMargins(0, 0, 0, 0); v->setSpacing(12);   // 카드 위끝과 같은 줄(검토 UI 2)
         auto* nm = new QHBoxLayout; nm->setSpacing(14);
-        auto* ic = new QLabel; { QPixmap pm(56 * 2, 56 * 2); pm.setDevicePixelRatio(2); pm.fill(Qt::transparent);
-            QPainter p(&pm); p.setRenderHint(QPainter::Antialiasing); p.setPen(Qt::NoPen); p.setBrush(theme::Action); p.drawRoundedRect(QRectF(0, 0, 56, 56), 12, 12);
-            QPainterPath pr; pr.moveTo(10, 22); pr.lineTo(20, 22); pr.lineTo(25, 36); pr.lineTo(31, 36); pr.lineTo(36, 22); pr.lineTo(46, 22);
-            p.setPen(QPen(theme::Card, 3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin)); p.setBrush(Qt::NoBrush); p.drawPath(pr); p.end();
-            ic->setPixmap(pm); ic->setFixedSize(56, 56); }
+        auto* ic = new QLabel; ic->setPixmap(kerf::appPixmap(56, devicePixelRatioF())); ic->setFixedSize(56, 56); ic->setAccessibleName(QStringLiteral("Trench"));   // 앱 아이콘 = 「T는 트렌치의 단면」(T2) — 이 화면의 dpr 로 굽는다(홈은 보일 때마다 다시 그림)
         nm->addWidget(ic); nm->addWidget(lab(QStringLiteral("Trench"), "heroName"));
         auto* sep = new QFrame; sep->setObjectName("homeSep"); sep->setFixedSize(1, 24);   // 이름 | 부제 가름선 — 라벨 테두리 대신(라벨 테두리는 sizeHint 에 여백이 더해져 줄임표 글이 짓눌려 보임)
         auto* sub = elideLab(lab(QStringLiteral("발굴 평·단면"), "homeSub"), Qt::ElideRight);   // 이름 글꼴이 넓어도(Batang 없는 PC · offscreen) 왼쪽 칸 420 을 넘기지 않게 부제가 줄임(T1 — 「Trench」 가 「Kerf」 보다 길다)

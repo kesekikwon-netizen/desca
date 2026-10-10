@@ -1,5 +1,5 @@
 # 아이콘 SVG 목록(손으로 적는다 — glob 아님). configure 때 kerf_icons.hpp 를 만든다: rcc · moc 없이 SVG 글자를 C++ 문자열로.
-# lucide/ 는 Lucide(ISC, LICENSE-lucide.txt)에서 그대로, kerf/ 는 Kerf 전용(make_kerf_svgs.py 가 만듦). 둘 다 24 격자 · stroke 2.
+# app/ 는 앱 아이콘 Trench(3 크기, 명시 색 — 색 바꾸기 대상 아님, make_app_ico.py 가 같은 SVG 로 .ico 를 만든다). lucide/ 는 Lucide(ISC, LICENSE-lucide.txt)에서 그대로, kerf/ 는 Kerf 전용(make_kerf_svgs.py 가 만듦). 둘 다 24 격자 · stroke 2.
 set(KERF_ICON_DIR ${CMAKE_CURRENT_LIST_DIR})
 set(KERF_ICON_FILES
   lucide/folder.svg lucide/x.svg lucide/plus.svg lucide/check.svg lucide/clipboard-list.svg lucide/file-text.svg lucide/image.svg
@@ -10,7 +10,8 @@ set(KERF_ICON_FILES
   kerf/chevron-down.svg kerf/star.svg kerf/section-line.svg kerf/hatch.svg kerf/outline.svg kerf/profile.svg kerf/points-xyz.svg
   kerf/cloud-las.svg kerf/geotiff.svg kerf/csv.svg kerf/sections-list.svg kerf/vex.svg kerf/top-view.svg kerf/height.svg
   kerf/crosshair.svg kerf/levels.svg kerf/fade.svg kerf/image-layer.svg kerf/north.svg kerf/legend.svg kerf/title-block.svg
-  kerf/scalebar.svg kerf/paper.svg kerf/edit-move.svg kerf/copy.svg kerf/enter.svg kerf/esc.svg kerf/gap.svg kerf/menu.svg kerf/sheet.svg)
+  kerf/scalebar.svg kerf/paper.svg kerf/edit-move.svg kerf/copy.svg kerf/enter.svg kerf/esc.svg kerf/gap.svg kerf/menu.svg kerf/sheet.svg
+  app/trench.svg app/trench-small.svg app/trench-tiny.svg)
 
 # out: 만들 헤더 경로. SVG 가 바뀌면 configure 가 다시 돈다(CMAKE_CONFIGURE_DEPENDS).
 function(kerf_write_icons_header out)

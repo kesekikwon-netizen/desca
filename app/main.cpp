@@ -199,9 +199,7 @@ int main(int argc, char** argv) {
     QApplication::setFont(f);
     app.setStyle("Fusion");
     app.setStyleSheet(theme::styleSheet(QSettings().value("ui/highContrast", false).toBool()));
-    QIcon ic; for (const char* r : {":/app_256.png"}) ic.addFile(r);
-    ic.addFile(QApplication::applicationDirPath() + "/app.ico");
-    app.setWindowIcon(ic);
+    app.setWindowIcon(kerf::appIcon());   // Trench 앱 아이콘 — 같은 SVG(app/icons/app/)에서 .ico 도 만든다(T2)
 
     QStringList a = app.arguments();
     QString splashLive;   // --splash-live DIR: 실제 여는 화면 창을 5 초 돌리며 1초마다 찍음
@@ -210,6 +208,7 @@ int main(int argc, char** argv) {
     bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
     QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, coordShot, uiAuditDir, sheetBatch;
     QString iconSheetPng; bool iconSheet = false;
+    QString appIconDir;   // --app-icon DIR: 앱 아이콘 PNG 다섯 장을 쓰고 눈 검사(실패 종료 코드 12)
     bool undoTest = false, split = false; double sheetScale = 0, sectionScale = 0;
     QString lodShot;
     double camX = 0, camY = 0, camMpp = 0, vexArg = 0, pitchArg = -1;
@@ -257,6 +256,7 @@ int main(int argc, char** argv) {
         else if (s == "--datum-shot") datumShot = nx();
         else if (s == "--coord-shot") coordShot = nx();
         else if (s == "--ctx-shot") ctxShot = nx();
+        else if (s == "--app-icon") appIconDir = nx();
         else if (s == "--icon-sheet") { iconSheet = true; iconSheetPng = nx(); }   // v5 A3: 아이콘 이름 검사 + 격자 캡처(실패 종료 코드 10)
         else if (s == "--lod-shot") lodShot = nx();
         else if (s == "--section-scale") sectionScale = nx().toDouble();
@@ -279,6 +279,11 @@ int main(int argc, char** argv) {
         else if (!s.startsWith("--")) file = s;
     }
 
+    if (!appIconDir.isEmpty()) {   // 모델 · 창 없이 돈다 — packaging/assets/make_app_ico.py 가 이 PNG 로 app.ico 를 만든다
+        QString rep; const bool ok = kerf::writeAppIcons(appIconDir, &rep);
+        fprintf(stdout, "%s\n", rep.toUtf8().constData());
+        return ok ? 0 : 12;
+    }
     if (!splashLive.isEmpty()) { QDir().mkpath(splashLive); OpeningSplash sp; sp.run(5000, splashLive); return 0; }
     if (!splashShot.isEmpty() && file.isEmpty()) {
         QImage im = MainWindow::renderOpeningSplash(QSize(960, 600));

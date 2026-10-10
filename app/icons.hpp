@@ -36,4 +36,10 @@ struct ChipColors {
 [[nodiscard]] QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, bool caret = false);   // caret = 메뉴 칩 ▾(타일 오른쪽 아래)
 /// 칩 한 장 바로 그리기(상태 · 배율 지정) — chipIcon 의 반복이 이것을 부르고, --ui-audit 가 같은 인자로 구운 기준 장과 칩 아이콘을 픽셀 비교한다(B5 검토 ⓓ)
 [[nodiscard]] QPixmap chipPixmap(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, QIcon::Mode mode, QIcon::State state, qreal dpr, bool caret = false);
+/// 앱 아이콘 한 장(Trench — 「T는 트렌치의 단면」, 캔버스 Brand 화판). px 논리 크기 · dpr 배율. 모서리 둥글기 = 변의 23 %(투명). 큰 것(> 32) · 작은 것(17–32) · 아주 작은 것(≤ 16)을 따로 그린다
+[[nodiscard]] QPixmap appPixmap(int px, qreal dpr = 1.0);
+/// 창 · 작업 표시줄 QIcon(16 · 24 · 32 · 48 · 64 · 128 · 256 × dpr 1 · 2)
+[[nodiscard]] QIcon appIcon();
+/// --app-icon DIR: 16 · 24 · 32 · 48 · 256 PNG(app-N.png)를 DIR 에 쓰고 눈 검사(모서리 투명 · 빨간 선 · 파인 자리 · 흙 띠). 하나라도 틀리면 false. report = 한 줄 요약 + 틀린 크기
+bool writeAppIcons(const QString& dir, QString* report);
 }  // namespace kerf

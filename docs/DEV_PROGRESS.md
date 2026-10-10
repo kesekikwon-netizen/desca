@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T1 이름 Kerf → Trench(보이는 글만) 끝**, 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 다음: T2 앱 아이콘 → T3 여는 화면 → T4(G1) 좌표계 5187. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T2 앱 아이콘 「T는 트렌치의 단면」 끝**(앱 · .ico 한 SVG), 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 다음: T3 여는 화면 「T를 판다」 1.0 s → T4(G1) 좌표계 5187. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -282,6 +282,13 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 합성 모델 감사 10조합(1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2) 모두 `RESULT ok` · `app-name` 통과 · 빠른 시험 51325 통과 · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0. 실제 모델(Production_1.3sm)은 `app-name` 통과, `RESULT fail` 은 기존 두 가지(좌표계 5183 알림 띠 · 긴 경로 칸 줄임) — T4(G1) 에서 없어짐. 실제 화면 캡처 `C:\dev\tmp\elev-bug\t1-shots\`(Batang 에서 「Trench | 발굴 평·단면」 정상).
 - **판정(Ruling):** ① 내부 식별자 유지(`SectionViewer.exe` · QSettings `ExcavSection/SectionViewer` · 캐시 경로) — 조직 · 앱 이름이 설정 위치와 3sm 변환 캐시(135 MB)를 정함, 바꾸면 최근 · 단면 목록이 사라져 보임 — 잘못이면: 폴더에 옛 이름이 보임. 캔버스의 「설정 이전」 문장 둘을 이에 맞게 고침. ② 버전은 1.2.1 그대로(릴리스 결정) — 캔버스의 「1.3」을 1.2.1 로 고침. ③ `app.rc` 의 `FILEVERSION` · 설치 파일 이름 · `app.manifest` 이름은 그대로.
 - **남은 문제:** 여는 화면 · 홈 아이콘 · .ico 는 아직 옛 그림 → T2 · T3. 캔버스 「여는 화면」 화판의 `rench` 글자 크기가 게시본에서 15 px 로 바뀌어 있음(내 원본은 230 px — 캔버스 편집기에서 바뀐 것으로 보여 되돌리지 않고 사용자에게 알림).
+
+### 2026-10-11 · Claude Code(Sonnet 5.5) — T2 (G0b): 앱 아이콘 「T는 트렌치의 단면」 — 한 SVG 에서 앱 · .ico 모두
+- **시험 먼저(RED):** 새 옵션 `--app-icon DIR`(모델 · 창 없이 도는 판정, 실패 종료 12) — 16 · 24 · 32 · 48 · 256 PNG 를 쓰고 모서리 투명 · 지표 빨간 선 · T 모양 빈 자리(크림) · 흙 띠 색을 픽셀로 잰다. 그리기 전(빈 그림 stub)에는 `n=5 bad=5 … RESULT fail`(EXIT 12).
+- **무엇을:** `app/icons/app/trench.svg`(> 32 px, 띠 넷 · 선 2.2) · `trench-small.svg`(17–32, 띠 둘 · 선 2.6) · `trench-tiny.svg`(≤ 16, 슬롯 8.5–15.5 · 선 3.2) — 명시 색, `clipPath` 없이 「크림 슬롯을 띠 위에 덮는」 방식(QtSvg 호환), `icons.cmake` 에 더함. `kerf::appPixmap(px, dpr)`(둥글기 변의 23 % 합성 마스크 + 안쪽 1 px 가는 테 — 크림 바탕에서도 타일 윤곽이 보임) · `kerf::appIcon()`(16 · 24 · 32 · 48 · 64 · 128 · 256 × 1 · 2) · `kerf::writeAppIcons`. 창 아이콘 · 정보 창 · 홈 56 px 타일이 이것을 씀(옛 손그림 흙색 타일 삭제). `packaging/assets/make_app_ico.py`(Pillow)가 앱이 그린 PNG 를 `app.ico`(5 크기) · `app_256.png` · `app_64.png` 로 묶음 — 도형을 파이썬에서 다시 그리지 않는다(각 ico 장이 앱 그림과 픽셀 동일함을 확인). 옛 `make_icons.py` 는 기록용 표시.
+- **확인:** GREEN `app-icon n=5 bad=0 RESULT ok`(EXIT 0) · ico 5 크기 모두 앱 렌더와 픽셀 동일 · exe 에 실제로 박힘(`app.rc` touch 뒤 재빌드, 탐색기용 32 px 추출이 새 아이콘) · `--icon-sheet n=65 missing=0` · 합성 모델 감사 10조합 `RESULT ok`(마지막 변경 뒤 4조합 재확인) · 빠른 시험 51325 통과 · 홈 캡처 2560(Batang)에서 「T」 모양 확인(`C:\dev\tmp\elev-bug\t2-shots\`).
+- **판정(Ruling):** ① 앱 아이콘 SVG 는 `icons.cmake` 목록(`kAll`)에 들어가 `--icon-sheet` 에도 보인다(65개) — 별도 목록을 만들 만큼의 이득이 없음. ② 설치 프로그램 그림(`header.bmp` · `wizard.bmp` · `app_1024.png`)은 옛 Kerf 그림 그대로 — 설치판은 사용자 요청 때만 만든다(R7.5). ③ 어두운 작업 표시줄에서의 윤곽은 크림 타일 자체가 충분히 밝아 따로 테를 두지 않음.
+- **남은 문제:** 여는 화면은 아직 옛 그림 → T3.
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.
