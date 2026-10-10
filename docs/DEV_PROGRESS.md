@@ -26,10 +26,10 @@
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
-| 바뀐 파일(내용) | 모두 커밋됨(단계마다 커밋 — 사용자 지시 2026-10-09 「단계마다 깃커밋해줘」). 로컬 `feature/design-v2` 는 `origin`(`0f7fbfe`)보다 앞섬 — **push 는 사용자 말 때**(또는 「자동 깃 커밋 푸시」 세션). `git log --oneline 0f7fbfe..HEAD` |
-| 빌드 | 성공 — `C:\dev\kerf-v4c` (§2), 병합 `3c9b0d4` 뒤 다시 빌드 exit 0 |
-| 시험 | 병합 뒤 `asec_tests "~CoalescingWorker*"` 51325 통과. 팩토리 통합 검증(`9a77d61`): 전체 51339 통과 · `--ui-audit` 1280×800 · 1920×1040 · 3440×1440 · 3840×2160 × 1 · 2 + 1280 · 2560 × 1 · 1.25 · 1.75 모두 RESULT ok · GitHub Actions: Windows 작업은 MSVC C2026 으로 실패 중(R0) |
-| 최근 캡처 | `C:\dev\tmp\kerf-shots\b5-merged-work.png`(병합 빌드 1920×1040 실제 화면) · `C:\dev\tmp\b5-shots\`(work-1280 · 1920 · 1920-x1.25 · 1920-x2 · 3440 · 3840 · draw-1280 · start-1280) · offscreen 감사 `C:\dev\kerf-wt\20261009-01-b5-dpi-build\logs\` (이 PC에만) |
+| 바뀐 파일(내용) | 모두 커밋 · 푸시됨(2026-10-11 사용자 지시 「커밋 푸시」) — `origin/feature/design-v2` 에 T1–T12 · 인수 문서 · 병합까지 올라가 있다. 새 PC 에서는 `git pull` 만 하면 된다(올릴 것 없음). 이 PC 에만 있는 것: 장부 `.superpowers/` · 실제 모델 · 캡처 · `.claude/settings.local.json`(권한 설정)
+| 빌드 | 성공 — `C:\dev\kerf-v4c` (§2), T12 뒤 마지막 빌드 exit 0 · MSVC(VS 2022 생성기) C2026 은 R0(`5331124`)에서 고침 — 병합 커밋 `6111378` 의 GitHub Actions 결과는 `factory ci 6111378` 로 확인 |
+| 시험 | T12 뒤 `asec_tests "~CoalescingWorker*"` 51408 통과 · `--ui-audit` 합성 모델 1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2 + 1920 × 1.25 · 1.75 + 실제 모델 `Production_1.3sm` + 실제 Windows 창 모두 RESULT ok · `--sheet-check` · `--icon-sheet` · `--undo-test` · `--cursor-sheet` · `--app-icon` EXIT 0 |
+| 최근 캡처 | 이 PC 의 `C:/dev/tmp/elev-bug/` 아래 t1 … t10 폴더 등(실좌표 · 이 PC 에만, 저장소에 없음). 새 PC 에서는 `shot.ps1` 로 다시 찍는다 |
 
 ## 2. 이 PC에서 빌드 · 실행 (검증된 명령)
 - **한글 경로 함정:** 저장소가 `C:\Users\권을\…`에 있으면 CMake가 부르는 `rc.exe` · `llvm-rc`가 멈춘다(실측 2회). 그래서 **정션 `C:\dev\desca` → 저장소**를 만들어 그 경로로 빌드한다(이미 있음: `New-Item -ItemType Junction -Path C:\dev\desca -Target <저장소>`).
@@ -392,6 +392,8 @@ C:\dev\kerf-v4c\asec_tests.exe
 > 4. 작업 방식(사용자 지시 그대로): superpowers 스킬(시험 먼저 RED → GREEN) · 복잡한 작업(좌표계 · DXF · SVG 층)은 advisor(Opus) 먼저 · 매 단계 **이름 지정한 파일만** 커밋(`git add -A` 금지, `design-v4/` · `dg/` · `image*.png` · `factory/jobs/20261010-03-audit-tighten/build.md` 는 올리지 않음) · 검토자 에이전트는 전부 끝난 뒤 한 번만 · 푸시 · 병합은 사용자가 말할 때만(이번 푸시는 사용자가 말했음).
 > 5. **새 PC 준비:** §2 의 빌드 정션(`C:\dev\desca` → 저장소) · Qt 6.8 이상(`setColorScheme` 때문) · 합성 모델 `asec-make-synthetic.exe C:\dev\kerf-synth` · **실제 모델 `Production_1.3sm`(사용자 다운로드 폴더 — 저장소에 없음, 사용자에게 받는다)** · 감사 매트릭스(1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2 + 1.25 · 1.75 + 실제 모델 + 실제 Windows 창 `--ui-audit`)는 이 파일 §4 각 기록의 「확인」 줄과 같다. 장부 `.superpowers/sdd/…/progress.md` 는 PC 에만 있으므로(`.gitignore`) 이 파일 §4 의 「판정」이 대신한다.
 > 6. 알려진 것: ① 실제 키보드로 여는 화면 Esc · 클릭은 사용자가 한 번 눌러 봐야 함(T3 판정 ①) ② 캔버스 질문 18–20(일러스트레이터 판 · A2/A1 · Strata 파일)은 R13 · 도면 용지 · 「자료」 정리 때 사용자 답 필요(추천대로 진행) ③ 푸시 전까지 원격에 없던 커밋이 많다 — 푸시 뒤 GitHub Actions(Windows) 결과를 `factory ci <sha>` 로 확인.
+
+> **아래 0–3번은 2026-10-10 이전(v5 · v6 시절) 기록이다 — 참고용. 지금 순서의 정본은 바로 위 「▶ 2026-10-11 중단 · 다른 PC 에서 이어받기」 블록(T13부터)이다.**
 
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.
 - **사용자가 직접 확인할 것(E4–E7, 1분 — 화면 조작 도구가 Kerf 창을 못 잡아 미실행):** 바탕화면 Kerf 로 합성 모델이나 실제 모델을 열고 ① 단면선 긋기(S) 중 평면 왼쪽 위 떠 있는 되돌리기 · 다시를 눌러 반응하는지 ② F11 로 전체화면 ↔ 원래 크기 ③ Ctrl+P 로 도면 탭을 연 뒤 Esc 로 무엇이 일어나는지 ④ 단면 머리 축척 칸에 「1:30」 을 쳐 Enter 하면 축척이 바뀌는지. 안 되는 것만 알려 주면 대기 목록에 넣는다.
