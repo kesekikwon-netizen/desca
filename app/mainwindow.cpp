@@ -254,6 +254,7 @@ void MainWindow::updateEnabled() {
     for (QWidget* wd : {static_cast<QWidget*>(front_), static_cast<QWidget*>(back_)}) wd->setEnabled(sc && secCtx);
     for (auto* c : depthChip_) if (c) c->setEnabled(sc && secCtx);
     if (depthBox_) depthBox_->setEnabled(sc && secCtx);
+    for (QWidget* wd : {elevRow2_, static_cast<QWidget*>(opacityMenu_), lineWidthMenu_}) if (wd) wd->setEnabled(sc && secCtx);   // 입면 아래 줄 · 더보기의 같은 칸도 입면 칸과 같이
     if (findBox_) findBox_->setEnabled(!home);
     if (coordBtn_) coordBtn_->setEnabled(sc && !busy && secCtx);   // 리본 오른쪽 끝 「좌표 입력」도 단면 문맥에서만(검토 I2)
     action("open")->setEnabled(!busy); action("recent")->setEnabled(!busy && !recentFiles().isEmpty());

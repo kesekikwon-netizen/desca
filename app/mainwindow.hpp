@@ -284,7 +284,13 @@ private:
     QString heightNote_;          // 높이 기준 지정 출처 안내(모델별 저장 / 마지막 지정값)
     QProgressBar* progress_ = nullptr;
     QDoubleSpinBox *front_ = nullptr, *back_ = nullptr;
-    QSlider* opacity_ = nullptr;
+    QSlider* opacity_ = nullptr;                 // 영상 불투명도 — 리본 입면 아래 줄(정본, secStyle 이 읽음)
+    QSlider* opacityMenu_ = nullptr;             // 같은 값 — 리본이 낮아 아래 줄이 숨으면 더보기 안에서
+    QWidget* elevRow2_ = nullptr;                // 리본 입면 아래 줄: 영상 불투명도 · 단면선 굵기(사용자 지시 2026-10-10 「더보기 안의 … 입면 밑으로」)
+    QWidget* lineWidthMenu_ = nullptr;           // 더보기 안의 단면선 굵기 칩
+    QAction *opacityMenuAct_ = nullptr, *lineWidthMenuAct_ = nullptr;   // 더보기 안의 두 칸(아래 줄이 보이면 숨김)
+    std::vector<QToolButton*> lineWidthChips_;   // 단면선 굵기 칩 전부(아래 줄 · 더보기) — 하나를 누르면 함께 맞춤
+    void setSectionLineWidth(double px);
     bool drawEnded_ = false;      // 방금 그리기를 마침(다음 단면 결과를 맞춤으로)
     bool highContrast_ = false;
     bool fitNextResult_ = false;

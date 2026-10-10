@@ -122,6 +122,11 @@ void Ribbon::addWidget(const QString& groupId, QWidget* w) {
     updateGeometry();
 }
 
+void Ribbon::setLookHook(std::function<void(const RibbonLook&, int)> hook) {
+    lookHook_ = std::move(hook);
+    if (lookHook_) applyLook(lookIndex_, true);   // 이미 고른 크기에도 바로 맞춘다(같은 크기면 updateLook 이 applyLook 을 건너뛰므로)
+}
+
 void Ribbon::setCorner(QWidget* w) {
     if (corner_) { row_->removeWidget(corner_); corner_->deleteLater(); }
     corner_ = w;
@@ -312,12 +317,14 @@ void Ribbon::applyLook(int index, bool force) {
     appliedLine_ = line;
     const RibbonLook L = looks().at(index);
     for (const Chip& c : chips_) drawChip(c, L);
+    if (lookHook_) lookHook_(L, chipHeight(L));   // 칸 위젯이 줄을 숨기거나 보이게 — 아래 여백 계산보다 먼저
     const int gh = kGroupPadTop + kCaptionHeight + kCaptionGap + chipHeight(L) + kGroupPadBottom;   // 묶음 높이를 같게 — 입면 묶음 이름이 내려가지 않음(검토 UI 2)
     for (const QString& id : order_) groups_[id].frame->setFixedHeight(gh);
-    for (QWidget* box : widgetBoxes_) {   // 위젯 가운데 = 타일 가운데(칩 위 여백 6 + 타일/2)
+    for (QWidget* box : widgetBoxes_) {   // 위젯 가운데 = 타일 가운데(칩 위 여백 6 + 타일/2). "ribbonCenterHeight" 가 있으면 그 맨 위 줄만 가운데
         QWidget* inner = box->layout()->count() ? box->layout()->itemAt(0)->widget() : nullptr;
-        const int ih = inner ? inner->sizeHint().height() : 0;
-        box->layout()->setContentsMargins(0, std::max(0, 6 + L.tile / 2 - ih / 2), 0, 0);
+        const int centerH = inner ? inner->property("ribbonCenterHeight").toInt() : 0;
+        const int ih = centerH > 0 ? centerH : (inner ? inner->sizeHint().height() : 0);
+        box->layout()->setContentsMargins(0, std::max(0, tileCenterY(L) - ih / 2), 0, 0);
         box->setFixedHeight(chipHeight(L));
     }
     setFixedHeight(sizeHint().height());

@@ -341,7 +341,38 @@ QWidget* MainWindow::buildRibbon() {
         h->addWidget(lab(QStringLiteral("뒤"), "hint")); h->addWidget(back_);
         h->addWidget(lab(QStringLiteral("앞"), "hint")); h->addWidget(front_); }
     depthBox_->setToolTip(QStringLiteral("입면 배경(뒤 깊이) · 숫자키 1–5, 앞 두께"));
-    ribbon_->addWidget(QStringLiteral("elev"), depthBox_);
+    // 단면선 굵기 칩 셋(아래 줄 · 더보기 공용 모양). 어느 쪽을 눌러도 setSectionLineWidth 가 모든 칩 · 설정 · 그리기를 맞춘다
+    auto lineWidthChips = [this](bool compact) {
+        auto* w = new QWidget; auto* h = new QHBoxLayout(w); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(compact ? 2 : 0);
+        const double ws[3] = {1.5, 2.0, 3.0};
+        const double cur = QSettings().value("view/sectionLineWidth", 2.0).toDouble();
+        for (int i = 0; i < 3; ++i) {
+            auto* c = new QToolButton; c->setObjectName("chip"); c->setCheckable(true); c->setFocusPolicy(Qt::NoFocus);
+            c->setText(compact ? QString::number(ws[i], 'g', 2) : QStringLiteral("%1 px").arg(ws[i], 0, 'g', 2));
+            if (compact) { c->setFixedSize(28, 22); c->setProperty("tight", true); }   // 28: 아래 줄이 위 줄(깊이) 폭 안에 들어가게
+            c->setToolTip(QStringLiteral("단면선 굵기 %1 px (화면만 — 인쇄는 0.35 mm)").arg(ws[i], 0, 'g', 2));
+            c->setProperty("lineWidth", ws[i]); c->setChecked(std::fabs(cur - ws[i]) < 0.01);
+            if (i == 0) c->setProperty("pos", "first");
+            if (i == 2) c->setProperty("pos", "last");
+            const double wv = ws[i];
+            QObject::connect(c, &QToolButton::clicked, this, [this, wv] { setSectionLineWidth(wv); });
+            lineWidthChips_.push_back(c); h->addWidget(c);
+        }
+        return w;
+    };
+    // 입면 아래 줄(사용자 지시 2026-10-10 「더보기 안의 영상 불투명도 · 단면선 굵기를 입면 밑으로」): 위 줄(깊이)은 타일 가운데 그대로, 그 밑에 단다.
+    // 슬라이더는 가로 Ignored(최소 56) — 아래 줄이 위 줄보다 넓어지지 않아 리본 폭 계산(1920 타일 50 · 1280 타일 20)이 그대로
+    elevRow2_ = new QWidget; elevRow2_->setObjectName("elevRow2");
+    { auto* h = new QHBoxLayout(elevRow2_); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(4);
+        opacity_ = new QSlider(Qt::Horizontal); opacity_->setObjectName("opacityRow"); opacity_->setRange(10, 100); opacity_->setValue(100);
+        opacity_->setMinimumWidth(56); opacity_->setFixedHeight(22); opacity_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+        opacity_->setToolTip(QStringLiteral("입면 영상 불투명도 10–100 % (화면만 — 도면 · 내보내기는 100 %)"));
+        h->addWidget(lab(QStringLiteral("영상 불투명도"), "hint")); h->addWidget(opacity_, 1); h->addSpacing(2);
+        h->addWidget(lab(QStringLiteral("단면선 굵기"), "hint")); h->addWidget(lineWidthChips(true)); }
+    auto* elevBlock = new QWidget; elevBlock->setObjectName("elevBlock");
+    elevBlock->setProperty("ribbonCenterHeight", depthBox_->sizeHint().height());   // 위 줄만 타일 가운데(Ribbon::addWidget)
+    { auto* v = new QVBoxLayout(elevBlock); v->setContentsMargins(0, 0, 0, 0); v->setSpacing(3); v->addWidget(depthBox_); v->addWidget(elevRow2_); }
+    ribbon_->addWidget(QStringLiteral("elev"), elevBlock);
     // 레벨선 간격 글(옛 가짜 입력칸)은 리본에서 뺐다 — 갱신 코드가 쓰므로 위젯만 숨겨 둔다(범례는 정보 줄)
     lvLine_ = lab(QStringLiteral("0.10 m"), "mono"); lvLabel_ = lab(QStringLiteral("0.50 m"), "mono");
     for (auto* l : {lvLine_, lvLabel_}) { l->setParent(ribbon_); l->hide(); }
@@ -366,29 +397,15 @@ QWidget* MainWindow::buildRibbon() {
     ribbon_->addGroup(QStringLiteral("etc"), QStringLiteral("기타"));
     add("etc", "keys", K::Normal, "keyboard", QStringLiteral("단축키"));
     { auto* mn = new QMenu(this);
-        opacity_ = new QSlider(Qt::Horizontal); opacity_->setRange(10, 100); opacity_->setValue(100); opacity_->setFixedWidth(110);
-        auto* opw = rowOf({lab(QStringLiteral("영상 불투명도"), "hint"), opacity_}); opw->setContentsMargins(12, 4, 12, 4);
-        auto* wa = new QWidgetAction(mn); wa->setDefaultWidget(opw); mn->addAction(wa);
-        auto* lw = new QWidget; { auto* h = new QHBoxLayout(lw); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(0);
-            const double ws[3] = {1.5, 2.0, 3.0};
-            double cur = QSettings().value("view/sectionLineWidth", 2.0).toDouble();
-            std::vector<QToolButton*> bs;
-            for (int i = 0; i < 3; ++i) {
-                auto* c = new QToolButton; c->setObjectName("chip"); c->setCheckable(true); c->setFocusPolicy(Qt::NoFocus);
-                c->setText(QStringLiteral("%1 px").arg(ws[i], 0, 'g', 2)); c->setChecked(std::fabs(cur - ws[i]) < 0.01);
-                if (i == 0) c->setProperty("pos", "first");
-                if (i == 2) c->setProperty("pos", "last");
-                bs.push_back(c); h->addWidget(c);
-            }
-            for (int i = 0; i < 3; ++i) {
-                double wv = ws[i];
-                QObject::connect(bs[size_t(i)], &QToolButton::clicked, this, [this, bs, i, wv] {
-                    for (int j = 0; j < 3; ++j) bs[size_t(j)]->setChecked(j == i);
-                    QSettings().setValue("view/sectionLineWidth", wv); section_->setStyle(secStyle());
-                });
-            } }
-        auto* lwBox = rowOf({lab(QStringLiteral("단면선 굵기"), "hint"), lw}); lwBox->setContentsMargins(12, 4, 12, 4);
-        auto* wa2 = new QWidgetAction(mn); wa2->setDefaultWidget(lwBox); mn->addAction(wa2);
+        // 영상 불투명도 · 단면선 굵기는 입면 아래 줄이 정본 — 여기 두 칸은 리본이 낮아 아래 줄이 숨을 때만 보인다(같은 값, 아래 setLookHook)
+        opacityMenu_ = new QSlider(Qt::Horizontal); opacityMenu_->setObjectName("opacityMenu"); opacityMenu_->setRange(10, 100); opacityMenu_->setValue(opacity_->value()); opacityMenu_->setFixedWidth(110);
+        QObject::connect(opacityMenu_, &QSlider::valueChanged, opacity_, [this](int v) { opacity_->setValue(v); });
+        QObject::connect(opacity_, &QSlider::valueChanged, opacityMenu_, [this](int v) { QSignalBlocker bk(opacityMenu_); opacityMenu_->setValue(v); });
+        auto* opw = rowOf({lab(QStringLiteral("영상 불투명도"), "hint"), opacityMenu_}); opw->setContentsMargins(12, 4, 12, 4);
+        auto* wa = new QWidgetAction(mn); wa->setDefaultWidget(opw); mn->addAction(wa); opacityMenuAct_ = wa;
+        lineWidthMenu_ = lineWidthChips(false); lineWidthMenu_->setObjectName("lineWidthMenu");
+        auto* lwBox = rowOf({lab(QStringLiteral("단면선 굵기"), "hint"), lineWidthMenu_}); lwBox->setContentsMargins(12, 4, 12, 4);
+        auto* wa2 = new QWidgetAction(mn); wa2->setDefaultWidget(lwBox); mn->addAction(wa2); lineWidthMenuAct_ = wa2;
         mn->addSeparator();
         mn->addAction(action("smooth")); mn->addAction(action("lang"));
         mn->addSeparator();
@@ -412,6 +429,13 @@ QWidget* MainWindow::buildRibbon() {
         ch->addWidget(findBox_); }
     ribbon_->setCorner(corner);
     { auto* sc = new QShortcut(QKeySequence::Find, this); QObject::connect(sc, &QShortcut::activated, this, [this] { findBox_->setFocus(); findBox_->selectAll(); }); }
+    // 입면 아래 줄은 칩 높이 안에 두 줄이 들어갈 때만(글자 보이는 크기 — 1920 · 2560 …). 안 들어가면(글자 숨김 크기 — 1280 …) 숨기고 더보기 안의 같은 칸을 보인다
+    ribbon_->setLookHook([this, elevBlock](const RibbonLook& L, int chipH) {
+        const int topH = depthBox_->sizeHint().height();
+        const bool two = std::max(0, Ribbon::tileCenterY(L) - topH / 2) + topH + elevBlock->layout()->spacing() + elevRow2_->sizeHint().height() <= chipH;
+        elevRow2_->setVisible(two);
+        opacityMenuAct_->setVisible(!two); lineWidthMenuAct_->setVisible(!two);
+    });
     return ribbon_;
 }
 
@@ -1701,6 +1725,13 @@ void MainWindow::shiftLine(double d) {
     updateHeader();
 }
 
+// 단면선 굵기(화면만): 칩 전부(입면 아래 줄 · 더보기) · 설정 · 단면 그리기를 한 번에
+void MainWindow::setSectionLineWidth(double px) {
+    QSettings().setValue("view/sectionLineWidth", px);
+    for (QToolButton* c : lineWidthChips_) c->setChecked(std::fabs(c->property("lineWidth").toDouble() - px) < 0.01);
+    if (section_) section_->setStyle(secStyle());
+}
+
 void MainWindow::applyHighContrast(bool on) {
     highContrast_ = on;
     QSettings().setValue("ui/highContrast", on);
@@ -2218,6 +2249,61 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         const bool okc = dim == 0 && elevDy >= 0 && elevDy <= 3;
         L << QStringLiteral("ui-audit ribbon-context dim-captions=%1 elev-center-dy=%2%3").arg(dim).arg(elevDy).arg(okc ? QString() : QStringLiteral("  FAIL"));
         ok &= okc;
+    }
+    {   // 2d) 입면 아래 줄(사용자 지시 2026-10-10 「더보기 안의 영상 불투명도 · 단면선 굵기를 입면 밑으로」): 리본에 글자가 보이는 크기면 입면 묶음 아래 줄에 보이고
+        //     더보기에는 없음, 글자 숨김 크기(리본이 낮아 두 줄이 안 들어감)면 아래 줄은 숨고 더보기 안에 둘. 아래 줄은 위 줄보다 넓지 않음(1920 타일 50 을 지킴).
+        //     두 자리의 값은 하나: 아래 줄에서 바꾸면 그리기 설정(secStyle)과 더보기 쪽이 같이 바뀐다
+        auto* row2 = ribbon_->findChild<QWidget*>(QStringLiteral("elevRow2"));
+        auto* opRow = ribbon_->findChild<QSlider*>(QStringLiteral("opacityRow"));
+        QSlider* opMenu = nullptr; QWidget* lwMenu = nullptr; int more = 0;
+        if (QMenu* mm = action("more")->menu())
+            for (QAction* a : mm->actions())
+                if (a->inherits("QWidgetAction"))
+                    if (QWidget* dw = static_cast<QWidgetAction*>(a)->defaultWidget()) {
+                        if (auto* s = dw->findChild<QSlider*>(QStringLiteral("opacityMenu"))) { opMenu = s; if (a->isVisible()) ++more; }
+                        if (auto* w = dw->findChild<QWidget*>(QStringLiteral("lineWidthMenu"))) { lwMenu = w; if (a->isVisible()) ++more; }
+                    }
+        const bool wide = lk.labels;
+        const bool shown = row2 && row2->isVisibleTo(ribbon_);
+        const bool placeOk = wide ? (shown && more == 0) : (!shown && more == 2);
+        // 폭: 입면 칸 전체(elevBlock)의 sizeHint 가 위 줄과 같아야(리본 폭 계산이 그대로) · 아래 줄은 슬라이더 최소 폭까지 넣어도 위 줄 안
+        auto* blk = ribbon_->findChild<QWidget*>(QStringLiteral("elevBlock"));
+        const int depthW = depthBox_ ? depthBox_->sizeHint().width() : 0, blkW = blk ? blk->sizeHint().width() : -1, rowMin = row2 ? row2->minimumSizeHint().width() : 0;
+        const bool widthOk = blkW == depthW && rowMin <= depthW;
+        bool inside = true;
+        if (shown) {   // 리본 안 · 짓눌림 없음(아래 줄 · 라벨 · 슬라이더 최소 폭)
+            const QRect r(row2->mapTo(ribbon_, QPoint(0, 0)), row2->size());
+            inside = ribbon_->rect().contains(r) && row2->width() >= rowMin && (!opRow || opRow->width() >= opRow->minimumWidth());
+            for (auto* l : row2->findChildren<QLabel*>()) if (l->isVisibleTo(row2) && l->width() < l->sizeHint().width()) inside = false;
+        }
+        bool sync = false;
+        if (opRow && opMenu && lwMenu && row2) {
+            const int op0 = opRow->value();
+            opRow->setValue(50);    // 줄 → 메뉴 · 그리기 설정
+            bool opOk = std::fabs(secStyle().imageOpacity - 0.5) < 1e-9 && opMenu->value() == 50;
+            opMenu->setValue(70);   // 메뉴 → 줄 · 그리기 설정
+            opOk = opOk && std::fabs(secStyle().imageOpacity - 0.7) < 1e-9 && opRow->value() == 70;
+            opRow->setValue(op0);
+            const double lw0 = QSettings().value(QStringLiteral("view/sectionLineWidth"), 2.0).toDouble();
+            auto chipOf = [](QWidget* host, double w) -> QToolButton* { for (auto* b : host->findChildren<QToolButton*>()) if (std::fabs(b->property("lineWidth").toDouble() - w) < 0.01) return b; return nullptr; };
+            QToolButton *r3 = chipOf(row2, 3.0), *m3 = chipOf(lwMenu, 3.0), *r15 = chipOf(row2, 1.5), *m15 = chipOf(lwMenu, 1.5);
+            const double hc = highContrast_ ? 1.5 : 1.0;
+            bool lwOk = false;
+            if (r3 && m3 && r15 && m15) {
+                r3->click();    // 줄 → 메뉴 · 그리기 설정
+                lwOk = std::fabs(secStyle().lineWidthPx - 3.0 * hc) < 1e-9 && m3->isChecked() && !m15->isChecked();
+                if (!wide) {    // 메뉴 → 줄 · 그리기 설정: 메뉴 칸이 보이는 크기에서만(넓은 창에서는 숨긴 QWidgetAction 칸의 click() 이 먹지 않음 — 실측 2026-10-10)
+                    m15->click();
+                    lwOk = lwOk && std::fabs(secStyle().lineWidthPx - 1.5 * hc) < 1e-9 && r15->isChecked() && !r3->isChecked();
+                }
+                if (QToolButton* back = chipOf(row2, lw0)) back->click();   // 되돌림
+            }
+            sync = opOk && lwOk;
+        }
+        const bool okr = row2 && placeOk && widthOk && inside && sync;
+        L << QStringLiteral("ui-audit elev-row2 shown=%1 more=%2 wide=%3 width=%4/%5 row-min=%6 inside=%7 sync=%8%9").arg(int(shown)).arg(more).arg(int(wide)).arg(blkW).arg(depthW)
+                 .arg(rowMin).arg(int(inside)).arg(int(sync)).arg(okr ? QString() : QStringLiteral("  FAIL"));
+        ok &= okr;
     }
     ok &= ribOk;
     if (!dir.isEmpty()) grab().save(QDir(dir).filePath(QStringLiteral("ribbon.png")));

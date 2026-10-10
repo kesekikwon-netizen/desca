@@ -2,6 +2,7 @@
 // 창 폭에 들어가는 가장 큰 크기 — 좁아지면 글자를 먼저 숨기고 타일을 줄인다. 묶음은 접지 않는다.
 // Q_OBJECT 없음(moc 없이 빌드): 신호 연결은 람다, 칩 목록은 멤버로 든다.
 #pragma once
+#include <functional>
 #include <QHash>
 #include <QList>
 #include <QString>
@@ -34,8 +35,13 @@ public:
     QFrame* addGroup(const QString& id, const QString& caption);
     /// 동작을 칩으로. label = 타일 아래 짧은 글자(2–4자), 툴팁 = 동작의 툴팁(긴 이름 · 키). kind 가 켜짐 색을 정한다
     QToolButton* addAction(const QString& groupId, QAction* a, kerf::ChipKind kind, const QString& iconName, const QString& label);
-    /// 칩이 아닌 위젯(뒤 깊이 칩 · 칸)을 묶음에. 크기는 위젯의 sizeHint
+    /// 칩이 아닌 위젯(뒤 깊이 칩 · 칸)을 묶음에. 크기는 위젯의 sizeHint. 위젯에 속성 "ribbonCenterHeight"(px)가 있으면
+    /// 그 높이(맨 위 줄)를 타일 세로 가운데에 맞추고 나머지는 그 밑으로 내려 단다(입면 아래 줄)
     void addWidget(const QString& groupId, QWidget* w);
+    /// 크기를 고를 때마다 · 건 즉시 부른다 — 칸 위젯이 칩 높이에 맞춰 줄을 숨기거나 보이게(여백 계산 전이라 바뀐 높이가 바로 반영됨)
+    void setLookHook(std::function<void(const RibbonLook&, int chipHeight)> hook);
+    /// 칩 안에서 타일 세로 가운데(위 여백 6 + 타일/2)
+    static int tileCenterY(const RibbonLook& L) { return 6 + L.tile / 2; }
     /// 오른쪽 끝 묶음(Strata 「지역」 + 찾기 자리)
     void setCorner(QWidget* w);
     /// 체크할 수 없는 칩을 켜짐(보기 켜짐) 모양으로 — 도면 탭의 「도면」 칩
@@ -86,6 +92,7 @@ private:
     QList<Chip> chips_;
     QList<QWidget*> widgetBoxes_;   // 칩이 아닌 위젯을 감싼 상자(타일 세로 가운데 맞춤)
     QHash<QString, QIcon> iconCache_;   // "이름|타일|종류"
+    std::function<void(const RibbonLook&, int)> lookHook_;
     int lookIndex_ = 0;
     int appliedLine_ = 0;
     bool updating_ = false;
