@@ -236,7 +236,11 @@ QScrollArea#sideScroll > QWidget > QWidget#sideBody { background: #FFFFFF; }
 QWidget#sideBottom { background: #FFFFFF; border-top: 1px solid #DEDCD1; }
 QLabel#sheetDone { font-size: 12px; color: #3F6B31; }
 QFrame#sideRule { background: #DEDCD1; border: none; }
-QLabel#inspName { font-family: Batang, "Noto Serif KR", "Malgun Gothic"; font-size: 20px; font-weight: 500; color: #141413; }
+QLabel#roName { font-family: Batang, "Noto Serif KR", "Malgun Gothic"; font-size: 20px; font-weight: 500; color: #141413; }
+QLabel#roHead { font-size: 11px; color: #5E5D59; }
+QLabel#roCap { font-size: 12px; color: #5E5D59; }
+QLabel#roVal { font-family: Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; color: #141413; }
+QFrame#listReadout { border: 0; border-top: 1px solid #DEDCD1; background: transparent; }
 QLabel#ccEmpty { font-size: 20px; color: #5E5D59; }
 QToolButton#homeBtn:disabled, QPushButton#homeBtn:disabled { color: #696862; background: #F5F4ED; border-color: #DEDCD1; }
 QLineEdit#homeFind:disabled { background: #F0EEE6; color: #73726C; border-color: #DEDCD1; }

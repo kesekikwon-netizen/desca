@@ -265,8 +265,14 @@ private:
     QMenu* recentMenu_ = nullptr;
     QUndoStack* undo_ = nullptr;
     QWidget* sidePanel_ = nullptr;
-    QWidget* inspector_ = nullptr;
-    QLabel *inspName_ = nullptr, *inspLen_ = nullptr, *inspDepth_ = nullptr, *inspNote_ = nullptr, *inspBody_ = nullptr;
+    // 고른 단면의 수치 — 오른쪽 판 대신 단면 목록 아래 읽기 전용 칸(T7)
+    enum RoRow { RoLen, RoDepth, RoBearing, RoFacing, RoBand, RoTop, RoFloor, RoCut, RoA, RoB, RoSrs, RoCount };
+    QFrame* readout_ = nullptr;
+    QLabel *roHead_ = nullptr, *roName_ = nullptr, *roNote_ = nullptr;
+    QLabel *roCap_[RoCount] = {}, *roVal_[RoCount] = {};
+    void setRo(int row, const QString& cap, const QString& val);   // 값이 비면 그 줄을 숨김
+    void updateReadout();                                          // 고른 단면 수치(updateHeader 가 부름)
+    void readoutDrawing(int stage, const asec::SectionLine& l);    // 그리는 중 수치(updateCtx 가 부름)
     QLabel *stripCut_ = nullptr, *stripBand_ = nullptr;
     QListWidget* secList_ = nullptr;
     QLabel* secCount_ = nullptr;
@@ -329,7 +335,6 @@ private:
     QWidget* buildStartPage();
     QFrame* buildNotice();
     QWidget* buildSidePanel();
-    QWidget* buildInspector();
     QWidget* buildPlanFrame();
     QWidget* buildSectionFrame();
     void updateHeader();           // 단면 머리·정보 띠·높이 배지

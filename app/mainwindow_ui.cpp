@@ -482,27 +482,14 @@ void MainWindow::updateCtx(int stage, const SectionLine& l) {
         guide_->setTool(QStringLiteral("section-line"), QStringLiteral("단면선 긋기 › A 찾는 중"));
         guide_->setHint(QStringLiteral("평면에서 시작점 A를 클릭하세요"));
         guide_->setKeys({QStringLiteral("Esc")});
-        if (inspName_) {   // 오른쪽 판도 「그리는 중」(화판 2)
-            inspName_->setText(QStringLiteral("새 단면 · 그리는 중"));
-            if (inspNote_) inspNote_->setText(QStringLiteral("평면에서 시작점 A를 찍으세요. 길이 · 방위 · 커서는 A′를 찾는 동안 여기 보입니다"));
-            if (inspLen_) inspLen_->setText(QStringLiteral("—"));
-            if (inspDepth_) inspDepth_->setText(QStringLiteral("—"));
-            if (inspBody_) inspBody_->clear();
-        }
+        readoutDrawing(0, l);   // 목록 아래 수치도 「그리는 중」(화판 2)
         return;
     }
     const double L = SectionFrame(l).L;
     guide_->setTool(QStringLiteral("section-line"), QStringLiteral("단면선 긋기 › A′ 찾는 중"));
     guide_->setHint(QStringLiteral("끝점 A′를 클릭하세요 · Shift = 축 맞춤"));   // 스펙 §5 — 길이는 평면 A′ 이름표 「A′ · 7.43 m」가 든다(T5: 「숫자 = 길이」 · Enter 는 좌표 입력과 함께 지움)
     guide_->setKeys({QStringLiteral("Esc")});
-    if (inspNote_) inspNote_->setText(QStringLiteral("A 찍음 · 끝점 A′를 찍으세요"));   // 화판 2
-    if (inspLen_ && inspBody_ && L > 1e-6) {
-        const Vec3 org = src_ ? src_->srs.origin : Vec3();
-        inspLen_->setText(QStringLiteral("%1 m").arg(L, 0, 'f', 2));
-        inspBody_->setText(QStringLiteral("방위  %1\n보는 쪽  %2\n\nA   %3\n    %4\n커서  %5\n    %6")
-                               .arg(qs8(formatAzimuth(sectionAzimuthDeg(l)))).arg(qs8(facingKo(sectionAzimuthDeg(l))))
-                               .arg(l.a.x + org.x, 0, 'f', 3).arg(l.a.y + org.y, 0, 'f', 3).arg(l.b.x + org.x, 0, 'f', 3).arg(l.b.y + org.y, 0, 'f', 3));
-    }
+    readoutDrawing(1, l);
 }
 
 // ---------------------------------------------------------------- 알림 띠(노란 띠 대신)
@@ -878,22 +865,42 @@ void MainWindow::updateHeader() {
         }
         setStripTexts(stateRich, cutFull, cutShort);
     }
-    if (!inspName_) return;
-    inspName_->setText(has ? sectionName() : QStringLiteral("고른 단면이 없습니다"));
+    updateReadout();
+}
+
+// ---------------------------------------------------------------- 단면 목록 아래 읽기 전용 수치(T7 · 오른쪽 판 대신)
+// 194879.139 → 「194 879.139」(천 단위 띄어 쓰기 — 캔버스 「최종 디자인」 Work 화판)
+static QString groupedFixed(double v, int dec) {
+    QString s = QString::number(std::fabs(v), 'f', dec);
+    const int dot = s.indexOf(QLatin1Char('.')), ip = dot < 0 ? int(s.size()) : dot;
+    for (int i = ip - 3; i > 0; i -= 3) s.insert(i, QLatin1Char(' '));
+    return (v < 0 ? QStringLiteral("−") : QString()) + s;
+}
+
+void MainWindow::setRo(int row, const QString& cap, const QString& val) {
+    if (row < 0 || row >= RoCount || !roVal_[row]) return;
+    const bool on = !val.isEmpty();
+    roCap_[row]->setText(cap); roVal_[row]->setText(val);
+    roCap_[row]->setVisible(on); roVal_[row]->setVisible(on);
+}
+
+void MainWindow::updateReadout() {
+    if (!roName_) return;
+    const bool has = plan_ && plan_->hasLine();
+    const int n = int(sections_.size());
+    roHead_->setText(current_ >= 0 && current_ < n ? QStringLiteral("<b>선택한 단면</b> &nbsp;%1 / %2").arg(current_ + 1).arg(n) : QStringLiteral("<b>선택한 단면</b>"));
+    roName_->setText(has ? sectionName() : QStringLiteral("고른 단면이 없습니다"));
     QString note;
-    if (current_ >= 0 && current_ < int(sections_.size())) note = qs8(sections_[size_t(current_)].note);
-    if (inspNote_) inspNote_->setText(has ? (note.isEmpty() ? secFacing_->text() : note + QStringLiteral(" · ") + secFacing_->text()) : QStringLiteral("단면선을 그으면 여기 수치가 모입니다"));
-    if (!has) {
-        inspLen_->setText(QStringLiteral("—"));
-        inspDepth_->setText(QStringLiteral("—"));
-        inspBody_->setText(QString());
-        return;
-    }
+    if (current_ >= 0 && current_ < n) note = qs8(sections_[size_t(current_)].note);
+    roNote_->setText(has ? (note.isEmpty() ? secFacing_->text() : note + QStringLiteral(" · ") + secFacing_->text()) : QStringLiteral("단면선을 그으면 여기 수치가 모입니다"));
+    for (int i = 0; i < RoCount; ++i) setRo(i, QString(), QString());
+    if (!has) return;
     const SectionLine& ln = plan_->line();
     const SectionFrame fr(ln);
     const Vec3 org = src_ ? src_->srs.origin : Vec3();
-    inspLen_->setText(QStringLiteral("%1 m").arg(fr.L, 0, 'f', 2));
-    QString body;
+    setRo(RoLen, QStringLiteral("길이"), QStringLiteral("%1 m").arg(fr.L, 0, 'f', 2));
+    setRo(RoBearing, QStringLiteral("방위"), qs8(formatAzimuth(sectionAzimuthDeg(ln))));
+    setRo(RoBand, QStringLiteral("앞 / 뒤"), QStringLiteral("%1 / %2 m").arg(ln.front, 0, 'f', 2).arg(ln.back, 0, 'f', 2));
     if (section_->hasResult()) {
         const auto& r = section_->result();
         // 잘린 선(빨강)에서 잼: 지표 = A·A′ 끝의 높이, 바닥 = 가장 낮은 점, 깊이 = 높은 쪽 지표 − 바닥
@@ -906,25 +913,39 @@ void MainWindow::updateHeader() {
             }
         if (zLo > zHi) { zLo = r.zMin; zHi = r.zMax; zA = zB = r.zMax; }
         const double top = std::max(zA, zB);
-        inspDepth_->setText(QStringLiteral("%1 m").arg(std::max(0.0, top - zLo), 0, 'f', 2));
         size_t nv = 0; for (auto& pl : r.profile) nv += pl.size();
-        body = QStringLiteral("방위  %1\n보는 쪽  %2\n앞 / 뒤  %3 / %4 m\n지표 EL.  %5 m\n바닥 EL.  %6 m\n잘린 선  %7줄 · %8점")
-                   .arg(qs8(formatAzimuth(sectionAzimuthDeg(ln))))
-                   .arg(qs8(facingKo(sectionAzimuthDeg(ln))))
-                   .arg(ln.front, 0, 'f', 2).arg(ln.back, 0, 'f', 2)
-                   .arg(QStringLiteral("%1 – %2").arg(std::min(zA, zB) + org.z, 0, 'f', 2).arg(std::max(zA, zB) + org.z, 0, 'f', 2)).arg(zLo + org.z, 0, 'f', 2)
-                   .arg(r.profile.size()).arg(nv);
-    } else {
-        inspDepth_->setText(QStringLiteral("—"));
-        body = QStringLiteral("방위  %1\n보는 쪽  %2\n앞 / 뒤  %3 / %4 m")
-                   .arg(qs8(formatAzimuth(sectionAzimuthDeg(ln))))
-                   .arg(qs8(facingKo(sectionAzimuthDeg(ln))))
-                   .arg(ln.front, 0, 'f', 2).arg(ln.back, 0, 'f', 2);
+        setRo(RoDepth, QStringLiteral("깊이"), QStringLiteral("%1 m").arg(std::max(0.0, top - zLo), 0, 'f', 2));
+        setRo(RoTop, QStringLiteral("지표 EL."), QStringLiteral("%1 – %2 m").arg(std::min(zA, zB) + org.z, 0, 'f', 2).arg(std::max(zA, zB) + org.z, 0, 'f', 2));
+        setRo(RoFloor, QStringLiteral("바닥 EL."), QStringLiteral("%1 m").arg(zLo + org.z, 0, 'f', 2));
+        setRo(RoCut, QStringLiteral("잘린 선"), QStringLiteral("%1줄 · %2점").arg(r.profile.size()).arg(groupedFixed(double(nv), 0)));
     }
-    body += QStringLiteral("\n\nA   %1\n    %2\nA′  %3\n    %4")
-                .arg(ln.a.x + org.x, 0, 'f', 3).arg(ln.a.y + org.y, 0, 'f', 3)
-                .arg(ln.b.x + org.x, 0, 'f', 3).arg(ln.b.y + org.y, 0, 'f', 3);
-    inspBody_->setText(body);
+    setRo(RoA, QStringLiteral("A"), groupedFixed(ln.a.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(ln.a.y + org.y, 3));
+    setRo(RoB, QStringLiteral("A′"), groupedFixed(ln.b.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(ln.b.y + org.y, 3));
+    if (roVal_[RoDepth]) roVal_[RoDepth]->setToolTip(QStringLiteral("지표(높은 쪽 끝)에서 바닥(가장 낮은 점)까지"));
+    setRo(RoSrs, QStringLiteral("수평"), qs8(srsReport_.desc.horizontalShortKo()));
+}
+
+// 그리는 중(0 = A 대기, 1 = A′ 대기): 같은 자리에 길이 · 방위 · 보는 쪽 · 앞/뒤 · A · 커서(A′ 자리)
+void MainWindow::readoutDrawing(int stage, const SectionLine& l) {
+    if (!roName_) return;
+    roHead_->setText(QStringLiteral("<b>선택한 단면</b>"));
+    roName_->setText(QStringLiteral("새 단면 · 그리는 중"));
+    for (int i = 0; i < RoCount; ++i) setRo(i, QString(), QString());
+    if (stage == 0) {
+        roNote_->setText(QStringLiteral("평면에서 시작점 A를 찍으세요. 길이 · 방위 · 커서는 A′를 찾는 동안 여기 보입니다"));
+        return;
+    }
+    roNote_->setText(QStringLiteral("A 찍음 · 끝점 A′를 찍으세요"));   // 화판 2
+    const double L = SectionFrame(l).L;
+    if (L <= 1e-6) return;
+    const Vec3 org = src_ ? src_->srs.origin : Vec3();
+    setRo(RoLen, QStringLiteral("길이"), QStringLiteral("%1 m").arg(L, 0, 'f', 2));
+    setRo(RoBearing, QStringLiteral("방위"), qs8(formatAzimuth(sectionAzimuthDeg(l))));
+    setRo(RoFacing, QStringLiteral("보는 쪽"), qs8(facingKo(sectionAzimuthDeg(l))));
+    setRo(RoBand, QStringLiteral("앞 / 뒤"), QStringLiteral("%1 / %2 m").arg(front_->value(), 0, 'f', 2).arg(back_->value(), 0, 'f', 2));
+    setRo(RoA, QStringLiteral("A"), groupedFixed(l.a.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(l.a.y + org.y, 3));
+    setRo(RoB, QStringLiteral("커서"), groupedFixed(l.b.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(l.b.y + org.y, 3));
+    setRo(RoSrs, QStringLiteral("수평"), qs8(srsReport_.desc.horizontalShortKo()));
 }
 
 // ---------------------------------------------------------------- 상태줄
@@ -1020,51 +1041,27 @@ QWidget* MainWindow::buildSidePanel() {
         m.exec(secList_->viewport()->mapToGlobal(pt));
     });
     v->addWidget(secList_, 1);
+    // 고른 단면의 수치(읽기 전용 — T7: 오른쪽 판을 없애고 목록 아래로). 계산한 값이라 여기서 고칠 수 없다
+    readout_ = new QFrame; readout_->setObjectName("listReadout"); readout_->setAttribute(Qt::WA_StyledBackground);
+    { auto* rv = new QVBoxLayout(readout_); rv->setContentsMargins(0, 10, 0, 0); rv->setSpacing(6);
+        roHead_ = lab(QString(), "roHead"); roHead_->setTextFormat(Qt::RichText); rv->addWidget(roHead_);
+        auto* nr = new QHBoxLayout; nr->setSpacing(10);
+        roName_ = lab(QString(), "roName"); roNote_ = lab(QString(), "hint"); roNote_->setWordWrap(true);
+        nr->addWidget(roName_, 0, Qt::AlignBottom); nr->addWidget(roNote_, 1, Qt::AlignBottom); rv->addLayout(nr);
+        auto* g = new QGridLayout; g->setContentsMargins(0, 0, 0, 0); g->setHorizontalSpacing(12); g->setVerticalSpacing(3); g->setColumnStretch(1, 1);
+        for (int i = 0; i < RoCount; ++i) {
+            roCap_[i] = lab(QString(), "roCap"); roVal_[i] = lab(QString(), "roVal");
+            roCap_[i]->setAlignment(Qt::AlignLeft | Qt::AlignTop); roVal_[i]->setAlignment(Qt::AlignRight | Qt::AlignTop);
+            roVal_[i]->setTextInteractionFlags(Qt::TextSelectableByMouse); roVal_[i]->setCursor(Qt::IBeamCursor);
+            roCap_[i]->hide(); roVal_[i]->hide();
+            g->addWidget(roCap_[i], i, 0, Qt::AlignTop); g->addWidget(roVal_[i], i, 1);
+        }
+        rv->addLayout(g);
+        auto* ronote = lab(QStringLiteral("계산한 값이라 여기서 고칠 수 없습니다. 단면선을 옮기면 바로 바뀝니다."), "faint"); ronote->setWordWrap(true); rv->addWidget(ronote); }
+    v->addWidget(readout_);
     auto* foot = lab(QStringLiteral("누르면 그 단면으로 · 두 번 누르면 이름 바꾸기\n목록은 이 PC 설정에 모델별로 저장(파일 → 단면 목록 내보내기)"), "faint");
     foot->setWordWrap(true);
     v->addWidget(foot);
-    return w;
-}
-
-QWidget* MainWindow::buildInspector() {
-    auto* w = new QWidget; w->setObjectName("sidePanel"); w->setAttribute(Qt::WA_StyledBackground);
-    w->setFixedWidth(272);   // 스펙 §2.1: 오른쪽 판 272 고정
-    auto* outer = new QVBoxLayout(w); outer->setContentsMargins(0, 0, 0, 0); outer->setSpacing(0);
-    auto* headW = new QWidget; headW->setObjectName("viewTitle"); headW->setAttribute(Qt::WA_StyledBackground); headW->setFixedHeight(32);
-    { auto* hh = new QHBoxLayout(headW); hh->setContentsMargins(16, 0, 16, 0); hh->addWidget(lab(QStringLiteral("선택한 단면"), "viewTitleText")); hh->addStretch(); }
-    outer->addWidget(headW);
-    auto* bodyW = new QWidget; auto* v = new QVBoxLayout(bodyW); v->setContentsMargins(16, 8, 16, 12); v->setSpacing(8);
-    outer->addWidget(bodyW, 1);
-    inspName_ = lab(QStringLiteral("고른 단면이 없습니다"), "inspName");   // 스펙 §4 이름 명조 20
-    inspNote_ = lab(QString(), "hint"); inspNote_->setWordWrap(true);
-    v->addWidget(inspName_);
-    v->addWidget(inspNote_);
-    auto* figs = new QHBoxLayout;
-    auto fig = [&](const QString& cap, QLabel*& out) {
-        auto* box = new QVBoxLayout;
-        box->addWidget(lab(cap, "faint"));
-        out = lab(QStringLiteral("—"), "mono");
-        out->setStyleSheet(QStringLiteral("font-size:20px;"));
-        box->addWidget(out);
-        figs->addLayout(box);
-    };
-    fig(QStringLiteral("길이"), inspLen_);
-    fig(QStringLiteral("깊이 (지표 → 바닥)"), inspDepth_);
-    v->addLayout(figs);
-    inspBody_ = new QLabel; inspBody_->setObjectName("mono"); inspBody_->setWordWrap(true); inspBody_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    v->addWidget(inspBody_);
-    v->addStretch();
-    // v4: 「이 단면으로 도면」은 리본 「도면」과 같아 목록 오른쪽 클릭으로만. 판 아래는 복사(읽기 전용 판)
-    auto* row = new QHBoxLayout; row->setSpacing(6);
-    auto* copyBtn = new QPushButton(kerf::icon(QStringLiteral("copy"), 16, theme::Hand), QStringLiteral("복사")); copyBtn->setProperty("iconName", QStringLiteral("copy"));
-    copyBtn->setToolTip(QStringLiteral("끝점 좌표 · 길이 · 방위를 글로 복사"));
-    QObject::connect(copyBtn, &QPushButton::clicked, this, [this] {
-        QGuiApplication::clipboard()->setText(inspBody_->text());
-        showStatus(QStringLiteral("단면 수치를 복사했습니다"));
-    });
-    row->addWidget(copyBtn, 1);
-    v->addLayout(row);
-    { auto* note = lab(QStringLiteral("이 판은 읽기만 합니다. 값을 바꾸는 곳은 리본과 평면입니다."), "faint"); note->setWordWrap(true); v->addWidget(note); }
     return w;
 }
 
@@ -1840,11 +1837,10 @@ MainWindow::MainWindow() {
         split_ = new QSplitter(Qt::Horizontal); split_->setHandleWidth(1);
         sidePanel_ = buildSidePanel();
         planFrame_ = buildPlanFrame(); sectionFrame_ = buildSectionFrame();
-        inspector_ = buildInspector();
-        split_->addWidget(sidePanel_); split_->addWidget(planFrame_); split_->addWidget(sectionFrame_); split_->addWidget(inspector_);
-        split_->setStretchFactor(0, 0); split_->setStretchFactor(1, 5); split_->setStretchFactor(2, 6); split_->setStretchFactor(3, 0);
+        split_->addWidget(sidePanel_); split_->addWidget(planFrame_); split_->addWidget(sectionFrame_);
+        split_->setStretchFactor(0, 0); split_->setStretchFactor(1, 5); split_->setStretchFactor(2, 6);
         split_->setChildrenCollapsible(false);
-        split_->setSizes({348, 520, 520, 272});   // 스펙 §2: 왼쪽 목록 348 · 오른쪽 판 272, 가운데 둘은 같은 폭
+        split_->setSizes({348, 520, 520});   // 스펙 §2: 왼쪽 목록(+ 아래 수치) 348, 가운데 둘은 같은 폭 — 오른쪽 판 없음(T7)
         sidePanel_->setVisible(action("listpanel")->isChecked());
         wl->addWidget(split_, 1); }
     body_->addWidget(workArea_);
@@ -2088,7 +2084,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         };
         for (auto* b : ribbon_->chips()) check(b, b->text());
         check(srsLabel_, QStringLiteral("srs-badge")); check(heightBadge2_, QStringLiteral("height-badge"));
-        check(docTabCorner_, QStringLiteral("doc-corner")); check(inspector_, QStringLiteral("inspector"));
+        check(docTabCorner_, QStringLiteral("doc-corner"));
         const int minW = minimumSizeHint().width();
         const QSize want = property("auditSize").toSize();   // main.cpp --size W×H (없으면 ① 건너뜀)
         // 실제 화면(AC10)에서는 창이 화면 사용 가능 영역에 잘리고(이 PC 150 % · 2293×940 논리: 1040 요청 → 940 실측) dpr = OS 배율 × QT_SCALE_FACTOR 라
@@ -2336,8 +2332,19 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     L << QStringLiteral("ui-audit ribbon-tidy points-chips=%1 xyz-las-chips=%2 keys-in-view=%3 quit-ctrl-q=%4 about-in-keys=%5%6").arg(pointsChips).arg(xyzLasChips).arg(keysInView).arg(quitKey ? 1 : 0).arg(aboutLink).arg(tidyOk ? QString() : QStringLiteral("  FAIL"));
     ok &= tidyOk;
 
+    // 4e) 오른쪽 판 삭제 · 고른 단면의 수치는 단면 목록 아래에 읽기 전용으로만(T7 · G4 · 사용자 결정 2026-10-10 「선택한 단면의 이 표시들도 단면 목록 밑에 확인용도로만」)
+    const int inspectorCount = int(findChildren<QWidget*>(QStringLiteral("inspector")).size());
+    int readoutRows = 0, readoutEditable = 0;
+    const QFrame* roBox = findChild<QFrame*>(QStringLiteral("listReadout"));
+    for (auto* v : findChildren<QLabel*>(QStringLiteral("roVal"))) if (v->isVisibleTo(this) && !v->text().trimmed().isEmpty() && v->text() != QStringLiteral("—")) ++readoutRows;
+    if (roBox) readoutEditable = int(roBox->findChildren<QAbstractButton*>().size() + roBox->findChildren<QLineEdit*>().size());
+    const bool readoutUnder = roBox && sidePanel_ && roBox->parentWidget() && sidePanel_->isAncestorOf(roBox);
+    const bool listReadoutOk = inspectorCount == 0 && roBox && readoutUnder && readoutEditable == 0 && (!src_ || !plan_->hasLine() || readoutRows >= 9);
+    L << QStringLiteral("ui-audit inspector=%1 list-readout rows=%2 read-only=%3 under-list=%4%5").arg(inspectorCount).arg(readoutRows).arg(roBox && readoutEditable == 0 ? 1 : 0).arg(readoutUnder ? 1 : 0).arg(listReadoutOk ? QString() : QStringLiteral("  FAIL"));
+    ok &= listReadoutOk;
+
     // 5) 그리는 동안 상태줄 「다음:」 문장이 없는가
-    int hint = -1, band = -1, guide2 = -1, compassOk = -1, noteOk = -1; QString guide2Why;
+    int hint = -1, band = -1, guide2 = -1, compassOk = -1, noteOk = -1, drawRoOk = -1; QString guide2Why;
     if (src_) {
         const SectionLine keep = plan_->line(); const bool hadLine = plan_->hasLine();
         const QString keepMsg = msg_->text(); const bool planActive = planTitle_ && planTitle_->property("active").toBool();
@@ -2358,7 +2365,15 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             const bool textOk = guide_->hint() == spec || (guide_->hint().startsWith(spec.left(6)) && guide_->width() >= planHost_->width() - 2 * 12 - 32);   // 줄임표 알갱이(글자 한두 개) 허용
             // 도구 이름(단계)은 평면 폭에 들어가면 보여야 한다(검토 UI 5): 숨겼다면 칩이 평면 폭을 거의 다 쓴 경우만
             const bool titleOk = guide_->titleShown() || guide_->width() >= planHost_->width() - 2 * 12 - 32;
-            noteOk = inspNote_ && inspNote_->text() == QStringLiteral("A 찍음 · 끝점 A′를 찍으세요") ? 1 : 0;
+            noteOk = roNote_ && roNote_->text() == QStringLiteral("A 찍음 · 끝점 A′를 찍으세요") ? 1 : 0;
+            {   // 그리는 중에도 같은 자리에 길이 · 방위 · A · 커서가 보인다(T7 — 오른쪽 판이 하던 일)
+                QMap<QString, QString> ro;
+                if (const QFrame* rb = findChild<QFrame*>(QStringLiteral("listReadout"))) {
+                    const auto caps = rb->findChildren<QLabel*>(QStringLiteral("roCap")), vals = rb->findChildren<QLabel*>(QStringLiteral("roVal"));
+                    for (int i = 0; i < caps.size() && i < vals.size(); ++i) if (caps[i]->isVisibleTo(this)) ro[caps[i]->text()] = vals[i]->text();
+                }
+                drawRoOk = ro.value(QStringLiteral("길이")) == QStringLiteral("7.43 m") && ro.contains(QStringLiteral("방위")) && !ro.value(QStringLiteral("A")).isEmpty() && ro.contains(QStringLiteral("커서")) ? 1 : 0;
+            }
             // 화면을 옮겨 dpr 이 바뀌면(QEvent::DevicePixelRatioChange, Qt 6.6+) 칩 아이콘을 그 배율로 다시 구워야 한다(B5) — 같은 장이면 흐림
             const qint64 key0 = guide_->iconCacheKey();
             { QEvent dprEv(QEvent::DevicePixelRatioChange); QApplication::sendEvent(guide_, &dprEv); }
@@ -2372,6 +2387,8 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     }
     L << QStringLiteral("ui-audit compass-hit=%1%2").arg(compassOk < 0 ? QStringLiteral("not-checked") : QString::number(compassOk)).arg(compassOk == 0 ? QStringLiteral("  FAIL") : QString());
     ok &= compassOk != 0;
+    L << QStringLiteral("ui-audit drawing-readout=%1%2").arg(drawRoOk < 0 ? QStringLiteral("not-checked") : QString::number(drawRoOk)).arg(drawRoOk == 0 ? QStringLiteral("  FAIL") : QString());
+    ok &= drawRoOk != 0;
     L << QStringLiteral("ui-audit draw-step2-note=%1%2").arg(noteOk < 0 ? QStringLiteral("not-checked") : QString::number(noteOk)).arg(noteOk == 0 ? QStringLiteral("  FAIL") : QString());
     ok &= noteOk != 0;
     L << QStringLiteral("ui-audit guide-step2=%1 %2%3").arg(guide2 < 0 ? QStringLiteral("not-checked") : QString::number(guide2)).arg(guide2Why).arg(guide2 == 0 ? QStringLiteral("  FAIL") : QString());
