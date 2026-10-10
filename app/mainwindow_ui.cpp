@@ -168,9 +168,10 @@ QLabel* elideLab(QLabel* l, Qt::TextElideMode mode) {
     l->setProperty("fullText", l->text());
     return l;
 }
-// 이어서 작업 칸 줄(스펙 §7 · rework 2 UI B1 · correctness C4): 칸 이름은 줄이지 않는다. 칸 1–5(마지막 열림 · 수평 좌표계 · 높이 · 단면 · 도면)는 내용 폭,
+// 이어서 작업 칸 줄(스펙 §7): 폭이 넉넉하면 옛 배치 그대로 폴더 2 : 나머지 1(rework 3 ⓐ — 1920 이상 모양 그대로). 그 비율에서 칸 이름이나
+// 칸 1–5 값이 줄임표가 될 때만(실제 글 폭으로 판단 — 창 폭 상수가 아님) 좁은 창 규칙: 칸 이름은 줄이지 않고, 칸 1–5(마지막 열림 · 수평 좌표계 · 높이 · 단면 · 도면)는 내용 폭,
 // 폴더 칸만 남는 폭을 받아 늘고 줄며 가운데 줄임표. 폴더 칸이 「C:…」도 못 담으면 칸 안 여백을 12 → 8 → 4 로 줄이고(값은 그대로),
-// 그래도 모자라면 좌표계 · 높이 값만 앞쪽부터 줄인다(번호 끝자리를 지킴 — 「…5186」). ccCells 는 가로 Ignored 라 이 폭들이 창 최소 폭을 밀지 않는다
+// 그래도 모자라면 좌표계 · 높이 값만 앞쪽부터 줄인다(번호 끝자리를 지킴 — 「…5186」, rework 2 UI B1 · correctness C4). ccCells 는 가로 Ignored 라 이 폭들이 창 최소 폭을 밀지 않는다
 void fitHomeCells(QWidget* cells) {
     struct C { QWidget* w; QLabel* cap; QLabel* val; };
     QList<C> cs;
@@ -186,6 +187,21 @@ void fitHomeCells(QWidget* cells) {
     const QString ell(QChar(0x2026));
     const int avail = cells->width();
     QVector<int> width(cs.size());
+    {   // 옛 비율(폴더 2 : 나머지 1) — 칸 이름 전부와 칸 1–5 값이 여백 12 로 다 들어가고 폴더가 「C:…」를 담으면 그대로 쓴다(+1 px: 정수 글 폭 반올림 보험)
+        int wsum = 0; for (int i = 0; i < cs.size(); ++i) wsum += i == 0 ? 2 : 1;
+        int cum = 0, prevX = 0; bool fits = true;
+        for (int i = 0; i < cs.size(); ++i) {
+            cum += i == 0 ? 2 : 1;
+            const int x = int(std::lround(double(avail) * cum / wsum));
+            width[i] = x - prevX; prevX = x;
+            const int need = i == 0 ? std::max(textW(cs[0].cap), cs[0].val->fontMetrics().horizontalAdvance(QStringLiteral("C:") + ell)) : std::max(textW(cs[i].cap), textW(cs[i].val));
+            if (need + 2 * 12 + 1 > width[i]) fits = false;
+        }
+        if (fits) {
+            for (int i = 0; i < cs.size(); ++i) { cs[i].w->layout()->setContentsMargins(12, 6, 12, 6); cs[i].w->setFixedWidth(width[i]); }
+            return;
+        }
+    }
     int usePad = 4;
     bool full = false;
     for (int pad : {12, 8, 4}) {   // 칸 1–5 를 내용 폭 그대로 두고 폴더가 「C:…」를 담는 가장 큰 여백
