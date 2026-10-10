@@ -242,8 +242,7 @@ C:\dev\kerf-v4c\asec_tests.exe
 
 ### 2026-10-10 · Claude Code — #3c 1280 좁은 창 · 홈 겹침 버그를 팩토리 작업 `20261010-01-narrow-1280` 으로 — 병합 `3c9b0d4`
 - **무엇을:** 창 폭 1280 에서 단면 머리 · 정보 줄 · 평면 눈금 글 · 홈 한 줄 글을 정해진 순서로 줄이고(사용자 답 Q1 A · Q2 A · Q3) `--ui-audit` 판정으로 잠금, 리본 1280 기대값 20, B5 검토 should 7건, **사용자 보고 버그(홈에 옛 위젯이 겹치고 「목록에서 지우기」가 안 됨, AC14)** 고침. 수정 3회: ① 문서 키 ② 홈 「<모델> 기준」 사라짐 · 칸 이름 줄임표 · 빈 구간 꼬리 · 머리 맞춤 한 번 · ▾ ③(사용자 허가) 1920 이상 카드 칸 옛 2 : 1 · ▾ 8 × 5 보이게 + 감사 픽셀 판정.
-- **확인:** 독립 검증 3차 13조합 RESULT ok · 통합 `9a77d61` 전체 시험 51339 · V8 + 1280/2560 × 1 · 1.25 · 1.75 RESULT PASS · 회귀 `--icon-sheet` · `--sheet-check` · `--ctx-shot` EXIT 0 · 긴 이름 1280 · 1920 ok. 검토 code · correctness · security · kerf-ui 모두 pass. 캡처 `C:\dev	mp
-1280-rework3\`.
+- **확인:** 독립 검증 3차 13조합 RESULT ok · 통합 `9a77d61` 전체 시험 51339 · V8 + 1280/2560 × 1 · 1.25 · 1.75 RESULT PASS · 회귀 `--icon-sheet` · `--sheet-check` · `--ctx-shot` EXIT 0 · 긴 이름 1280 · 1920 ok. 검토 code · correctness · security · kerf-ui 모두 pass. 캡처 `C:\dev\tmp\n1280-rework3\`.
 - **판정:** 2차 재검토 뒤 1920 이상 칸 배치 변경(명세 §1 과 어긋남)과 ▾ 안 보임은 자동으로 넘기지 않고 사용자에게 물음(R1.5 예외) → 「한 번 더 고친 뒤 병합」. 남은 should · note 는 대기 R1b.
 - **남은 문제:** push 전. worktree · 브랜치 삭제는 사용자 확인 뒤. 기록 `factory/jobs/20261010-01-narrow-1280/`.
 
