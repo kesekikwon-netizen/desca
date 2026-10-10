@@ -132,14 +132,41 @@ QIcon icon(const QString& name, int px, const QColor& ink) {
     return ic;
 }
 
-QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, bool caret) {
+QPolygonF caretTriangle(int px) {
+    const qreal w = px * 0.5, h = w * 0.625, x = px - w, y = px - h;   // 16 px → ▾ 8 × 5, 오른쪽 아래 끝(단추 폭 그대로 — rework 3 ⓑ)
+    QPolygonF tri; tri << QPointF(x, y) << QPointF(x + w, y) << QPointF(x + w / 2, y + h);
+    return tri;
+}
+
+QIcon iconWithCaret(const QString& name, int px, const QColor& ink, const QColor& halo) {
     const kerficons::Svg* s = find(name);
+    if (!s) return icon(name, px, ink);
     QIcon ic;
+    for (qreal d : iconDprs()) {
+        QPixmap pm = renderGlyph(s, px, ink, d, 1.0);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QPolygonF tri = caretTriangle(px);
+        p.setPen(QPen(halo, 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin)); p.setBrush(halo);   // ① 바탕색 테를 먼저(바깥 1 px) — 획과 떼어 놓는다
+        p.drawPolygon(tri);
+        p.setPen(Qt::NoPen); p.setBrush(ink);   // ② 그 위에 펜 없이 먹색으로 채운다(전에는 테를 나중에 쳐 안쪽 0.75 px 를 덮어 ▾ 가 점처럼 보였다 — 검토 2차 should A · S1′)
+        p.drawPolygon(tri);
+        p.end();
+        ic.addPixmap(pm);
+    }
+    return ic;
+}
+
+QPixmap chipPixmap(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, QIcon::Mode mode, QIcon::State state, qreal dpr, bool caret) {
+    const Look L = lookFor(kind, mode == QIcon::Selected ? QIcon::Normal : mode, state, c);
+    return renderChip(find(name), tile, glyphPx, L, dpr, caret);
+}
+
+QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, bool caret) {
+    QIcon ic;   // 그리는 길은 chipPixmap 하나 — 감사 기준 장과 같은 함수
     for (auto mode : {QIcon::Normal, QIcon::Active, QIcon::Disabled, QIcon::Selected})
-        for (auto state : {QIcon::Off, QIcon::On}) {
-            const Look L = lookFor(kind, mode == QIcon::Selected ? QIcon::Normal : mode, state, c);
-            for (qreal d : iconDprs()) ic.addPixmap(renderChip(s, tile, glyphPx, L, d, caret), mode, state);
-        }
+        for (auto state : {QIcon::Off, QIcon::On})
+            for (qreal d : iconDprs()) ic.addPixmap(chipPixmap(name, tile, glyphPx, kind, c, mode, state, d, caret), mode, state);
     return ic;
 }
 }  // namespace kerf

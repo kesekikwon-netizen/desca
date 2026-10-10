@@ -7,6 +7,7 @@
 #include <QIcon>
 #include <QList>
 #include <QPixmap>
+#include <QPolygonF>
 #include <QString>
 
 namespace kerf {
@@ -25,8 +26,14 @@ struct ChipColors {
 [[nodiscard]] QList<qreal> iconDprs();
 /// 선 아이콘 QIcon(1× · 2×). 없는 이름이면 빈 QIcon + qWarning 한 번
 [[nodiscard]] QIcon icon(const QString& name, int px, const QColor& ink);
+/// 선 아이콘 + 오른쪽 아래 ▾(메뉴 단추 표시 — 폭을 늘리지 않음). halo = 바탕색 테(▾ 를 획과 떼어 놓는다). 배율은 iconDprs() 여섯 장
+[[nodiscard]] QIcon iconWithCaret(const QString& name, int px, const QColor& ink, const QColor& halo);
+/// iconWithCaret 의 ▾ 삼각형(px 논리 좌표) — 그리기와 감사(--ui-audit carets)가 같은 모양을 쓴다
+[[nodiscard]] QPolygonF caretTriangle(int px);
 /// 한 장 바로 그리기(ink 색, px 논리 픽셀, dpr 배율)
 [[nodiscard]] QPixmap glyph(const QString& name, int px, const QColor& ink, qreal dpr = 1.0);
 /// 리본 칩 아이콘: tile 한 변(px) 안에 glyph 크기 아이콘, 둥글기 tile/4. kind 에 따라 켜짐 색이 다르다
 [[nodiscard]] QIcon chipIcon(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, bool caret = false);   // caret = 메뉴 칩 ▾(타일 오른쪽 아래)
+/// 칩 한 장 바로 그리기(상태 · 배율 지정) — chipIcon 의 반복이 이것을 부르고, --ui-audit 가 같은 인자로 구운 기준 장과 칩 아이콘을 픽셀 비교한다(B5 검토 ⓓ)
+[[nodiscard]] QPixmap chipPixmap(const QString& name, int tile, int glyphPx, ChipKind kind, const ChipColors& c, QIcon::Mode mode, QIcon::State state, qreal dpr, bool caret = false);
 }  // namespace kerf

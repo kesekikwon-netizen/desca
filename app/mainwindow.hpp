@@ -37,6 +37,7 @@ class QFrame;
 class QComboBox;
 class QMenu;
 class QTableWidget;
+class QLayout;
 
 inline constexpr double kDepthFadeStrength = 0.55;   // 깊이 음영 세기(가장 먼 면을 흰색 쪽으로 55%)
 inline constexpr double kMaxBandDepth = 5.0;         // 두께 띠 앞/뒤 최대(m) — 입면 영상 깊이 최대 5 m
@@ -135,6 +136,8 @@ public:
     QDialog* buildPlanSheetDialog(PlanSheetParams& io, const QImage& preview, double prevX0, double prevY1, double prevRes, bool& accepted);
     QWidget* startPage() const { return startPage_; }
     void showStart(bool on);
+    /// 레이아웃을 재귀로 비운다(위젯은 숨기고 deleteLater, 하위 레이아웃은 재귀) — 홈 다시 그리기 · 도면 점검 상자가 씀(AC14: 격자 안 위젯이 남아 겹치던 버그)
+    static void clearLayout(QLayout* lay);
     bool undoTest(QString* log);                        // 자동화: 되돌리기/다시 점검
     bool uiAudit(const QString& dir, QString* log);     // 자동화(v4 단계 1): 같은 일 단추 겹침 · 자리 규칙 잠금 시험
     bool iconSheet(const QString& png, QString* log);   // 자동화(v5 A3): 모든 Ico 이름에 SVG 가 있는지 + 칩 모양 격자 캡처
@@ -241,6 +244,23 @@ private:
     void updateVexUi();
     QLabel *stripLen_ = nullptr, *stripDepth_ = nullptr, *stripScale_ = nullptr, *stripState_ = nullptr, *stripLevels_ = nullptr;
     QWidget *planTitle_ = nullptr, *secTitleBar_ = nullptr;
+    QWidget* infoStrip_ = nullptr;             // 단면 머리 아래 정보 줄(계산 상태 · 잘린 선 · 입면 뒤 · 레벨선 범례)
+    int secHeaderStep_ = 0, stripStep_ = 0;    // 좁은 창에서 머리 · 정보 줄을 줄인 단계(0 = 모두 보임, 스펙 §4 — --ui-audit 가 읽는다)
+    QString secTitleFull_;                     // 단면 머리 제목 전체 글(좁으면 fitSectionHeader 가 줄임표 + 툴팁)
+    QWidget* secToggles_ = nullptr;            // 켜기 · 끄기 넷 상자(viewToggles)
+    QToolButton *secTogglesMenu_ = nullptr, *secMaxBtn_ = nullptr;   // 좁을 때 넷을 접는 「그릴 것 ▾」 메뉴 단추 · 「크게」
+    bool fittingHeader_ = false;
+    int secHeaderPasses_ = 0;                  // fitSectionHeader 가 실제로 단계를 다시 고른 횟수(감사 refit — rework 2 code S2)
+    int headerBatch_ = 0;                      // updateHeader 안: 머리 맞춤은 끝에서 한 번만(방위 글까지 바꾼 뒤 — rework 2 code S2 · correctness C3)
+    QString secHeaderKey_;                     // 마지막으로 맞춘 입력(폭 · 제목 · 방위 · 세로 글 · 상태) — 같으면 바로 돌아간다
+    QString vexFull_;                          // 「세로 ×1 ▾」 전체 글(열쇠 — 좁은 머리 3단계 뒤로는 아이콘만)
+    QIcon vexIcon_, vexCaretIcon_;             // 세로 과장 아이콘 · ▾ 를 구운 아이콘(아이콘만일 때 메뉴 표시 — rework 2 UI S1)
+    void fitSectionHeader();                   // 스펙 §4 · Q1 A: 북쪽을 봄 → 크게 → 세로 아이콘만 → 토글을 메뉴로 → 제목 줄임표
+    void setSecTitleText(const QString& full); // 제목은 이 길로만(updateHeader · 감사 1280L)
+    QString stripStateRich_, stripCutFull_, stripCutShort_;   // 정보 줄 글(상태는 서식 글, 잘린 선은 전체 · 점 수 뺀 짧은 글)
+    bool fittingStrip_ = false;
+    void fitInfoStrip();                       // 스펙 §4 · Q2 A: 레벨선 안내 → 입면 뒤 → 점 수 → 줄임표 + 툴팁(계산 상태는 숨기지 않음)
+    void setStripTexts(const QString& stateRich, const QString& cutFull, const QString& cutShort);   // 정보 줄 글은 이 길로만(updateHeader · 감사 1280p)
     QComboBox* scaleCombo_ = nullptr;
     QLabel *lvLine_ = nullptr, *lvLabel_ = nullptr;
     QToolButton* depthChip_[5] = {};

@@ -479,6 +479,7 @@ void SectionView::setVerticalExaggeration(double v) {
     }
     xf_.vex = v;
     xf_.zTop = zc + xf_.plot.height() / 2 / xf_.ppmZ();
+    fitted_ = false;   // 세로 과장을 바꾼 보기는 사용자 보기(사용자 답 Q3 2026-10-10 「가로 축척 유지」) — 창 크기가 바뀌어도 fit() 이 가로 축척을 다시 잡지 않는다(B5 검토 S1)
     update();
     if (onViewChanged) onViewChanged();
 }

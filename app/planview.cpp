@@ -204,6 +204,7 @@ void PlanView::clearScene() {
     streamer_.reset();
     makeCurrent(); freeGpu(); doneCurrent();
     meshes_.clear(); hidx_ = HeightIndex(); hasScene_ = false; hasLine_ = false; lastFrame_ = FrameInfo(); update();
+    fitted_ = false;   // 장면이 없으면 맞춤 상태도 없다 — 창 크기가 바뀔 때 옛 상자로 fitAll 이 돌지 않게(B5 검토 ⓖ)
 }
 
 void PlanView::setStreamingScene(const std::vector<fs::path>& roots, const Vec3& center, const Box3& bounds, const SrsInfo& srs,
@@ -329,16 +330,33 @@ void PlanView::resizeEvent(QResizeEvent* e) {
 
 double PlanView::refZ() const { return bounds_.valid() ? bounds_.mx.z - center_.z : 0.0; }
 
-void PlanView::updateMatrices() {
-    double diag = std::max(1.0, bounds_.diag());
-    double w = width() * mpp_, h = height() * mpp_;
-    proj_.setToIdentity();
-    proj_.ortho(float(-w / 2), float(w / 2), float(-h / 2), float(h / 2), float(-diag * 4), float(diag * 4));
-    view_.setToIdentity();
-    view_.rotate(float(-(90.0 - pitch_)), 1, 0, 0);
-    view_.rotate(float(-yaw_), 0, 0, 1);
-    view_.translate(-target_);
+// 화면 행렬 식 한 곳(B5 검토 ⓒ): ortho ±w·mpp/2 · ±h·mpp/2 · ±4·diag, 회전 −(90 − pitch) X · −yaw Z, −target 이동. updateMatrices(저장) · contentFits(지금 크기로 임시) 가 같이 쓴다
+void PlanView::makeMatrices(int w, int h, QMatrix4x4& proj, QMatrix4x4& view) const {
+    const double diag = std::max(1.0, bounds_.diag());
+    const double ww = w * mpp_, hh = h * mpp_;
+    proj.setToIdentity();
+    proj.ortho(float(-ww / 2), float(ww / 2), float(-hh / 2), float(hh / 2), float(-diag * 4), float(diag * 4));
+    view.setToIdentity();
+    view.rotate(float(-(90.0 - pitch_)), 1, 0, 0);
+    view.rotate(float(-yaw_), 0, 0, 1);
+    view.translate(-target_);
 }
+
+// 화면 점(w×h 안) → 기준 높이(refZ) 평면과의 교점(로컬 XY). 행렬은 장면 중심 기준 float, 로컬은 double 로 center_ 를 더한다. screenToLocalXY · contentFits 가 같이 쓴다
+bool PlanView::unprojectToRefZ(const QMatrix4x4& pv, const QPointF& sp, int w, int h, Vec2& out) const {
+    bool inv = false;
+    const QMatrix4x4 m = pv.inverted(&inv);
+    if (!inv || w <= 0 || h <= 0) return false;
+    const float nx = float(sp.x() / w * 2 - 1), ny = float(1 - sp.y() / h * 2);
+    const QVector3D A = (m * QVector4D(nx, ny, -1, 1)).toVector3DAffine(), B = (m * QVector4D(nx, ny, 1, 1)).toVector3DAffine();
+    const double zr = refZ();
+    const double dz = B.z() - A.z();
+    const double t = std::fabs(dz) < 1e-9 ? 0 : (zr - A.z()) / dz;
+    out = Vec2(A.x() + t * (B.x() - A.x()) + center_.x, A.y() + t * (B.y() - A.y()) + center_.y);
+    return true;
+}
+
+void PlanView::updateMatrices() { makeMatrices(width(), height(), proj_, view_); }
 
 void PlanView::fitAll() {
     if (!bounds_.valid()) return;
@@ -352,27 +370,17 @@ void PlanView::fitAll() {
 }
 
 // 저장된 proj_ 가 아니라 지금 width() · height() · mpp_ · target_ · yaw_ · pitch_ 로 잰다 — offscreen(GL 없음)에서는 resizeGL 이 안 불려 proj_ 가 옛 크기 그대로라
-// viewRectLocal 로 재면 고치기 전에도 맞는 것처럼 보인다(spec §3-B Task 1). 식은 updateMatrices · screenToLocalXY 와 같다
+// viewRectLocal 로 재면 고치기 전에도 맞는 것처럼 보인다(spec §3-B Task 1). 식은 updateMatrices · screenToLocalXY 와 같은 함수(makeMatrices · unprojectToRefZ)
 bool PlanView::contentFits() const {
     if (!hasScene_ || !bounds_.valid() || width() <= 0 || height() <= 0) return false;
-    const double diag = std::max(1.0, bounds_.diag());
-    const double w = width() * mpp_, h = height() * mpp_;
     QMatrix4x4 proj, view;
-    proj.ortho(float(-w / 2), float(w / 2), float(-h / 2), float(h / 2), float(-diag * 4), float(diag * 4));
-    view.rotate(float(-(90.0 - pitch_)), 1, 0, 0);
-    view.rotate(float(-yaw_), 0, 0, 1);
-    view.translate(-target_);
-    bool inv = false;
-    const QMatrix4x4 m = (proj * view).inverted(&inv);
-    if (!inv) return false;
+    makeMatrices(width(), height(), proj, view);
+    const QMatrix4x4 pv = proj * view;
     Box3 v;
-    const double zr = refZ();
     for (QPointF c : {QPointF(0, 0), QPointF(width(), 0), QPointF(0, height()), QPointF(width(), height())}) {
-        const float nx = float(c.x() / width() * 2 - 1), ny = float(1 - c.y() / height() * 2);
-        const QVector3D A = (m * QVector4D(nx, ny, -1, 1)).toVector3DAffine(), B = (m * QVector4D(nx, ny, 1, 1)).toVector3DAffine();
-        const double dz = B.z() - A.z();
-        const double t = std::fabs(dz) < 1e-9 ? 0 : (zr - A.z()) / dz;
-        v.add(Vec3(A.x() + t * (B.x() - A.x()) + center_.x, A.y() + t * (B.y() - A.y()) + center_.y, bounds_.mn.z));
+        Vec2 q;
+        if (!unprojectToRefZ(pv, c, width(), height(), q)) return false;
+        v.add(Vec3(q.x, q.y, bounds_.mn.z));
     }
     return v.mn.x <= bounds_.mn.x + 1e-6 && v.mx.x >= bounds_.mx.x - 1e-6 && v.mn.y <= bounds_.mn.y + 1e-6 && v.mx.y >= bounds_.mx.y - 1e-6;   // 경계 1e-6 m(profile §7)
 }
@@ -622,19 +630,7 @@ QPointF PlanView::localToScreen(double x, double y, double z) const {
     return QPointF((c.x() / c.w() * 0.5 + 0.5) * width(), (1.0 - (c.y() / c.w() * 0.5 + 0.5)) * height());
 }
 
-bool PlanView::screenToLocalXY(const QPointF& sp, Vec2& out) const {
-    bool inv = false;
-    QMatrix4x4 m = (proj_ * view_).inverted(&inv);
-    if (!inv) return false;
-    float nx = float(sp.x() / width() * 2 - 1), ny = float(1 - sp.y() / height() * 2);
-    QVector4D a = m * QVector4D(nx, ny, -1, 1), b = m * QVector4D(nx, ny, 1, 1);
-    QVector3D A = a.toVector3DAffine(), B = b.toVector3DAffine();
-    double zr = refZ();
-    double dz = B.z() - A.z();
-    double t = std::fabs(dz) < 1e-9 ? 0 : (zr - A.z()) / dz;
-    out = Vec2(A.x() + t * (B.x() - A.x()) + center_.x, A.y() + t * (B.y() - A.y()) + center_.y);
-    return true;
-}
+bool PlanView::screenToLocalXY(const QPointF& sp, Vec2& out) const { return unprojectToRefZ(proj_ * view_, sp, width(), height(), out); }
 
 bool PlanView::screenRayLocal(const QPointF& sp, Vec3& o, Vec3& d) const {
     bool inv = false;
@@ -646,6 +642,60 @@ bool PlanView::screenRayLocal(const QPointF& sp, Vec3& o, Vec3& d) const {
     o = Vec3(double(A.x()) + center_.x, double(A.y()) + center_.y, double(A.z()) + center_.z);
     d = Vec3(double(B.x()) - A.x(), double(B.y()) - A.y(), double(B.z()) - A.z());
     return d.x * d.x + d.y * d.y + d.z * d.z > 0;
+}
+
+// 숫자 글 간격 규칙(스펙 §5 · 요청 원문 「간격 × px/m ≥ 글 폭 + 8」): {1, 2, 5, 10} m 중 조건을 만족하는 가장 작은 값, 없으면 10.
+// 화면 글자 배치 규칙(입력이 Qt 글꼴로 잰 px)이라 core 가 아니라 여기(spec §2 R2.2 판정). 8 px 는 허용오차가 아니라 디자인 값
+static int pickTickLabelStep(double pxPerM, double labelPx) {
+    for (int s : {1, 2, 5, 10}) if (s * pxPerM >= labelPx + 8) return s;
+    return 10;
+}
+
+// 단면선 위 m 숫자 글 간격(스펙 §5): px/m = 화면 단면선 길이 ÷ L, 글 폭 = 가장 큰 m 값 「%1 m」(모노 11)
+int PlanView::tickLabelStepM() const {
+    if (!hasLine_ || width() <= 0 || height() <= 0) return 1;
+    const SectionFrame f(line_);
+    if (f.L <= 1e-6) return 1;
+    const double z = refZ() + center_.z;
+    const QPointF A = localToScreen(line_.a.x, line_.a.y, z), B = localToScreen(line_.b.x, line_.b.y, z);
+    const double pxPerM = std::hypot(B.x() - A.x(), B.y() - A.y()) / f.L;
+    const int maxM = std::max(1, int(std::floor(f.L - 1e-4)));
+    const double labelPx = QFontMetricsF(theme::monoFont(11)).horizontalAdvance(QStringLiteral("%1 m").arg(maxM));
+    return pickTickLabelStep(pxPerM, labelPx);
+}
+
+// 숫자 글 사각형: s = k·step(1 ≤ s < L)마다 눈금 중심에서 띠 반대쪽 16 px, 폭 = 글 폭 + 2(흰 테 1 px 양쪽), 높이 = 글꼴 높이 + 2.
+// paintOverlay 가 이 사각형 가운데에 글을 그리고, --ui-audit plan-tick 이 서로 겹치는 쌍을 센다(같은 함수라 판정 = 그림)
+QVector<PlanView::TickLabel> PlanView::tickLabels() const {
+    QVector<TickLabel> out;
+    if (!hasLine_ || width() <= 0 || height() <= 0) return out;
+    const SectionFrame f(line_);
+    if (f.L <= 0.4) return out;
+    const double z = refZ() + center_.z;
+    auto S = [&](const Vec2& q) { return localToScreen(q.x, q.y, z); };
+    const QPointF A = S(line_.a), B = S(line_.b);
+    const double pxLen = std::hypot(B.x() - A.x(), B.y() - A.y());
+    if (pxLen < 80) return out;
+    const QFontMetricsF fm(theme::monoFont(11));
+    const int step = std::max(1, tickLabelStepM());
+    for (double s = step; s < f.L - 1e-4; s += step) {
+        const QPointF c = S(f.planXY(s, 0));
+        const QPointF side = S(f.planXY(s, 0.4)) - c;
+        const double sl = std::hypot(side.x(), side.y());
+        const QPointF along = pxLen > 1 ? (B - A) / pxLen : QPointF(1, 0);
+        const QPointF n = sl > 1e-3 ? side / sl : QPointF(-along.y(), along.x());
+        const QString t = QStringLiteral("%1 m").arg(s, 0, 'f', 0);
+        const QPointF at = c - n * 16;
+        const double w = fm.horizontalAdvance(t) + 2, h = fm.height() + 2;
+        out.push_back({QRectF(at.x() - w / 2, at.y() - h / 2, w, h), t});
+    }
+    return out;
+}
+
+QVector<QRectF> PlanView::tickLabelRects() const {
+    QVector<QRectF> rs;
+    for (const TickLabel& t : tickLabels()) rs << t.rect;
+    return rs;
 }
 
 // 왼쪽 아래 뜬 카드: 「디테일 불러오는 중 12 / 40」 + 먹색 4 px 막대(다 오면 사라짐). 그림자 대신 1 px 테(성능)
@@ -757,8 +807,7 @@ void PlanView::paintOverlay(QPainter& p) {
     p.setPen(QPen(theme::SectionRed, redW, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
     const double pxLen = std::hypot(B.x() - A.x(), B.y() - A.y());
     if (hasLine_ && f.L > 0.4 && pxLen >= 80) {
-        p.setFont(theme::monoFont(11));
-        for (double s = 0.5; s < f.L - 1e-4; s += 0.5) {
+        for (double s = 0.5; s < f.L - 1e-4; s += 0.5) {   // 눈금 선은 0.5 m 마다 그대로(숫자 글 간격만 tickLabelStepM — 스펙 §5)
             QPointF c = S(f.planXY(s, 0));
             QPointF side = S(f.planXY(s, 0.4)) - c;
             double sl = std::hypot(side.x(), side.y());
@@ -770,15 +819,13 @@ void PlanView::paintOverlay(QPainter& p) {
             p.drawLine(c - n * h, c + n * h);
             p.setPen(QPen(theme::Ink, 1.2, Qt::SolidLine, Qt::RoundCap));
             p.drawLine(c - n * h, c + n * h);
-            if (meter) {
-                QString t = QStringLiteral("%1 m").arg(s, 0, 'f', 0);
-                QPointF at = c - n * 16;
-                QRectF tr(at.x() - 18, at.y() - 8, 36, 16);
-                p.setPen(Qt::white);   // 어두운 구덩이 위에서도 읽히게 흰 테(검토 UI 4)
-                for (const QPointF& o : {QPointF(-1, 0), QPointF(1, 0), QPointF(0, -1), QPointF(0, 1)}) p.drawText(tr.translated(o), Qt::AlignCenter, t);
-                p.setPen(theme::Ink);
-                p.drawText(tr, Qt::AlignCenter, t);
-            }
+        }
+        p.setFont(theme::monoFont(11));
+        for (const TickLabel& tl : tickLabels()) {   // 숫자 글은 감사(tickLabelRects)와 같은 사각형 가운데에
+            p.setPen(Qt::white);   // 어두운 구덩이 위에서도 읽히게 흰 테(검토 UI 4)
+            for (const QPointF& o : {QPointF(-1, 0), QPointF(1, 0), QPointF(0, -1), QPointF(0, 1)}) p.drawText(tl.rect.translated(o), Qt::AlignCenter, tl.text);
+            p.setPen(theme::Ink);
+            p.drawText(tl.rect, Qt::AlignCenter, tl.text);
         }
     }
     if (hasLine_ && line_.back > 1e-6 && f.L > 1e-6 && pxLen >= 80) {   // 선이 화면에서 짧으면(80 px 미만) 눈금처럼 숨김
