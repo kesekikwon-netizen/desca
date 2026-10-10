@@ -132,6 +132,12 @@ QIcon icon(const QString& name, int px, const QColor& ink) {
     return ic;
 }
 
+QPolygonF caretTriangle(int px) {
+    const qreal w = px * 0.5, h = w * 0.625, x = px - w, y = px - h;   // 16 px → ▾ 8 × 5, 오른쪽 아래 끝(단추 폭 그대로 — rework 3 ⓑ)
+    QPolygonF tri; tri << QPointF(x, y) << QPointF(x + w, y) << QPointF(x + w / 2, y + h);
+    return tri;
+}
+
 QIcon iconWithCaret(const QString& name, int px, const QColor& ink, const QColor& halo) {
     const kerficons::Svg* s = find(name);
     if (!s) return icon(name, px, ink);
@@ -140,9 +146,10 @@ QIcon iconWithCaret(const QString& name, int px, const QColor& ink, const QColor
         QPixmap pm = renderGlyph(s, px, ink, d, 1.0);
         QPainter p(&pm);
         p.setRenderHint(QPainter::Antialiasing);
-        const qreal w = px * 0.375, h = w * 0.6, x = px - w - 0.5, y = px - h - 0.5;   // 16 px → ▾ 6 × 3.6, 오른쪽 아래(리본 메뉴 칩의 ▾ 와 같은 자리 규칙)
-        QPolygonF tri; tri << QPointF(x, y) << QPointF(x + w, y) << QPointF(x + w / 2, y + h);
-        p.setPen(QPen(halo, 1.5)); p.setBrush(ink);
+        const QPolygonF tri = caretTriangle(px);
+        p.setPen(QPen(halo, 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin)); p.setBrush(halo);   // ① 바탕색 테를 먼저(바깥 1 px) — 획과 떼어 놓는다
+        p.drawPolygon(tri);
+        p.setPen(Qt::NoPen); p.setBrush(ink);   // ② 그 위에 펜 없이 먹색으로 채운다(전에는 테를 나중에 쳐 안쪽 0.75 px 를 덮어 ▾ 가 점처럼 보였다 — 검토 2차 should A · S1′)
         p.drawPolygon(tri);
         p.end();
         ic.addPixmap(pm);

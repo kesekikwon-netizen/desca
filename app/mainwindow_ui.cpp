@@ -2436,25 +2436,25 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
                 }
         if (!reach) F.toggles = false;
         // 보이는 메뉴 단추(「그릴 것」 · 세로 과장)는 ▾ 가 보여야 한다(스펙 §4 「그릴 것 ▾」 · 「세로 ×1 ▾」 — QSS 가 메뉴 표시를 지우므로 글 ▾ 또는 아이콘에 구운 ▾, rework 2 UI S1).
-        // 구운 ▾ 는 픽셀로 잰다(rework 3 ⓑ): 단추 아이콘의 그 배율 장에서, 같은 이름의 맨 아이콘보다 더해진 먹색 픽셀이 오른쪽 아래 사분면에
-        // 리본 메뉴 칩 ▾ 넓이(6 × 4 = 12 논리 px²) × dpr² 이상이어야 한다 — 속성(caretBaked)만 믿던 판정은 「점」 같은 ▾ 도 통과시켰다
+        // 구운 ▾ 는 픽셀로 잰다(rework 3 ⓑ): 단추 아이콘의 그 배율 장에서 ▾ 삼각형(kerf::caretTriangle — 그리기와 같은 모양) 안쪽 픽셀 중 먹색인 수가
+        // 리본 메뉴 칩 ▾ 넓이(6 × 4 삼각형 = 12 논리 px²) × dpr² 이상이어야 한다 — 속성(caretBaked)만 믿던 판정은 테가 안쪽을 덮어 「점」이 된 ▾ 도 통과시켰다
         for (QToolButton* mb : {secTogglesMenu_, vexBtn_})
             if (mb && mb->isVisibleTo(secTitleBar_)) {
                 const bool textCaret = mb->toolButtonStyle() != Qt::ToolButtonIconOnly && mb->text().contains(QChar(0x25BE));
                 if (textCaret) continue;
-                const QString nm = mb == secTogglesMenu_ ? QStringLiteral("layers") : QString::fromLatin1(theme::iconName(theme::Ico::Vex));
                 const qreal d = mb->devicePixelRatioF();
                 const QImage a = mb->icon().pixmap(mb->iconSize(), d).toImage().convertToFormat(QImage::Format_ARGB32);
-                const QImage g = kerf::glyph(nm, mb->iconSize().width(), theme::Hand, d).toImage().convertToFormat(QImage::Format_ARGB32);
+                QPolygonF tri = kerf::caretTriangle(mb->iconSize().width());
+                for (QPointF& q : tri) q *= a.width() / qreal(mb->iconSize().width());   // 논리 → 그 장의 픽셀
                 auto ink = [](QRgb c) { return qAlpha(c) > 200 && std::abs(qRed(c) - theme::Hand.red()) < 40 && std::abs(qGreen(c) - theme::Hand.green()) < 40 && std::abs(qBlue(c) - theme::Hand.blue()) < 40; };
-                int added = 0;
-                if (a.size() == g.size())
-                    for (int y = a.height() / 2; y < a.height(); ++y)
-                        for (int x = a.width() / 2; x < a.width(); ++x) if (ink(a.pixel(x, y)) && !ink(g.pixel(x, y))) ++added;
-                const int need = int(std::lround(12.0 * d * d));
-                F.caretInk = F.caretInk < 0 ? added : std::min(F.caretInk, added);
+                int inked = 0;
+                for (int y = 0; y < a.height(); ++y)
+                    for (int x = 0; x < a.width(); ++x) if (tri.containsPoint(QPointF(x + 0.5, y + 0.5), Qt::OddEvenFill) && ink(a.pixel(x, y))) ++inked;
+                const qreal s = a.width() / qreal(mb->iconSize().width());
+                const int need = int(std::lround(12.0 * s * s));
+                F.caretInk = F.caretInk < 0 ? inked : std::min(F.caretInk, inked);
                 F.caretNeed = need;
-                if (added < need) F.carets = false;
+                if (inked < need) F.carets = false;
             }
         // 정보 줄: 겹침 · 밖 · 짓눌림 + 잘린 글, 계산 상태 글은 늘 보임, 빈 구간 꼬리는 늘 보임(rework 2 correctness C1), 줄인 글에는 전체 글 툴팁
         int tip = 0;
