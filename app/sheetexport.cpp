@@ -287,7 +287,7 @@ void MainWindow::paintSheet(QPainter& p, const SectionDoc& doc0, const SheetPara
     xf.zTop = W.zTop;
     // 문서 스타일: 넣을 것 선택 그대로(그리는 순서 레벨선 → 영상 → 단면선은 paintSectionDoc 이 지킴)
     SectionDoc doc = doc0;
-    doc.st.showImage = sp.withImage; doc.st.showLine = sp.withLine; doc.st.showLevels = sp.withLevels;
+    doc.st.showImage = sp.withImage; doc.st.showLine = sp.withLine; doc.st.showLevels = sp.withLevels; doc.st.showTicks = sp.withTicks;
     doc.st.imageOpacity = 1.0; doc.st.showBaseline = sp.showBaseline; doc.st.baselineEl = sp.baselineEl;
     doc.st.plotScaleBar = !sp.withTitle;
     doc.st.levelMinorPt = clampLineWeightPt(sp.levelMinorPt); doc.st.levelMajorPt = clampLineWeightPt(sp.levelMajorPt);
@@ -327,6 +327,7 @@ SheetParams MainWindow::defaultSheetParams() const {
     sp.withImage = st.value("sheet/withImage", true).toBool();
     sp.withLine = st.value("sheet/withLine", true).toBool();
     sp.withLevels = st.value("sheet/withLevels", true).toBool();
+    sp.withTicks = st.value("sheet/withTicks", true).toBool();   // 거리 눈금(T10) — 끄는 칸은 도면 판의 「그릴 것」(T16)
     sp.withTitle = st.value("sheet/withTitle", true).toBool();
     sp.levelMinorPt = clampLineWeightPt(st.value("sheet/levelMinorPt", 0.2).toDouble());
     sp.levelMajorPt = clampLineWeightPt(st.value("sheet/levelMajorPt", 0.5).toDouble());
@@ -697,7 +698,7 @@ bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const Shee
     if (p.format == 1) {   // DXF: 모델 공간 1:N(용지 배치 없음)
         DxfParams dp; dp.world3d = false; dp.denom = p.spec.denom; dp.image = p.withImage; dp.imageDpi = std::min(p.dpi, 200.0);
         dp.levelMinorPt = p.levelMinorPt; dp.levelMajorPt = p.levelMajorPt;
-        SectionDoc doc = doc0; doc.st.showLevels = p.withLevels;
+        SectionDoc doc = doc0; doc.st.showLevels = p.withLevels; doc.st.showTicks = p.withTicks;
         return exportSectionDxf(doc, src, dp, path, msg, cancel);
     }
     // 입면 영상: 출력 해상도로 다시 계산(같은 단면선 → 같은 윤곽은 스냅숏 것을 유지)
@@ -1495,7 +1496,7 @@ void MainWindow::dlgSheet() {
         const SheetParams& o = *lastSheet_;
         sp.spec.paper = o.spec.paper; sp.spec.landscape = o.spec.landscape;
         sp.format = o.format; sp.dpi = o.dpi; sp.split = o.split;
-        sp.withImage = o.withImage; sp.withLine = o.withLine; sp.withLevels = o.withLevels; sp.withTitle = o.withTitle;
+        sp.withImage = o.withImage; sp.withLine = o.withLine; sp.withLevels = o.withLevels; sp.withTicks = o.withTicks; sp.withTitle = o.withTitle;
         sp.showBaseline = o.showBaseline;
         sp.levelMinorPt = o.levelMinorPt; sp.levelMajorPt = o.levelMajorPt; sp.hatchKind = o.hatchKind; sp.hatchMm = o.hatchMm;
         if (section_->hasResult()) {
@@ -1936,6 +1937,10 @@ bool MainWindow::runSheetCheck(const QString& outDir, QString* log) {
             const double expMinor = ptToMm(sec.levelMinorPt) * k, expMajor = ptToMm(sec.levelMajorPt) * k;
             const int lvOk = flag(std::abs(e1.levelMinorPx - expMinor) < 0.05 && std::abs(e1.levelMajorPx - expMajor) < 0.05 && e1.levelMajorPx > e1.levelMinorPx);
             lines << QStringLiteral("sheet-check level-pt minor=%1 expect=%2 major=%3 expect=%4 ok=%5").arg(e1.levelMinorPx, 0, 'f', 3).arg(expMinor, 0, 'f', 3).arg(e1.levelMajorPx, 0, 'f', 3).arg(expMajor, 0, 'f', 3).arg(lvOk);
+            // 거리 눈금(T10): 도면에도 세로 눈금이 그려지고, 굵기는 레벨선과 같은 pt(0.2 · 0.5)이며, 굵은 눈금이 1 개 이상
+            const int dtOk = flag(e1.distTickCount >= 2 && e1.distTickMajorCount >= 1 && e1.distTickStepM > 0 && std::abs(e1.distTickMinorPx - expMinor) < 0.05 && std::abs(e1.distTickMajorPx - expMajor) < 0.05 && e1.distTickMajorPx > e1.distTickMinorPx);
+            lines << QStringLiteral("sheet-check dist-ticks=%1 major=%2 step=%3m weight-px=%4/%5 expect=%6/%7 ok=%8").arg(e1.distTickCount).arg(e1.distTickMajorCount).arg(e1.distTickStepM, 0, 'g', 4)
+                         .arg(e1.distTickMinorPx, 0, 'f', 3).arg(e1.distTickMajorPx, 0, 'f', 3).arg(expMinor, 0, 'f', 3).arg(expMajor, 0, 'f', 3).arg(dtOk);
         }
         QImage s2; SheetPaintProbe e2;
         paintSec(2.07, s2, e2);

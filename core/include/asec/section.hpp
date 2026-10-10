@@ -103,6 +103,12 @@ struct LevelPlan { int lineCm = 10; int labelCm = 50; };
 LevelPlan planLevels(double pxPerMeter, double minLinePx, double minLabelPx, int baseCm = 10);
 /// 보기 좋은 눈금 간격(1·2·5 ×10^k) — 목표 개수 근처
 double niceStep(double range, int targetCount);
+/// 단면 거리 눈금(세로선, T10): 단면 시작점 A(s = 0)에서 stepM 의 배수마다 한 줄, majorEvery 번째(0 포함)는 굵게.
+/// 굵은 눈금 간격: 간격의 가수가 5 이면 2 번째(0.5 m → 1 m · 5 m → 10 m), 그 밖(1 · 2 · 10 …)은 5 번째(1 m → 5 m · 2 m → 10 m)
+struct DistTick { double s; bool major; };
+int distTickMajorEvery(double stepM);
+/// [s0, s1] 안의 눈금들(오름차순). stepM <= 0 이거나 눈금이 5000 개를 넘으면 빈 목록
+std::vector<DistTick> distTicks(double s0, double s1, double stepM);
 /// 단면선 기복(m): 열린 단면선(지면) 점 높이의 5–95 백분위 차. 닫힌 고리(덤불·돌 덩어리)는 뺌. 점 없으면 0
 double profileRelief(const std::vector<Polyline>& profile);
 /// 빈 구간(v4 단계 5): 단면선 길이 [0, length] 중 잘린 선(profile 의 s 범위들의 합집합)이 덮지 않는 구간.

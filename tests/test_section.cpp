@@ -208,3 +208,33 @@ TEST_CASE("profileGaps: 단면선 밖(s<0, s>length) 점은 잘라 셈", "[gaps]
     REQUIRE(g.size() == 1);
     CHECK(g[0].s0 == Approx(3)); CHECK(g[0].s1 == Approx(9));
 }
+
+TEST_CASE("거리 눈금(T10): 굵은 눈금 간격 · 위치 · 구간") {
+    CHECK(distTickMajorEvery(1.0) == 5);     // 1 m 눈금 → 5 m 마다 굵게
+    CHECK(distTickMajorEvery(2.0) == 5);     // 2 m → 10 m
+    CHECK(distTickMajorEvery(5.0) == 2);     // 5 m → 10 m
+    CHECK(distTickMajorEvery(0.5) == 2);     // 0.5 m → 1 m
+    CHECK(distTickMajorEvery(10.0) == 5);
+    CHECK(distTickMajorEvery(50.0) == 2);
+    CHECK(distTickMajorEvery(0.1) == 5);     // 0.1 m → 0.5 m
+    CHECK(distTickMajorEvery(0) == 1);       // 나쁜 입력은 전부 굵게(그리지 않음)
+    auto t = distTicks(0, 12, 1);
+    REQUIRE(t.size() == 13);
+    CHECK(t.front().s == Approx(0.0)); CHECK(t.back().s == Approx(12.0));
+    int majors = 0; for (auto& k : t) if (k.major) ++majors;
+    CHECK(majors == 3);                       // 0 · 5 · 10 m
+    CHECK(t[0].major); CHECK_FALSE(t[1].major); CHECK(t[5].major); CHECK(t[10].major);
+    auto u = distTicks(2.5, 7.0, 2.0);        // 2 m 눈금: 4 · 6 — 굵은 눈금(10 m 배수)은 없다
+    REQUIRE(u.size() == 2);
+    CHECK(u[0].s == Approx(4.0)); CHECK(u[1].s == Approx(6.0));
+    CHECK_FALSE(u[0].major); CHECK_FALSE(u[1].major);
+    auto neg = distTicks(-1.2, 1.2, 1.0);     // 시작점 앞(s < 0)에도 같은 격자 — 0 이 굵게
+    REQUIRE(neg.size() == 3);
+    CHECK(neg[0].s == Approx(-1.0)); CHECK_FALSE(neg[0].major); CHECK(neg[1].s == Approx(0.0)); CHECK(neg[1].major);
+    auto negMajor = distTicks(-6, 0, 1);      // −5 도 굵게(음수 배수)
+    bool m5 = false; for (auto& k : negMajor) if (std::fabs(k.s + 5.0) < 1e-9) m5 = k.major;
+    CHECK(m5);
+    CHECK(distTicks(0, 10, 0).empty()); CHECK(distTicks(0, 10, -1).empty());
+    CHECK(distTicks(5, 1, 1).empty());        // 거꾸로 구간
+    CHECK(distTicks(0, 1e6, 0.1).empty());    // 너무 촘촘하면 그리지 않음
+}

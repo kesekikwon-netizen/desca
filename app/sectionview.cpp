@@ -124,15 +124,10 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     QFont title = theme::uiFont(std::max(6, int(std::lround(14 * ui))), true);
     QFontMetricsF fm(small);
 
-    // 1) 세로 격자(거리) — 아주 옅게
+    // 1) 거리 눈금의 간격(레벨선 · 영상 · 눈금 그리기가 함께 씀) — 아래 거리 숫자도 같은 간격
     double dStep = niceStep(std::max(1e-3, sVis1 - sVis0), std::max(2, int(pr.width() / (90 * ui))));
     p.save();
     p.setClipRect(pr);
-    {
-        QPen g(QColor(0xF0, 0xEE, 0xE6), 1.0 * ui);
-        p.setPen(g);
-        for (long k = long(std::ceil(sVis0 / dStep)); k * dStep <= sVis1; ++k) p.drawLine(QPointF(X(k * dStep), pr.top()), QPointF(X(k * dStep), pr.bottom()));
-    }
     // 2) 레벨선(맨 아래 층 — 영상·단면선 밑): 10 cm 얇고 옅게, 50 cm·1 m 조금 진하게. 너무 촘촘하면 생략
     //    간격 규칙(planLevels): 선 10 cm·숫자 50 cm 기본. 화면은 선 사이 4 px, 인쇄(내보내기)는 0.5 mm 보다 좁으면 50 cm·1 m·5 m 로 솎음.
     //    확대해도 10 cm 보다 촘촘하게 긋지 않음.
@@ -167,6 +162,24 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         p.setOpacity(st_.imageOpacity);
         p.drawImage(tr, img);
         p.setOpacity(1.0);
+    }
+    // 3b) 거리 눈금(T10): 입면 영상 위 · 단면선 아래의 세로선 — 1 m 마다(간격은 아래 거리 숫자와 같음) 얇게, 5 번째마다(1 m 눈금이면 5 m) 굵게. 굵기는 레벨선과 같은 pt(0.2 · 0.5).
+    //     화면은 바닥값(0.75 · 1.0 px)을 지키고, 도면 · 내보내기는 pt 그대로. 색은 Ink 에 투명도만(영상 위에서도 읽힘)
+    if (st_.showTicks) {
+        const double pxPerMmT = ui * 96.0 / 25.4;
+        const double wMinorT = forExport ? ptToMm(st_.levelMinorPt) * pxPerMmT : std::max(0.75 * ui, ptToMm(st_.levelMinorPt) * pxPerMmT);
+        const double wMajorT = forExport ? ptToMm(st_.levelMajorPt) * pxPerMmT : std::max(1.0 * ui, ptToMm(st_.levelMajorPt) * pxPerMmT);
+        QColor cMinor = theme::Ink, cMajor = theme::Ink; cMinor.setAlpha(80); cMajor.setAlpha(150);
+        const std::vector<DistTick> ticks = distTicks(sVis0, sVis1, dStep);
+        int nMajor = 0;
+        for (const DistTick& t : ticks) {
+            const double x = X(t.s);
+            if (x < pr.left() - 0.5 || x > pr.right() + 0.5) continue;
+            p.setPen(QPen(t.major ? cMajor : cMinor, t.major ? wMajorT : wMinorT));
+            p.drawLine(QPointF(x, pr.top()), QPointF(x, pr.bottom()));
+            if (t.major) ++nMajor;
+        }
+        if (probe) { probe->distTickCount = int(ticks.size()); probe->distTickMajorCount = nMajor; probe->distTickStepM = dStep; probe->distTickMinorPx = wMinorT; probe->distTickMajorPx = wMajorT; }
     }
     // 4) 단면 한계(A, A′) 세로 점선
     {

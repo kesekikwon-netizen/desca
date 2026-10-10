@@ -268,7 +268,7 @@ struct StateCmd : QUndoCommand {
 bool MainWindow::ViewState::operator==(const ViewState& o) const {
     auto eqL = [](const SectionLine& x, const SectionLine& y) { return x.a.x == y.a.x && x.a.y == y.a.y && x.b.x == y.b.x && x.b.y == y.b.y; };
     return hasLine == o.hasLine && (!hasLine || eqL(line, o.line)) && front == o.front && back == o.back && image == o.image && profile == o.profile &&
-           levels == o.levels && fade == o.fade && smooth == o.smooth && current == o.current;
+           levels == o.levels && ticks == o.ticks && fade == o.fade && smooth == o.smooth && current == o.current;
 }
 
 QAction* MainWindow::makeAction(const QString& key, const QString& ko, const QString& en, theme::Ico ico, const QString& shortcut, bool checkable) {
@@ -556,7 +556,7 @@ QWidget* MainWindow::buildSectionFrame() {
     {
         auto* box = secToggles_ = new QWidget; box->setObjectName("viewToggles"); box->setAttribute(Qt::WA_StyledBackground);
         auto* bl = new QHBoxLayout(box); bl->setContentsMargins(2, 2, 2, 2); bl->setSpacing(2);
-        const std::pair<const char*, theme::Ico> tg[] = {{"image", theme::Ico::Image}, {"line", theme::Ico::Line}, {"levels", theme::Ico::Levels}};
+        const std::pair<const char*, theme::Ico> tg[] = {{"image", theme::Ico::Image}, {"line", theme::Ico::Line}, {"levels", theme::Ico::Levels}, {"ticks", theme::Ico::Ticks}};
         for (const auto& [key, ico] : tg) {
             auto* b = new QToolButton; b->setObjectName("viewToggle"); b->setIcon(theme::icon(ico, 16)); b->setIconSize(QSize(16, 16));
             b->setFocusPolicy(Qt::NoFocus); b->setFixedSize(28, 24);
@@ -584,8 +584,8 @@ QWidget* MainWindow::buildSectionFrame() {
         secTogglesMenu_->setIcon(kerf::iconWithCaret(QStringLiteral("layers"), 16, theme::Hand, theme::Card)); secTogglesMenu_->setProperty("caretBaked", true);   // 메뉴 단추라는 표시 ▾ 를 아이콘에(스펙 §4 「그릴 것 ▾」 — 폭을 늘리지 않음, rework 2 UI S1)
         secTogglesMenu_->setAccessibleName(QStringLiteral("그릴 것"));
         secTogglesMenu_->setPopupMode(QToolButton::InstantPopup);
-        secTogglesMenu_->setToolTip(QStringLiteral("그릴 것 켜기 · 끄기 — 입면 영상 · 잘린 선 · 레벨선 · 깊이 음영 (I · L · V)"));
-        { auto* m = new QMenu(secTogglesMenu_); for (const char* k : {"image", "line", "levels", "fade"}) m->addAction(action(k)); secTogglesMenu_->setMenu(m); }
+        secTogglesMenu_->setToolTip(QStringLiteral("그릴 것 켜기 · 끄기 — 입면 영상 · 잘린 선 · 레벨선 · 깊이 음영 · 거리 눈금 (I · L · V · D)"));
+        { auto* m = new QMenu(secTogglesMenu_); for (const char* k : {"image", "line", "levels", "fade", "ticks"}) m->addAction(action(k)); secTogglesMenu_->setMenu(m); }
         secTogglesMenu_->hide();
         h->addWidget(secTogglesMenu_); h->addSpacing(6);
     }
@@ -1198,7 +1198,7 @@ MainWindow::ViewState MainWindow::captureState() const {
     ViewState s;
     s.hasLine = plan_->hasLine(); if (s.hasLine) s.line = plan_->line();
     s.front = front_->value(); s.back = back_->value();
-    s.image = action("image")->isChecked(); s.profile = action("line")->isChecked(); s.levels = action("levels")->isChecked();
+    s.image = action("image")->isChecked(); s.profile = action("line")->isChecked(); s.levels = action("levels")->isChecked(); s.ticks = action("ticks")->isChecked();
     s.fade = action("fade")->isChecked(); s.smooth = action("smooth")->isChecked();
     s.current = current_;
     return s;
@@ -1211,7 +1211,7 @@ void MainWindow::applyState(const ViewState& s) {
         front_->setValue(s.front); back_->setValue(s.back);
     }
     plan_->setBand(s.front, s.back);
-    const std::pair<const char*, bool> toggles[] = {{"image", s.image}, {"line", s.profile}, {"levels", s.levels}, {"fade", s.fade}, {"smooth", s.smooth}};
+    const std::pair<const char*, bool> toggles[] = {{"image", s.image}, {"line", s.profile}, {"levels", s.levels}, {"ticks", s.ticks}, {"fade", s.fade}, {"smooth", s.smooth}};
     for (auto& [k, v] : toggles) action(k)->setChecked(v);   // applyingState_ 가 되돌리기 기록을 막음(단추 동기화는 신호로)
     section_->setStyle(secStyle());
     current_ = (s.current >= 0 && s.current < int(sections_.size())) ? s.current : current_;
@@ -1669,7 +1669,7 @@ static const QList<KeyRow>& keyRows() {
         {QStringLiteral("X"), QStringLiteral("세로 과장 ×1 → ×2 → ×5 → ×10 (화면만 · 도면은 1:1)"), {QStringLiteral("X")}},
         {QStringLiteral("R"), QStringLiteral("방향 반전(A↔A′)"), {QStringLiteral("R")}},
         {QStringLiteral("N"), QStringLiteral("새 단면"), {QStringLiteral("N")}},
-        {QStringLiteral("I · L · V"), QStringLiteral("입면 영상 · 잘린 선 · 레벨선 켜기 · 끄기"), {QStringLiteral("I"), QStringLiteral("L"), QStringLiteral("V")}},
+        {QStringLiteral("I · L · V · D"), QStringLiteral("입면 영상 · 잘린 선 · 레벨선 · 거리 눈금 켜기 · 끄기"), {QStringLiteral("I"), QStringLiteral("L"), QStringLiteral("V"), QStringLiteral("D")}},
         {QStringLiteral("F · T"), QStringLiteral("맞춤 · 위에서 보기"), {QStringLiteral("F"), QStringLiteral("T")}},
         {QStringLiteral("+  −"), QStringLiteral("확대 · 축소"), {QStringLiteral("+"), QStringLiteral("-")}},
         {QStringLiteral("Ctrl+1 · Ctrl+2"), QStringLiteral("평면 · 단면 보이기 켜기 · 끄기"), {QStringLiteral("Ctrl+1"), QStringLiteral("Ctrl+2")}},
@@ -1754,6 +1754,8 @@ MainWindow::MainWindow() {
     makeAction("levels", QStringLiteral("레벨선"), "Level Lines", I::Levels, "V", true)->setChecked(true);
     makeAction("smooth", QStringLiteral("평활"), "Smooth", I::Smooth, QString(), true);
     makeAction("fade", QStringLiteral("깊이 음영"), "Depth Shading", I::Band, QString(), true);
+    makeAction("ticks", QStringLiteral("거리 눈금"), "Distance Ticks", I::Ticks, "D", true)->setChecked(QSettings().value("section/ticks", true).toBool());
+    action("ticks")->setToolTip(QStringLiteral("거리 눈금 (D) — 입면 위 세로 눈금(1 m 마다 · 5 m 굵게, 아래 거리 숫자와 같은 자리) — 토층을 그릴 자리를 m 로 읽습니다(도면 · 내보내기도 같음)"));
     action("fade")->setToolTip(QStringLiteral("깊이 음영 (Depth Shading) — 입면 영상에서 단면선보다 뒤에 있는 면일수록 옅게 그려 빨간 단면선이 잘 보이게 합니다(내보내기도 같음)"));
     makeAction("info", QStringLiteral("단면 정보"), "Section Info", I::Info);
     makeAction("view1", QStringLiteral("평면"), "Plan", I::View1, "Ctrl+1", true)->setChecked(true);
@@ -1928,11 +1930,12 @@ MainWindow::MainWindow() {
     QObject::connect(action("top"), &QAction::triggered, this, [this] { plan_->homeView(); });
     QObject::connect(action("zoomin"), &QAction::triggered, this, [this] { plan_->zoomBy(1 / 1.4); section_->zoomBy(1.4); });
     QObject::connect(action("zoomout"), &QAction::triggered, this, [this] { plan_->zoomBy(1.4); section_->zoomBy(1 / 1.4); });
-    const std::pair<const char*, const char*> tg[] = {{"image", "입면 영상"}, {"line", "단면선 표시"}, {"levels", "레벨선"}};
+    const std::pair<const char*, const char*> tg[] = {{"image", "입면 영상"}, {"line", "단면선 표시"}, {"levels", "레벨선"}, {"ticks", "거리 눈금"}};
     for (auto& [k, name] : tg) {
         QString nm = QString::fromUtf8(name);
         QObject::connect(action(k), &QAction::toggled, this, [this, nm](bool) { section_->setStyle(secStyle()); commitState(nm); });
     }
+    QObject::connect(action("ticks"), &QAction::toggled, this, [](bool on) { QSettings().setValue("section/ticks", on); });
     QObject::connect(opacity_, &QSlider::valueChanged, this, [this](int) { section_->setStyle(secStyle()); });
     QObject::connect(action("smooth"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/smooth", on); requestSection(true); commitState(QStringLiteral("평활")); });
     QObject::connect(action("fade"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/depthFade", on); section_->setStyle(secStyle()); requestSection(true); commitState(QStringLiteral("깊이 음영")); });
@@ -2314,6 +2317,20 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     L << QStringLiteral("ui-audit ribbon-tidy points-chips=%1 xyz-las-chips=%2 keys-in-view=%3 quit-ctrl-q=%4 about-in-keys=%5%6").arg(pointsChips).arg(xyzLasChips).arg(keysInView).arg(quitKey ? 1 : 0).arg(aboutLink).arg(tidyOk ? QString() : QStringLiteral("  FAIL"));
     ok &= tidyOk;
 
+    // 4h) 거리 눈금(T10 · 사용자 요청 「입면 토층도 그려야 할 때가 있다 — 체크 표시를 볼 수 있게」): 입면 위에 세로 눈금(1 m · 5 m 굵게)을 그리고, D 키 · 단면 머리 아이콘 · 「그릴 것 ▾」 메뉴로 켜고 끈다(기본 켬)
+    {
+        const auto ti = act_.find(QStringLiteral("ticks"));
+        const bool act = ti != act_.end();
+        const bool key = act && ti->second->shortcut() == QKeySequence(QStringLiteral("D"));
+        const bool on = act && ti->second->isChecked() && secStyle().showTicks;
+        bool hdr = false, menu = false;
+        for (auto* b : secTitleBar_->findChildren<QToolButton*>(QStringLiteral("viewToggle"))) if (act && b->accessibleName() == ti->second->text()) hdr = true;
+        if (auto* mb = secTitleBar_->findChild<QToolButton*>(QStringLiteral("secTogglesMenu"))) if (mb->menu() && act) menu = mb->menu()->actions().contains(ti->second);
+        const bool ticksOk = act && key && on && (hdr || menu);
+        L << QStringLiteral("ui-audit dist-ticks action=%1 key-d=%2 on=%3 header=%4 menu=%5%6").arg(act ? 1 : 0).arg(key ? 1 : 0).arg(on ? 1 : 0).arg(hdr ? 1 : 0).arg(menu ? 1 : 0).arg(ticksOk ? QString() : QStringLiteral("  FAIL"));
+        ok &= ticksOk;
+    }
+
     // 4g) F1 창(T9): 표의 키 = 실제로 연결된 키(없는 키를 적거나 있는 키를 빼면 실패) · 두 열 · 글이 읽힘(대비 4.5:1) · 앱은 늘 밝은 색 체계
     {
         auto norm = [](const QKeySequence& k) { return k.toString(QKeySequence::PortableText); };
@@ -2556,7 +2573,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             if (auto* mb = secTitleBar_->findChild<QToolButton*>(QStringLiteral("secTogglesMenu")))
                 if (mb->isVisibleTo(secTitleBar_) && mb->menu()) {
                     const QList<QAction*> acts = mb->menu()->actions();
-                    reach = acts.contains(action("image")) && acts.contains(action("line")) && acts.contains(action("levels")) && acts.contains(action("fade"));
+                    reach = acts.contains(action("image")) && acts.contains(action("line")) && acts.contains(action("levels")) && acts.contains(action("fade")) && acts.contains(action("ticks"));
                 }
         if (!reach) F.toggles = false;
         // 보이는 메뉴 단추(「그릴 것」 · 세로 과장)는 ▾ 가 보여야 한다(스펙 §4 「그릴 것 ▾」 · 「세로 ×1 ▾」 — QSS 가 메뉴 표시를 지우므로 글 ▾ 또는 아이콘에 구운 ▾, rework 2 UI S1).

@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T9 F1 창 고침(어두운 모드 바탕 · 표 = 실제 키 · F2 · Del 연결) 끝** → 다음 T10(G7) 입면 위 거리 눈금 + D 키 + 도면 SVG. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T10 입면 위 거리 눈금 + D 키 + 도면에도 끝** → 다음 T11(G8) 커서 5종 `app/cursors.{hpp,cpp}`. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -349,6 +349,14 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 합성 감사 10조합 + 1920 ×1.25 · ×1.75 + 실제 모델 `RESULT ok` · **실제 Windows 창 플랫폼에서도 `RESULT ok`**(`color-scheme=light` — 시스템은 어두운 모드인데 앱은 밝게, `contrast=18.4`) · 실제 창 캡처 `C:\dev\tmp\ui__keys.png`(두 열 표 · 글 읽힘 · 정보 줄 · 닫기 Esc) 눈 확인 · `~CoalescingWorker*` 통과 · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0.
 - **판정(Ruling):** ① 앱 전체를 밝은 색 체계로 고정(어두운 모드 지원 없음 — 스펙에 어두운 테마 없음, `ui-visual-check` 도 `--themes light` 만) — 틀리면: 어두운 모드를 쓰는 사람도 밝은 앱을 봄. ② F2 · Del 은 「고른 단면」에 걸었고 단면 목록에 초점이 없어도 작업 영역 안이면 먹음(목록이 Tab 초점만 받아 클릭 뒤에는 초점이 안 가므로) — Del 은 확인 창을 거침. ③ Ctrl+Tab(탭 순환) · D(거리 눈금)는 아직 없는 기능이라 표에 안 적음(D 는 T10 에서 걸며 표에 더함).
 - **남은 문제:** 없음(T9 끝). 다음 T10(G7) 입면 위 거리 눈금(세로) + D 키 + 도면 SVG.
+
+### 2026-10-11 · Claude Code(Sonnet 5.5) — T10 (G7 · R9): 입면 위 거리 눈금(세로) + D 키 + 도면에도
+- **사용자 요청(2026-10-10):** 「입면 토층도 그려야 할 때가 있다 체크표시를 볼 수 있게 하라」 → 확인 답 「입면 위 거리 눈금(세로선)을 레벨선처럼 눈에 띄게, 아래 거리 숫자와 맞춰 토층 그릴 자리를 m · EL. 로 읽게, 도면(SVG)에도 같은 눈금」. 옛 세로 격자는 아주 옅고(`#F0EEE6`) 입면 영상 **밑**에 그려져 영상 위에서는 안 보였다.
+- **시험 먼저(RED):** core Catch2 `거리 눈금(T10)`(굵은 눈금 간격 1 → 5 · 2 → 5 · 5 → 2 · 0.5 → 2 · 0 → 1, 위치 0–12 m 1 m = 13개 · 굵은 눈금 0 · 5 · 10, 음수 구간 · 나쁜 입력 · 너무 촘촘함) 스텁에서 실패(test_section.cpp 213–217) · `--ui-audit dist-ticks action key-d on header menu`(동작 · D 키 · 기본 켬 · 머리 아이콘 또는 「그릴 것 ▾」 메뉴) · F1 표에 「I · L · V · D」를 먼저 적어 `keys-table-match=0 extra=[D]` · `--sheet-check dist-ticks=0 … ok=0`(도면 그림에 눈금이 없고 굵기 0).
+- **무엇을:** core `distTickMajorEvery` · `distTicks`(section.hpp) · `Ico::Ticks` + 새 아이콘 `kerf/dist-ticks.svg`(`make_kerf_svgs.py` 가 만듦) · 동작 `ticks`(D, 체크, 설정 `section/ticks`) · 단면 머리 네 번째 아이콘 토글 + 「그릴 것 ▾」 다섯째 항목 · 되돌리기 상태에 `ticks` · `SectionStyle::showTicks`(기본 켬) · `paintSectionDoc` 가 영상 위 · 단면선 아래에 눈금을 긋고(옛 옅은 격자 삭제) 프로브(개수 · 굵은 눈금 수 · 간격 · 펜 굵기)를 채움 · 도면 `SheetParams::withTicks`(`sheet/withTicks`, 조판 변환 · SVG · 묶음 저장 · 점검에 따라감) · F1 표 「I · L · V · D」.
+- **확인:** core `~CoalescingWorker*` 51408 통과 · `--sheet-check dist-ticks=13 major=3 step=1m weight-px=0.564/1.411 expect=0.564/1.411 ok=1`(1:50 A4 가로 — 0.2 · 0.5 pt 가 레벨선과 같은 값) · 감사 합성 1280 · 1920 ×1 ok · 전체 매트릭스(10조합 · 1.25 · 1.75 · 실제 모델 · 실제 Windows 창)는 아래 줄 · 실제 창 캡처 `C:\dev\tmp\elev-bug\t10\sec.png`(영상 위 2 m 마다 세로선, 10 m 굵게, 아래 숫자와 같은 자리 · 머리 아이콘 넷).
+- **판정(Ruling):** ① 눈금은 아래 숫자의 간격(core `niceStep`)을 그대로 따라 줌에 따라 2 m · 1 m · 0.5 m 로 달라짐(기본 1 m 는 도면 1:50 에서) — 사용자 말 「아래 거리 숫자와 맞춰」 — 틀리면 간격 고정 옵션. ② 색은 새 토큰 없이 `Ink` + 투명도 — 틀리면 토큰 하나 더. ③ 도면 판의 켜기 · 끄기 칸은 T16(「그릴 것 ▾」 · 층 나눔)에서 — 그동안 도면은 기본 켬. ④ DXF 눈금 층은 T15(DXF 단계)에서 — 지금은 SVG · PDF · PNG · TIFF 만.
+- **남은 문제:** 없음(T10 끝). 다음 T11(G8) 커서 5종.
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

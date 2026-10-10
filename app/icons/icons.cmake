@@ -9,7 +9,7 @@ set(KERF_ICON_FILES
   kerf/clock.svg kerf/flip.svg kerf/list.svg kerf/contrast.svg kerf/keyboard.svg kerf/info.svg kerf/zoom-in.svg kerf/zoom-out.svg
   kerf/chevron-down.svg kerf/star.svg kerf/section-line.svg kerf/hatch.svg kerf/outline.svg kerf/profile.svg kerf/points-xyz.svg
   kerf/cloud-las.svg kerf/geotiff.svg kerf/csv.svg kerf/sections-list.svg kerf/vex.svg kerf/top-view.svg kerf/height.svg
-  kerf/crosshair.svg kerf/levels.svg kerf/fade.svg kerf/image-layer.svg kerf/north.svg kerf/legend.svg kerf/title-block.svg
+  kerf/crosshair.svg kerf/levels.svg kerf/dist-ticks.svg kerf/fade.svg kerf/image-layer.svg kerf/north.svg kerf/legend.svg kerf/title-block.svg
   kerf/scalebar.svg kerf/paper.svg kerf/edit-move.svg kerf/copy.svg kerf/enter.svg kerf/esc.svg kerf/gap.svg kerf/menu.svg kerf/sheet.svg
   app/trench.svg app/trench-small.svg app/trench-tiny.svg)
 

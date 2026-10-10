@@ -68,7 +68,7 @@ struct SheetParams {
     double dpi = 300;            // PNG/TIFF(및 PDF 영상) 해상도
     bool split = false;          // 넘치면 여러 장으로 나눠(PDF 여러 쪽 / 영상 여러 파일)
     QString title;               // 도면명
-    bool withImage = true, withLine = true, withLevels = true, withTitle = true;
+    bool withImage = true, withLine = true, withLevels = true, withTicks = true, withTitle = true;
     bool showBaseline = false; double baselineEl = 0;
     double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기 pt(10 cm · 50 cm) — 디자인 v5 결정 L
     int hatchKind = 0; double hatchMm = 1.0;         // 잘린 돌 빗금: 0 45° · 1 검은 칠 · 2 점묘, 간격 mm(스펙 §8 — F 단계가 씀)
@@ -296,7 +296,7 @@ private:
 public:
     struct ViewState {
         asec::SectionLine line; bool hasLine = false; double front = 0, back = 0.5;
-        bool image = true, profile = true, levels = true, fade = false, smooth = false;
+        bool image = true, profile = true, levels = true, ticks = true, fade = false, smooth = false;
         int current = 0;
         bool operator==(const ViewState& o) const;
     };

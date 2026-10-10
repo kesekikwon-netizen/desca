@@ -400,6 +400,20 @@ double niceStep(double range, int target) {
     return (r < 1.5 ? 1 : r < 3.5 ? 2 : r < 7.5 ? 5 : 10) * mag;
 }
 
+int distTickMajorEvery(double stepM) {
+    if (!(stepM > 0)) return 1;
+    const double mag = std::pow(10.0, std::floor(std::log10(stepM))), m = stepM / mag;   // 가수 1 ≤ m < 10
+    return std::fabs(m - 5.0) < 1e-6 ? 2 : 5;
+}
+
+std::vector<DistTick> distTicks(double s0, double s1, double stepM) {
+    std::vector<DistTick> out;
+    if (!(stepM > 0) || !(s1 >= s0) || (s1 - s0) / stepM > 5000) return out;
+    const int every = distTickMajorEvery(stepM);
+    for (long k = long(std::ceil(s0 / stepM - 1e-9)); k * stepM <= s1 + 1e-9; ++k) out.push_back({k * stepM, ((k % every) + every) % every == 0});
+    return out;
+}
+
 double profileRelief(const std::vector<Polyline>& profile) {
     std::vector<double> z;
     for (auto& pl : profile) {

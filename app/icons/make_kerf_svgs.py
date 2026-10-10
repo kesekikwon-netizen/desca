@@ -29,6 +29,7 @@ ICONS = {
     'height': '<path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/>',
     'crosshair': '<circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
     'levels': '<path d="M3 7h18M3 12h18M3 17h18"/>',
+    'dist-ticks': '<path d="M5 3v14M12 3v14M19 3v14"/><path d="M3 20h18M5 20v-2M12 20v-2M19 20v-2"/>',   # 거리 눈금(세로선 + 아래 눈금 자)
     'fade': '<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/>',
     'image-layer': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/>',
     'north': '<path d="m12 2 5 18-5-4-5 4z"/>',

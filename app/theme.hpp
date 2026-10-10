@@ -337,7 +337,7 @@ QToolButton:checked, QToolButton#chip:checked { border-color: #141413; }
 
 // ---- 아이콘: 먹색 선(데이터 색 아이콘만 빨강·회색 획 유지)
 enum class Ico { Open, Draw, Flip, Plan, Fit, Orbit, Image, Line, Levels, Dxf, Png, Smooth, Tif, Geo, Xyz, Las, Csv, ZoomIn, ZoomOut, Close, Info, Clear, View1, View2, Band,
-                 Recent, Sheet, Undo, Redo, Measure, Height, Move, Add, Max, Picture, Keys, Vex, Sliders };
+                 Recent, Sheet, Undo, Redo, Measure, Height, Move, Add, Max, Picture, Keys, Vex, Sliders, Ticks };
 
 /// Ico → SVG 이름(app/icons/, 디자인 v5 §11). 새 Ico 를 더하면 여기와 icons.cmake 목록에 같이 더한다
 inline const char* iconName(Ico k) {
@@ -355,11 +355,11 @@ inline const char* iconName(Ico k) {
     case Ico::Measure: return "crosshair";  case Ico::Height: return "height";     case Ico::Move: return "move";
     case Ico::Add: return "plus";           case Ico::Max: return "maximize";      case Ico::Picture: return "image";
     case Ico::Keys: return "keyboard";      case Ico::Vex: return "vex";
-    case Ico::Sliders: return "sliders-horizontal";
+    case Ico::Sliders: return "sliders-horizontal";   case Ico::Ticks: return "dist-ticks";
     }
     return "x";
 }
-inline constexpr int kIcoCount = int(Ico::Sliders) + 1;
+inline constexpr int kIcoCount = int(Ico::Ticks) + 1;
 
 /// 리본 칩 타일 색(디자인 v5 §3.2 · Strata tokens.json ribbon) — 토큰에서만
 inline kerf::ChipColors chipColors() {

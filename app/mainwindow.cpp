@@ -216,7 +216,7 @@ void MainWindow::selectDocTab(int i) { if (viewTabs_ && i >= 0 && i < viewTabs_-
 
 SectionStyle MainWindow::secStyle() const {
     SectionStyle s;
-    s.showImage = action("image")->isChecked(); s.showLine = action("line")->isChecked(); s.showLevels = action("levels")->isChecked();
+    s.showImage = action("image")->isChecked(); s.showLine = action("line")->isChecked(); s.showLevels = action("levels")->isChecked(); s.showTicks = action("ticks")->isChecked();
     s.imageOpacity = opacity_->value() / 100.0;
     s.depthFade = action("fade")->isChecked();
     s.lineWidthPx = QSettings().value("view/sectionLineWidth", 2.0).toDouble() * (highContrast_ ? 1.5 : 1.0);
@@ -249,7 +249,7 @@ void MainWindow::updateEnabled() {
     for (const char* k : {"flip", "clear", "move"}) action(k)->setEnabled(sc && plan_->hasLine() && secCtx);
     for (const char* k : {"dxf", "secimg", "csv", "info"}) action(k)->setEnabled(sec && !busy && !home && !drawing);
     for (const char* k : {"plan", "points", "xyz", "las", "sheet", "plansheet", "sectionsheet"}) action(k)->setEnabled(sc && !busy && !home && !drawing);
-    for (const char* k : {"secjson", "secimport", "image", "line", "levels", "fade", "smooth", "listpanel"}) action(k)->setEnabled(sc && !busy && !home);
+    for (const char* k : {"secjson", "secimport", "image", "line", "levels", "ticks", "fade", "smooth", "listpanel"}) action(k)->setEnabled(sc && !busy && !home);
     for (const char* k : {"seclist", "view1", "view2", "contrast"}) action(k)->setEnabled(!home);
     for (QWidget* wd : {static_cast<QWidget*>(front_), static_cast<QWidget*>(back_)}) wd->setEnabled(sc && secCtx);
     for (auto* c : depthChip_) if (c) c->setEnabled(sc && secCtx);
