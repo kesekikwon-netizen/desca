@@ -1,6 +1,6 @@
 # 승인 기록 — 20261010-01-narrow-1280 1280 좁은 창: 단면 머리 · 정보 줄 · 평면 눈금 · 리본 기대값 20 + B5 검토 should 7건
 
-## 승인 보고서 (AI 검토 통과 뒤 스킬이 작성, 사용자에게 보여 준 것 — 2026-10-10 09:55)
+## 승인 보고서 (AI 검토 통과 뒤 스킬이 작성 — 2026-10-10 09:55 첫 판, 11:15 회차 3 반영)
 > **사람 검토 필수 영역:** 화면 · 감사(`--ui-audit` 판정 추가 · 리본 1280 기대값 32 → 20 · DESIGN_SPEC 기대값 변경). 좌표 · 파일 형식 · CI 해당 없음.
 > **사용자 결정 필요 2건(아래 「실패 · 미실행」 ⓐ ⓑ):** 고치려면 수정 회차가 한도 2 를 넘어 사용자 허가가 필요하다(SKILL §2) → 자동 승인하지 않음.
 
@@ -14,11 +14,14 @@
 - 독립 검토 결과와 남은 위험: code pass(should 3) · correctness pass(should 2) · security pass(note 3) · kerf-ui pass(should 2), 충돌 없음 — review.md 「종합 2차」. 후속으로 넘길 것: 감사 `refit == 1` · `gap-kept` 숨김 판정 · `fitInfoStrip` 입력 비교 · 감사 실패 줄 라벨 글 · 단면 오른쪽 끝 「A」(전부터). 받아들인 것: 범위 밖 `setAccessibleName("그릴 것")` 한 줄(화면 · 동작 불변).
 - 승인 대상 커밋 SHA: `00c9a43844c46e13ea445379e75576e8ceebc498` (기준 `308daac82e8e46189600488c209d43020e046cc2` → 변경 `00c9a43`)
 - GitHub Actions: 기준 커밋 `ci(base)` = none(WARN exit 3 — 기준 커밋이 push 되지 않음). 통과로 쓰지 않는다. 참고: 지금 GitHub Windows 작업은 MSVC C2026(`theme.hpp`) 으로 빌드부터 실패 — 대기 R0 에서 고침.
+- **회차 3 반영(11:15):** 위 ⓐ ⓑ 는 사용자 선택 「한 번 더 고친 뒤 병합 (추천)」에 따라 수정 회차 3(`97f5525` · `5526b5c` · `02688be`)에서 **해결** — ⓐ 1920 이상 칸 폴더 2 : 나머지 1(`cells-mode=run:ratio`, 1280 은 `content`) ⓑ ▾ 8 × 5 또렷(`caret-ink` 16/12 …, 캡처 `C:\dev\tmp\n1280-rework3\caret-crop-1280.png`). 재검토 code pass · kerf-ui pass(review.md 「종합 3차」), test-runner 3차 V8 · 1280/2560 ×1.25/×1.75 · 2560 ×1 RESULT PASS(13조합) · 회귀 셋 EXIT 0 · 긴 이름 1280 · 1920 ok. 변경 파일은 위 11개 그대로(+ `app/icons.*` · `mainwindow_ui.cpp` · DESIGN_SPEC 회차 3 줄).
+- 승인 대상 커밋 SHA(회차 3 뒤): `02688be73475427ddd17ef34c4420bb0160997ea` (기준 `308daac` → 변경 `02688be`)
 - 되돌리기 방법: 병합 전 = 브랜치 `factory/20261010-01-narrow-1280` 를 병합하지 않음(worktree 삭제) · 병합 뒤 = `git revert -m 1 <병합 커밋>`
 
 ## 사용자 승인 (사용자가 /factory approve 20261010-01-narrow-1280 라고 말한 뒤에만)
 | 때 | 사용자 말(그대로) | 승인 SHA | 결과 |
 | --- | --- | --- | --- |
+| 2026-10-10 11:15 | 「한 번 더 고친 뒤 병합 (추천)」(AskUserQuestion 답 10:00 — 조건 = ⓐ ⓑ 해결 뒤 병합) + 사전 허가 /goal 「남은 개발작업 전체 완료할때까지 전부 추천으로 진행해서 권한 허가해줄께 마지막가지 개발완료해줘」(DEV_RULES R1.5) | `02688be` | approved — 조건 충족(종합 3차: code · kerf-ui pass, test-runner 3차 PASS) |
 
 ## 승인 뒤 변경
 - 승인 뒤 코드가 바뀌면 여기 적고 다시 검증 · 다시 승인(위 표에 새 줄).

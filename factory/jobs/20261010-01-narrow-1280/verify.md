@@ -332,3 +332,122 @@
 | asec-section | PASS | 0 | 1 | tiles(leaf)=12 tris=186272 rawSeg=602 polylines=1 vertices=54 z=[44.20,47.50] image=3000x825 res=0.0040  collect=12ms cut=1ms image=14ms | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec-section.exe C:\dev\kerf-synth\Synthetic.3mx 200002 450006 200014 450006 --out C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-102257\sec` · `asec-section.log` |
 | ui-audit 2560x1440 ×1 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 2560x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-102257\settings-2560x1440-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-102257\ui-audit-2560x1440-x1 --quit` · `ui-audit.txt` |
 | ci(base) | WARN | 3 |  | CI 308daac none (이 커밋의 실행 없음 — push 안 됨 또는 아직 시작 전) | `ci-status.ps1 -Sha 308daac82e8e46189600488c209d43020e046cc2` |
+
+## 검증 2026-10-10 10:54 · **PASS** · HEAD `02688be73475427ddd17ef34c4420bb0160997ea`
+- 기준 `308daac82e8e46189600488c209d43020e046cc2` · 바뀐 파일 11개: app/icons.cpp, app/icons.hpp, app/mainwindow.hpp, app/mainwindow_ui.cpp, app/planview.cpp, app/planview.hpp, app/ribbon.cpp, app/ribbon.hpp, app/sectionview.cpp, app/sheetexport.cpp, docs/design/DESIGN_SPEC.md
+- 시험 범위: 빠른 시험(~CoalescingWorker*) · ui-audit: on (크기 1280x800,1920x1040,3440x1440,3840x2160 · 배율 1,2)
+- 로그 폴더(미커밋, 이 PC): `C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436`
+
+| 단계 | 판정 | 종료 코드 | 초 | 요약 | 명령 · 로그 |
+| --- | --- | --- | --- | --- | --- |
+| configure | SKIP |  |  | 건너뜀: 이미 구성됨(CMakeCache.txt 있음) |  |
+| build | PASS | 0 | 2 | 빌드 성공, 새 경고 0개(기존 CRT deprecated · fopen · mirrored 만) | `cmake --build C:\dev\kerf-wt\20261010-01-narrow-1280-build` · `build.log` |
+| tests(quick) | PASS | 0 | 34 | assertions: 51325 ¦ 51325 passed /  | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec_tests.exe "~CoalescingWorker*"` · `tests-quick.log` |
+| asec-section | PASS | 0 | 2 | tiles(leaf)=12 tris=186272 rawSeg=602 polylines=1 vertices=54 z=[44.20,47.50] image=3000x825 res=0.0040  collect=560ms cut=3ms image=458ms | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec-section.exe C:\dev\kerf-synth\Synthetic.3mx 200002 450006 200014 450006 --out C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\sec` · `asec-section.log` |
+| ui-audit 1280x800 ×1 | PASS | 0 | 73 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1280x800 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\settings-1280x800-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\ui-audit-1280x800-x1 --quit` · `ui-audit.txt` |
+| ui-audit 1280x800 ×2 | PASS | 0 | 68 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1280x800 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\settings-1280x800-x2 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\ui-audit-1280x800-x2 --quit` · `ui-audit.txt` |
+| ui-audit 1920x1040 ×1 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1920x1040 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\settings-1920x1040-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\ui-audit-1920x1040-x1 --quit` · `ui-audit.txt` |
+| ui-audit 1920x1040 ×2 | PASS | 0 | 67 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1920x1040 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\settings-1920x1040-x2 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\ui-audit-1920x1040-x2 --quit` · `ui-audit.txt` |
+| ui-audit 3440x1440 ×1 | PASS | 0 | 69 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 3440x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\settings-3440x1440-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\ui-audit-3440x1440-x1 --quit` · `ui-audit.txt` |
+| ui-audit 3440x1440 ×2 | PASS | 0 | 69 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 3440x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\settings-3440x1440-x2 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\ui-audit-3440x1440-x2 --quit` · `ui-audit.txt` |
+| ui-audit 3840x2160 ×1 | PASS | 0 | 67 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 3840x2160 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\settings-3840x2160-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\ui-audit-3840x2160-x1 --quit` · `ui-audit.txt` |
+| ui-audit 3840x2160 ×2 | PASS | 0 | 69 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 3840x2160 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\settings-3840x2160-x2 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\ui-audit-3840x2160-x2 --quit` · `ui-audit.txt` |
+| ci(base) | WARN | 3 |  | CI 308daac none (이 커밋의 실행 없음 — push 안 됨 또는 아직 시작 전) | `ci-status.ps1 -Sha 308daac82e8e46189600488c209d43020e046cc2` |
+
+## 검증 2026-10-10 10:59 · **PASS** · HEAD `02688be73475427ddd17ef34c4420bb0160997ea`
+- 기준 `308daac82e8e46189600488c209d43020e046cc2` · 바뀐 파일 11개: app/icons.cpp, app/icons.hpp, app/mainwindow.hpp, app/mainwindow_ui.cpp, app/planview.cpp, app/planview.hpp, app/ribbon.cpp, app/ribbon.hpp, app/sectionview.cpp, app/sheetexport.cpp, docs/design/DESIGN_SPEC.md
+- 시험 범위: 빠른 시험(~CoalescingWorker*) · ui-audit: on (크기 1280x800,2560x1440 · 배율 1.25,1.75)
+- 로그 폴더(미커밋, 이 PC): `C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105440`
+
+| 단계 | 판정 | 종료 코드 | 초 | 요약 | 명령 · 로그 |
+| --- | --- | --- | --- | --- | --- |
+| configure | SKIP |  |  | 건너뜀: 이미 구성됨(CMakeCache.txt 있음) |  |
+| build | PASS | 0 | 1 | 빌드 성공, 새 경고 0개(기존 CRT deprecated · fopen · mirrored 만) | `cmake --build C:\dev\kerf-wt\20261010-01-narrow-1280-build` · `build.log` |
+| tests(quick) | PASS | 0 | 3 | assertions: 51325 ¦ 51325 passed /  | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec_tests.exe "~CoalescingWorker*"` · `tests-quick.log` |
+| asec-section | PASS | 0 | 1 | tiles(leaf)=12 tris=186272 rawSeg=602 polylines=1 vertices=54 z=[44.20,47.50] image=3000x825 res=0.0040  collect=14ms cut=2ms image=16ms | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec-section.exe C:\dev\kerf-synth\Synthetic.3mx 200002 450006 200014 450006 --out C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105440\sec` · `asec-section.log` |
+| ui-audit 1280x800 ×1.25 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1280x800 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105440\settings-1280x800-x1.25 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105440\ui-audit-1280x800-x1.25 --quit` · `ui-audit.txt` |
+| ui-audit 1280x800 ×1.75 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1280x800 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105440\settings-1280x800-x1.75 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105440\ui-audit-1280x800-x1.75 --quit` · `ui-audit.txt` |
+| ui-audit 2560x1440 ×1.25 | PASS | 0 | 67 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 2560x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105440\settings-2560x1440-x1.25 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105440\ui-audit-2560x1440-x1.25 --quit` · `ui-audit.txt` |
+| ui-audit 2560x1440 ×1.75 | PASS | 0 | 67 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 2560x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105440\settings-2560x1440-x1.75 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105440\ui-audit-2560x1440-x1.75 --quit` · `ui-audit.txt` |
+| ci(base) | WARN | 3 |  | CI 308daac none (이 커밋의 실행 없음 — push 안 됨 또는 아직 시작 전) | `ci-status.ps1 -Sha 308daac82e8e46189600488c209d43020e046cc2` |
+
+## 검증 2026-10-10 11:00 · **PASS** · HEAD `02688be73475427ddd17ef34c4420bb0160997ea`
+- 기준 `308daac82e8e46189600488c209d43020e046cc2` · 바뀐 파일 11개: app/icons.cpp, app/icons.hpp, app/mainwindow.hpp, app/mainwindow_ui.cpp, app/planview.cpp, app/planview.hpp, app/ribbon.cpp, app/ribbon.hpp, app/sectionview.cpp, app/sheetexport.cpp, docs/design/DESIGN_SPEC.md
+- 시험 범위: 빠른 시험(~CoalescingWorker*) · ui-audit: on (크기 2560x1440 · 배율 1)
+- 로그 폴더(미커밋, 이 PC): `C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105923`
+
+| 단계 | 판정 | 종료 코드 | 초 | 요약 | 명령 · 로그 |
+| --- | --- | --- | --- | --- | --- |
+| configure | SKIP |  |  | 건너뜀: 이미 구성됨(CMakeCache.txt 있음) |  |
+| build | PASS | 0 | 1 | 빌드 성공, 새 경고 0개(기존 CRT deprecated · fopen · mirrored 만) | `cmake --build C:\dev\kerf-wt\20261010-01-narrow-1280-build` · `build.log` |
+| tests(quick) | PASS | 0 | 3 | assertions: 51325 ¦ 51325 passed /  | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec_tests.exe "~CoalescingWorker*"` · `tests-quick.log` |
+| asec-section | PASS | 0 | 1 | tiles(leaf)=12 tris=186272 rawSeg=602 polylines=1 vertices=54 z=[44.20,47.50] image=3000x825 res=0.0040  collect=13ms cut=1ms image=15ms | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec-section.exe C:\dev\kerf-synth\Synthetic.3mx 200002 450006 200014 450006 --out C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105923\sec` · `asec-section.log` |
+| ui-audit 2560x1440 ×1 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 2560x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105923\settings-2560x1440-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-105923\ui-audit-2560x1440-x1 --quit` · `ui-audit.txt` |
+| ci(base) | WARN | 3 |  | CI 308daac none (이 커밋의 실행 없음 — push 안 됨 또는 아직 시작 전) | `ci-status.ps1 -Sha 308daac82e8e46189600488c209d43020e046cc2` |
+
+## 검증 3차(rework 3, HEAD `02688be`) — test-runner 독립 검증 2026-10-10 10:44–11:05, worktree 깨끗(`git status --short` 비어 있음, HEAD `02688be73475427ddd17ef34c4420bb0160997ea`)
+**전체 결론: 자동 기준 전부 통과(① V8 `RESULT PASS` · ② V2 `RESULT PASS` · ③ 2560x1440 `RESULT PASS` · 회귀 셋 EXIT 0 · core/tests/CMake/CI diff 없음). 실패 0 · 이번 변경의 실패 없음. 수동 1(AC11 루브릭 = kerf-ui-reviewer 몫) · 미실행 4(아래 「미실행」). 회차 3 새 판정(`cells-mode` · `carets=1 caret-ink=N/M`)은 13조합 모두 실제로 나왔고 기대대로다. rework 2 키(`home-clipped=0` · `cells-elided=0` · `gap-kept=1` · `sec-header-overlap=0` · `home-stale-children=0`)도 13조합 모두 그대로다.**
+
+기호: **①** = verify 블록 10:54(1280x800 · 1920x1040 · 3440x1440 · 3840x2160 × ×1 · ×2, `RESULT PASS` exit 0), 로그 `C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-104436\ui-audit-<크기>-x<배율>\ui-audit.txt`. **②** = verify 블록 10:59(1280x800 · 2560x1440 × ×1.25 · ×1.75, `RESULT PASS` exit 0), 로그 `…\logs\20261010-105440\`. **③** = verify 블록 11:00(2560x1440 ×1 — 기준 모니터 TFG39Q14V, `RESULT PASS` exit 0), 로그 `…\logs\20261010-105923\`. 셋은 한 번에 하나씩 차례로 돌렸다(z.dll 잠금 피함). 각 ui-audit.txt 는 `FAIL` 0건 · 끝줄 `ui-audit RESULT ok`(13개 모두 grep 으로 확인). 명령 출력 원문: `C:\dev\tmp\n1280-v3-run1.txt` · `n1280-v3-run2.txt` · `n1280-v3-run3.txt`. 참고: 시작할 때 `cmake --build --preset release --parallel`(pid 19616, 다른 빌드 폴더 — 이 작업과 무관한 다른 세션)이 돌고 있었으나 이 작업의 빌드 폴더와 겹치지 않았고 세 실행 모두 영향 없이 끝났다.
+
+### 단계 판정(이번 실행)
+| 실행 | 단계별 종료 코드 · 요약 |
+| --- | --- |
+| ① V8 | configure SKIP · build exit 0(새 경고 0) · tests(quick) exit 0 `assertions: 51325 / 51325 passed`(136 중 135 통과 · 1 건너뜀) · asec-section exit 0 `polylines=1 vertices=54 z=[44.20,47.50]` · ui-audit 8줄 모두 exit 0 `RESULT ok`(66–73 s) · ci(base) WARN exit 3(기준 커밋 308daac 의 Actions 실행 없음 — push 안 됨, 기존 사정) → `RESULT PASS` |
+| ② V2 | build exit 0 · tests(quick) exit 0 51325 · asec-section exit 0 `vertices=54` · ui-audit 1280×1.25 · 1280×1.75 · 2560×1.25 · 2560×1.75 모두 exit 0 `RESULT ok`(66–67 s) · ci(base) WARN exit 3 → `RESULT PASS` |
+| ③ 2560 ×1 | build exit 0 · tests(quick) exit 0 51325 · asec-section exit 0 `vertices=54` · ui-audit 2560x1440 ×1 exit 0 `RESULT ok`(66 s) · ci(base) WARN exit 3 → `RESULT PASS` |
+| 회귀 `--icon-sheet` | EXIT=0 · `icon-sheet n=62 missing=0 … RESULT ok` |
+| 회귀 `--sheet-check`(1920x1040, 합성 모델 · 선 `200002 450006 200014 450006`) | EXIT=0 · `level-pt minor=0.564 expect=0.564 major=1.411 expect=1.411 ok=1` · `sheet-check RESULT ok` |
+| 회귀 `--ctx-shot` | EXIT=0 · `ctx-shot ok: C:\dev\tmp\n1280-v3\draw-ctx.png guide=1` |
+| core/tests/CMake/CI diff | `git diff --stat 308daac -- core tests tools CMakeLists.txt app/CMakeLists.txt .github` → 출력 0줄(비어 있음) |
+
+회귀 실행은 `QT_QPA_PLATFORM=offscreen`, PATH 앞 `C:\Qt\6.10.3\msvc2022_64\bin`, 설정 새 폴더 `C:\dev\tmp\n1280-v3\s-*`, `Start-Process -PassThru` + `WaitForExit(240000)`(셋 모두 시간 안에 끝남, Kill 없음). 회귀 출력 `C:\dev\tmp\n1280-v3\`.
+
+### 회차 3 새 판정 · rework 2 키 — 13조합 실측(ui-audit.txt 그대로)
+| 조합 | cells-mode | carets · caret-ink(N/M) | sec-header-overlap | home-clipped · cells-elided | gap-kept · home-stale-children |
+| --- | --- | --- | --- | --- | --- |
+| 1280x800 ×1 | `run:content,1280w:content` | 1 · 16/12 | 0 | 0 · 0 | 1 · 0 |
+| 1280x800 ×1.25 | `run:content,1280w:content` | 1 · 24/19 | 0 | 0 · 0 | 1 · 0 |
+| 1280x800 ×1.75 | `run:content,1280w:content` | 1 · 46/37 | 0 | 0 · 0 | 1 · 0 |
+| 1280x800 ×2 | `run:content,1280w:content` | 1 · 72/48 | 0 | 0 · 0 | 1 · 0 |
+| 1920x1040 ×1 | `run:ratio,1280w:content` | 1 · 16/12 | 0 | 0 · 0 | 1 · 0 |
+| 1920x1040 ×2 | `run:ratio,1280w:content` | 1 · 72/48 | 0 | 0 · 0 | 1 · 0 |
+| 2560x1440 ×1 | `run:ratio,1280w:content` | 1 · 16/12 | 0 | 0 · 0 | 1 · 0 |
+| 2560x1440 ×1.25 | `run:ratio,1280w:content` | 1 · 24/19 | 0 | 0 · 0 | 1 · 0 |
+| 2560x1440 ×1.75 | `run:ratio,1280w:content` | 1 · 46/37 | 0 | 0 · 0 | 1 · 0 |
+| 3440x1440 ×1 | `run:ratio,1280w:content` | 1 · 16/12 | 0 | 0 · 0 | 1 · 0 |
+| 3440x1440 ×2 | `run:ratio,1280w:content` | 1 · 72/48 | 0 | 0 · 0 | 1 · 0 |
+| 3840x2160 ×1 | `run:ratio,1280w:content` | 1 · 16/12 | 0 | 0 · 0 | 1 · 0 |
+| 3840x2160 ×2 | `run:ratio,1280w:content` | 1 · 72/48 | 0 | 0 · 0 | 1 · 0 |
+
+기대 대비: 1920 · 2560 · 3440 · 3840 → `run:ratio` ✓(9조합) · 1280 → `run:content,1280w:content` ✓(4조합) · 모든 조합 `carets=1 caret-ink=N/M` 에서 N ≥ M ✓(최소 16/12). 그 밖 같은 줄들: 13조합 모두 `strip-clipped=0 state-kept=1` · `plan-tick-overlap=0` · `vex-fit=1 mode=keep` · env `overflow=0 icon-dpr-bad=0 chip-dpr-bad=0` · `narrow rule-at-1280 look=20 … actual-look=20 plan-fits=1 section-fits=1 zoom-kept=1 probe=… resized=1`(1280 실행 `probe=1600x1000`, 그 밖 실행 크기와 같음).
+
+### 완료 기준 표(AC1–AC14 + 회차 3 ⓐ ⓑ)
+| # | 결과 | 근거 |
+| --- | --- | --- |
+| AC1 단면 머리 | 통과 | 13조합 모두 `sec-header-overlap=0 kept=1 toggles-reachable=1 carets=1 refit=1/0`(위 표). 상태별 `at=` 예(2560 ×1): `run:0:0,1280w:5:0,1280L:5:0,1280p:5:0,1280d:5:0,1280v:5:0`. env `overflow=0`. 이번에 새로 캡처한 것은 없음(builder 캡처 `C:\dev\tmp\n1280-rework3\work-1280.png` · `draw-1280.png` 는 builder 기록 인용). |
+| AC2 정보 줄 | 통과 | 13조합 모두 `strip-clipped=0 state-kept=1 gap-kept=1 elide-tip-missing=0`(2560 ×1: `run:0:0,1280w:3:0,1280L:3:0,1280p:4:0,1280d:4:0,1280v:3:0`). |
+| AC3 평면 눈금 글 | 통과(자동) · 수동 일부 | 13조합 모두 `plan-tick-overlap=0 step=5 px-per-m=17.4`(1280w 상태). 실제 1920 의 「1 m 마다」 눈 확인은 이번에도 새로 안 함(AC11 수동). |
+| AC4 리본 1280 = 20 | 통과(잠금 판별은 build.md 인용) | 13조합 모두 `narrow rule-at-1280 look=20 labels=0 … actual-look=20`. 「상수 24 → FAIL」 임시 변경은 제품 코드 수정 금지라 **재실행 안 함**(build.md 인용). |
+| AC5 세로 과장 뒤 맞춤 | 통과 | 13조합 모두 `vex-fit=1 mode=keep`(예: 2560 ×1 `ppm=69.0939/69.0939`). |
+| AC6 칩 픽셀 비교 | 통과(판별력은 build.md 인용) | 13조합 모두 env `icon-dpr-bad=0 chip-dpr-bad=0`(`dpr=1.00 · 1.25 · 1.75 · 2.00` 포함). 판별력 임시 변경은 재실행 안 함. |
+| AC7 1280 실행 probe | 통과(판별력은 build.md 인용) | 1280 실행 4조합 `probe=1600x1000 resized=1` · 그 밖 `probe=<실행 크기> resized=1`, 모두 `plan-fits=1 section-fits=1 zoom-kept=1`. |
+| AC8 홈 한 줄 글 | 통과 | 13조합 모두 `home-clipped=0 cells-elided=0 elide-tip-missing=0 min-width=1280 at=run:0:0,1280w:0:0`. 긴 이름 복사본 감사(AC8 ②)는 이번에 새로 돌리지 않음 — 회차 3 변경(`fitHomeCells` 옛 비율 먼저 보기)이 긴 이름 칸 줄임에 닿으므로 **미실행(아래 3번)**. builder 기록은 `긴 이름 1920/1280: home-clipped=0 cells-elided=0 cells-mode=run:ratio / content … min-width=1280`(build.md 인용). |
+| AC9 ⓑ ⓒ ⓖ | 통과(ⓑ 자동 · 판별력은 build.md 인용) | 13조합 모두 env `overflow=0`. ⓒ · ⓖ 는 이번 회차 diff(`00c9a43..02688be`)가 `app/planview.*` 를 건드리지 않아(바뀐 파일 4개: icons.cpp · icons.hpp · mainwindow_ui.cpp · DESIGN_SPEC.md) 앞선 검증 기록 그대로 — 이번에 diff 를 다시 읽지 않음. |
+| AC10 고정 완료 기준 | 통과 | ① V8 `RESULT PASS` exit 0(8조합 `RESULT ok`) + ② V2 `RESULT PASS` exit 0(4조합 `RESULT ok`) + ③ `RESULT PASS`. build 새 경고 0 · tests(quick) 51325 통과 · asec-section `polylines=1 vertices=54` — 위 「단계 판정」. |
+| AC11 캡처 루브릭 | **수동(미실행 — kerf-ui-reviewer 몫)** | 점수 없음. 참고로 builder 의 `caret-crop-1280.png`(6 배 확대, `C:\dev\tmp\n1280-rework3\`)를 눈으로 봄: 「그릴 것」 · 세로 아이콘 오른쪽 아래 ▾ 가 또렷하고 리본 「더보기」 칩 ▾ 와 크기가 비슷하다. 새로 캡처한 것은 없음. |
+| AC12 회귀 | 통과 | 위 「단계 판정」: `--icon-sheet` · `--sheet-check` · `--ctx-shot` EXIT 0 · `git diff --stat 308daac -- core tests tools CMakeLists.txt app/CMakeLists.txt .github` 비어 있음 · 기존 감사 항목 전부 ①②③ `RESULT ok` 에 포함. |
+| AC13 문서 | 통과 | `git diff 308daac -- docs/design/DESIGN_SPEC.md`(13줄 추가 · 3줄 삭제) 확인. 회차 3 변경(`00c9a43..02688be`, 5줄 바뀜)은 §7 홈 줄(「넉넉하면 2 : 1, 줄임표가 생길 때만 좁은 창 규칙」)과 §12 156행(`home … cells-mode=run:ratio,1280w:content` · `sec-header … carets=1 caret-ink=N/M`). `git grep` 으로 156행에 `cells-mode` · `caret-ink` 있음. `+` 줄에 `C:[\\/]` · `HKEY_` 없음(grep exit 1). |
+| AC14 홈 다시 그리기 | 통과 | 13조합 모두 `home-stale-children=0`. 「목록에서 지우기」 클릭 화면은 직접 시도하지 않음(감사 키로 간접). |
+| ⓐ 1920 이상 홈 칸 = 옛 2 : 1 | 통과(자동) · 수동 일부 | 실행 크기 1920 · 2560 · 3440 · 3840(1920 ×1 · ×2, 2560 ×1 · ×1.25 · ×1.75, 3440 ×1 · ×2, 3840 ×1 · ×2) 9조합 모두 `cells-mode=run:ratio,1280w:content` + `home-clipped=0 cells-elided=0`. 1280 실행 4조합은 `run:content,1280w:content`(rework 2 모양 그대로 — 좁은 창 규칙). 판단은 글 폭이라 감사가 합성 모델 하나만 잰다(builder 판정 2 인용). 캡처 눈 확인(`n1280-rework3\home-1920.png` · `home-2560.png`)은 builder 기록 인용 — 이번에 새로 안 봄. |
+| ⓑ 구운 ▾ 가 보임 | 통과(자동, 픽셀 판정) · 수동 일부 | 13조합 모두 `carets=1 caret-ink=N/M` 에서 N ≥ M: ×1 16/12 · ×1.25 24/19 · ×1.75 46/37 · ×2 72/48. 1280 에서 `sec-header-overlap=0`(단추 폭 그대로, 겹침 없음). 판별력(옛 그리기로 임시 되돌림 → `caret-ink=4/12 FAIL`)은 제품 코드 수정 금지라 **재실행 안 함**(build.md 인용). 감사가 ▾ 삼각형을 그리기와 같은 함수(`kerf::caretTriangle`)에서 가져오는 한계는 builder 판정 1 에 적혀 있고, 눈 확인은 위 AC11 의 `caret-crop-1280.png` 만(검토자 몫). |
+
+### 기존 실패 vs 이번 변경의 실패
+- 이번 변경으로 생긴 실패: **없음**(세 verify 모두 RESULT PASS · 회귀 셋 EXIT 0 · 종료 코드가 0 아닌 단계 없음. 단 `ci(base)` WARN exit 3 은 기준 커밋 308daac 에 대한 Actions 실행이 없다는 뜻 — push 안 됨, 기존 사정).
+- 기존(profile §9, 이번 변경 탓 아님): `CoalescingWorker` 불안정 시험은 이번에도 `~CoalescingWorker*` 로 제외해 돌렸고 이번 실패는 없어 재실행하지 않음 · `[real]` 1건 건너뜀(tests 로그 `136 test cases | 135 passed | 1 skipped`) · 기존 경고 `fopen` · `mirrored` 는 build 줄이 「새 경고 0」으로 보고.
+
+### 미실행(통과로 쓰지 않음)
+1. **AC11 루브릭 점수**(kerf-ui-reviewer 8항목 · 1280 작업 · 그리는 중 · 홈 · 긴 이름 홈, 1920 모양 그대로) — 사람/검토자 몫. 이번에 새 캡처 없음.
+2. **판별력 임시 변경 증명**(AC4 상수 24 · AC6 1.25 빼기 · AC7 맞춤 길 끄기 · AC9 resize 맞춤 끄기 · 회차 3 ⓑ 옛 그리기로 되돌려 `caret-ink=4/12 FAIL`) — 제품 코드를 고치지 않는 역할이라 재실행하지 않고 build.md 기록만 인용.
+3. **긴 이름 복사본 감사(AC8 ②, 1280 · 1920)** — 이번 검증 요청 범위(세 verify + 회귀 셋)에 없어 안 돌림. 회차 3 의 `fitHomeCells` 변경과 닿는 곳이라 필요하면 따로 돌려야 한다(builder 기록은 build.md 인용).
+4. **전체 시험(`CoalescingWorker` 포함) · 실제 125 · 175 % 모니터 · 3440 · 3840 실제 화면 · 「목록에서 지우기」 클릭 · 「그릴 것」 메뉴를 연 모양** — core/tests 변경 없음(diff 비어 있음)이라 빠른 시험만. 실제 화면은 이 PC 150 % 하나라 offscreen ①② 로 갈음(B5 와 같은 방식).
