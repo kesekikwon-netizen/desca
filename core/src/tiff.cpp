@@ -79,7 +79,7 @@ bool writeTiff(const std::filesystem::path& p, const RgbaImage& img, const TiffO
     if (o.geo.enabled) {
         tags.push_back(doubles(33550, {o.geo.scaleX, o.geo.scaleY, 0.0}));
         tags.push_back(doubles(33922, {0, 0, 0, o.geo.tieX, o.geo.tieY, 0}));
-        std::string asc = (o.geo.citation.empty() ? std::string("ExcavSection") : o.geo.citation) + "|";
+        std::string asc = (o.geo.citation.empty() ? std::string("Trench") : o.geo.citation) + "|";
         std::vector<uint16_t> k{1, 1, 0, 0};
         auto key = [&](uint16_t id, uint16_t loc, uint16_t cnt, uint16_t val) { k.insert(k.end(), {id, loc, cnt, val}); k[3]++; };
         key(1024, 0, 1, 1);                                  // GTModelType = Projected

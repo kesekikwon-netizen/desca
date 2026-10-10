@@ -282,7 +282,8 @@ QMenu::separator { height: 1px; background: #DEDCD1; margin: 4px 8px; }
 QToolTip { background: #30302E; color: #FAF9F5; border: none; padding: 4px 8px; font-size: 12px; }
 
 QWidget#startPage { background: #FAF9F5; }
-QLabel#homeSub { font-size: 15px; color: #5E5D59; border-left: 1px solid #C2C0B6; padding-left: 14px; }
+QLabel#homeSub { font-size: 15px; color: #5E5D59; }
+QFrame#homeSep { background: #C2C0B6; border: 0; }
 QLabel#homeLead { font-size: 15px; color: #5E5D59; }
 QLabel#cap { font-size: 11px; color: #5E5D59; }
 QLabel#lab { font-size: 12px; color: #5E5D59; }

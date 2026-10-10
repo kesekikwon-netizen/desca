@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code — **최종 디자인 캔버스 「Trench 최종 디자인」**(이름 Kerf → Trench, 아이콘 · 여는 모션 · 화면 넷 · 부품 · 커서 · AI 작업 지시서 G0–G20) https://claude.ai/artifact/St8M2cwJYYfPW9gcNDshRQ . 다음: G0 이름 · 아이콘 · 여는 화면 → G1(R6 좌표계 5187) → Guide 화판 순서. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T1 이름 Kerf → Trench(보이는 글만) 끝**, 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 다음: T2 앱 아이콘 → T3 여는 화면 → T4(G1) 좌표계 5187. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -273,6 +273,15 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 캔버스 publish 25판까지 모두 성공(파일 17). 화판 내용은 코드가 아니라 빌드 · 시험 대상 아님. 이 기록 · backlog 한 줄만 커밋.
 - **판정(Ruling):** ① 디자인 범위 = v5 뼈대 + 2026-10-10 결정(Q0–Q6 · A1–A14 · R-목록) + v6 중 V4만 + 오늘 둘(깊이 음영 · 입면 아래 줄) — 어긋나면 캔버스가 이김(R23 문서 합침 때 DESIGN_SPEC 본문으로). ② 「기타」 묶음은 「보기」로 합쳐 묶음 6(점검 P2 추천) — 잘못이면: 「단축키」 자리만 되돌림. ③ 커서는 도구를 든 동안만 십자 + 단계 배지(5종) — 잘못이면: 배지 없는 OS 십자로 되돌림. ④ 코드 검토(3f43c5b · e3abc49)는 사용자 지시로 중단 — G0–G20 끝에 한 번. ⑤ 이름 바꾸기는 코드 작업 G0(창 제목 · 설정 이전 · .ico · 여는 화면)에서 — 저장소 · 폴더 이름(`desca` · `kerf-*`)은 바꾸지 않음(사용자가 말할 때).
 - **남은 문제:** 다음은 G0부터(Guide 화판 순서). 좌표계 5183 → 5187(R6 = G1)은 사용자가 물은 것 — G0 바로 뒤. 캔버스 질문 셋(18 · 19 · 20)은 R13 · 용지 · 자료 정리 전까지 답을 받는다.
+
+### 2026-10-11 · Claude Code(Sonnet 5.5, advisor Opus 5.5) — T1 (G0a): 사용자에게 보이는 이름 Kerf → Trench
+- **사용자 지시:** /goal 「작업지시서와 trench 최종 디자인을 보고 맞춰가며 개발디자인을 보완하라 … 슈퍼파워skills … 매단계 커밋하고 다음으로」. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`(T1–T22), 장부 `.superpowers/sdd/2026-10-11-trench-final/progress.md`.
+- **시험 먼저(RED):** `--ui-audit` 새 줄 `app-name title=… display=… home=…` — 창 제목 · 표시 이름 · 홈 이름 라벨이 `Trench` 이고 `Kerf` 가 없어야 ok. 변경 전 합성 모델 `title="Synthetic.3mx — Kerf 1.2.1" … FAIL`(EXIT 9).
+- **무엇을:** 창 제목 3곳 · 표시 이름(`window-title … appended=0` 규칙 유지) · 정보 창 · 홈 이름 라벨 · 단면 PNG 바닥글 · SVG/PDF 제작자 · `app.rc`(회사 · 설명 · 제품 이름) · `읽어보기.txt` · README 머리 · 내보낸 파일 안의 설명 글(GeoTIFF citation · 단면 GeoTIFF 설명 · LAS 생성 소프트웨어 · 기본 citation = `Trench …`). 형식 식별자(`ExcavSection.sections` 단면 목록 · `ExcavSection section image`)는 파일 호환 때문에 그대로.
+- **같이 고친 것(회귀):** 홈 이름 「Trench」가 「Kerf」보다 길어 1280 에서 이어서 작업 카드 칸이 줄임표 → `home-clipped` FAIL(합성 전부). 원인 = 부제 라벨의 QSS `border-left`+`padding-left` 가 sizeHint 에 여백을 더해(offscreen 에서 이름 240 px) 왼쪽 칸이 420 → 459. 해결 = 가름선을 라벨 테두리가 아니라 별도 `QFrame#homeSep`(1×24)으로, 부제를 `elideLab`(가로 Ignored · 줄임표 + 툴팁)로.
+- **확인:** 합성 모델 감사 10조합(1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2) 모두 `RESULT ok` · `app-name` 통과 · 빠른 시험 51325 통과 · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0. 실제 모델(Production_1.3sm)은 `app-name` 통과, `RESULT fail` 은 기존 두 가지(좌표계 5183 알림 띠 · 긴 경로 칸 줄임) — T4(G1) 에서 없어짐. 실제 화면 캡처 `C:\dev\tmp\elev-bug\t1-shots\`(Batang 에서 「Trench | 발굴 평·단면」 정상).
+- **판정(Ruling):** ① 내부 식별자 유지(`SectionViewer.exe` · QSettings `ExcavSection/SectionViewer` · 캐시 경로) — 조직 · 앱 이름이 설정 위치와 3sm 변환 캐시(135 MB)를 정함, 바꾸면 최근 · 단면 목록이 사라져 보임 — 잘못이면: 폴더에 옛 이름이 보임. 캔버스의 「설정 이전」 문장 둘을 이에 맞게 고침. ② 버전은 1.2.1 그대로(릴리스 결정) — 캔버스의 「1.3」을 1.2.1 로 고침. ③ `app.rc` 의 `FILEVERSION` · 설치 파일 이름 · `app.manifest` 이름은 그대로.
+- **남은 문제:** 여는 화면 · 홈 아이콘 · .ico 는 아직 옛 그림 → T2 · T3. 캔버스 「여는 화면」 화판의 `rench` 글자 크기가 게시본에서 15 px 로 바뀌어 있음(내 원본은 230 px — 캔버스 편집기에서 바뀐 것으로 보여 되돌리지 않고 사용자에게 알림).
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

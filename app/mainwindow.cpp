@@ -329,7 +329,7 @@ void MainWindow::applyScene(OpenedScene&& s) {
     refreshSrs();
     info_->setText(streaming_ ? QStringLiteral("%1%2 · LOD 스트리밍").arg(kind_, s.layers > 1 ? QStringLiteral(" · 레이어 %1개").arg(s.layers) : QString())
                               : QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
-    setWindowTitle(QStringLiteral("%1 — Kerf %2").arg(QFileInfo(path_).fileName(), QString::fromUtf8(kVersion)));
+    setWindowTitle(QStringLiteral("%1 — Trench %2").arg(QFileInfo(path_).fileName(), QString::fromUtf8(kVersion)));
     if (findBox_) findBox_->clear();   // 검토 M5
     showStart(false);
     addRecent(path_);
@@ -361,7 +361,7 @@ void MainWindow::closeScene() {
     if (findBox_) findBox_->clear();   // 거르기 글은 모델과 함께 끝(검토 M5)
     sections_.clear(); thumbs_.clear(); current_ = -1; refreshSectionList();
     undo_->clear();
-    setWindowTitle(QStringLiteral("Kerf %1").arg(QString::fromUtf8(kVersion)));
+    setWindowTitle(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
     discardSheetTab();   // 옛 모델의 「도면」 탭 · 조판 위젯이 남지 않게(검토 I4)
     showStart(true);
     updateEnabled();
@@ -503,7 +503,7 @@ bool MainWindow::exportSectionImage(const SectionDoc& doc0, MeshSource& src, con
     canvas.fill(Qt::white);
     {
         QPainter pt(&canvas);
-        QString footer = QStringLiteral("Kerf · 1:%1 · %2 dpi · %3").arg(p.denom, 0, 'f', 0).arg(p.dpi, 0, 'f', 0).arg(QDate::currentDate().toString("yyyy-MM-dd"));
+        QString footer = QStringLiteral("Trench · 1:%1 · %2 dpi · %3").arg(p.denom, 0, 'f', 0).arg(p.dpi, 0, 'f', 0).arg(QDate::currentDate().toString("yyyy-MM-dd"));
         paintSectionDoc(pt, doc, QRectF(0, 0, sz.width(), sz.height()), xf, ui, img, true, footer, &geo);
     }
     const int dpm = int(std::lround(p.dpi / 0.0254));
@@ -995,7 +995,7 @@ void MainWindow::paintOpeningSplash(QPainter& p, const QSize& sz, double t) {
     QFont title = theme::uiFont(int(std::lround(36 * k)));
     title.setFamilies({QStringLiteral("Batang"), QStringLiteral("Noto Serif KR"), QStringLiteral("Malgun Gothic")});
     p.setFont(title);
-    p.drawText(QRectF(48 * k, 28 * k, 700 * k, 48 * k), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("Kerf"));
+    p.drawText(QRectF(48 * k, 28 * k, 700 * k, 48 * k), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("Trench"));
     p.setFont(theme::uiFont(int(std::lround(14 * k))));
     p.setPen(QColor(0x5E, 0x5D, 0x59));
     p.drawText(QRectF(48 * k, 76 * k, 700 * k, 24 * k), Qt::AlignLeft | Qt::AlignVCenter,
@@ -1010,7 +1010,7 @@ void MainWindow::paintOpeningSplash(QPainter& p, const QSize& sz, double t) {
     p.setFont(theme::uiFont(int(std::lround(12 * k))));
     p.drawText(QRectF(48 * k, im.height() - 38 * k, 700 * k, 22 * k), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("원본 파일은 바꾸지 않습니다"));
     p.drawText(QRectF(im.width() - 420 * k, im.height() - 38 * k, 372 * k, 22 * k), Qt::AlignRight | Qt::AlignVCenter,
-               QStringLiteral("© 2026 Kerf · Qt 6.8"));
+               QStringLiteral("© 2026 Trench · Qt 6.8"));
     // 8) 진행 막대(기반암 띠 맨 위 3 px)
     p.fillRect(QRectF(0, im.height() - 72 * k, im.width() * t, 3 * k), QColor(0xD9, 0x77, 0x57));
 }
@@ -1024,10 +1024,10 @@ QImage MainWindow::renderOpeningSplash(const QSize& size, double t) {
 
 void MainWindow::dlgAbout() {
     QMessageBox mb(this);
-    mb.setWindowTitle(QStringLiteral("프로그램 정보"));   // Qt 가 「 - Kerf x.y.z」를 붙임
+    mb.setWindowTitle(QStringLiteral("프로그램 정보"));   // Qt 가 「 - Trench x.y.z」를 붙임
     mb.setIconPixmap(windowIcon().pixmap(64, 64));
     mb.setTextFormat(Qt::RichText);
-    mb.setText(QStringLiteral("<b>Kerf</b> v%1 · 발굴 평·단면<br>3MX 실사 메시 단면 · 10 cm 레벨선 · DXF / GeoTIFF / 점군 내보내기<br><br>"
+    mb.setText(QStringLiteral("<b>Trench</b> v%1 · 발굴 평·단면<br>3MX 실사 메시 단면 · 10 cm 레벨선 · DXF / GeoTIFF / 점군 내보내기<br><br>"
                               "<small>Qt %2 (LGPLv3, 동적 링크) · OpenCTM (zlib) · stb (공개 도메인/MIT) · nlohmann/json (MIT)<br>"
                               "3MX 는 공개 형식 사양에 따라 직접 읽습니다.</small>").arg(kVersion).arg(qVersion()));
     mb.exec();

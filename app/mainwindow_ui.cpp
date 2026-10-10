@@ -1477,7 +1477,7 @@ void MainWindow::rebuildStartPage() {
     g->setColumnMinimumWidth(0, 420); g->setColumnStretch(1, 1); g->setColumnMinimumWidth(2, 280);   // 카드 오른쪽 칸(280)과 같은 폭
     g->setRowStretch(1, 1);
 
-    // ---- 왼쪽 위: 앱 아이콘 56 · 「Kerf | 발굴 평·단면」 · 설명 · 「모델 열기 Ctrl+O」 「최근 ▾」 · 끌어 놓기 안내
+    // ---- 왼쪽 위: 앱 아이콘 56 · 「Trench | 발굴 평·단면」 · 설명 · 「모델 열기 Ctrl+O」 「최근 ▾」 · 끌어 놓기 안내
     auto* hero = new QWidget; { auto* v = new QVBoxLayout(hero); v->setContentsMargins(0, 0, 0, 0); v->setSpacing(12);   // 카드 위끝과 같은 줄(검토 UI 2)
         auto* nm = new QHBoxLayout; nm->setSpacing(14);
         auto* ic = new QLabel; { QPixmap pm(56 * 2, 56 * 2); pm.setDevicePixelRatio(2); pm.fill(Qt::transparent);
@@ -1485,8 +1485,10 @@ void MainWindow::rebuildStartPage() {
             QPainterPath pr; pr.moveTo(10, 22); pr.lineTo(20, 22); pr.lineTo(25, 36); pr.lineTo(31, 36); pr.lineTo(36, 22); pr.lineTo(46, 22);
             p.setPen(QPen(theme::Card, 3, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin)); p.setBrush(Qt::NoBrush); p.drawPath(pr); p.end();
             ic->setPixmap(pm); ic->setFixedSize(56, 56); }
-        nm->addWidget(ic); nm->addWidget(lab(QStringLiteral("Kerf"), "heroName"));
-        auto* sub = lab(QStringLiteral("발굴 평·단면"), "homeSub"); nm->addWidget(sub); nm->addStretch();
+        nm->addWidget(ic); nm->addWidget(lab(QStringLiteral("Trench"), "heroName"));
+        auto* sep = new QFrame; sep->setObjectName("homeSep"); sep->setFixedSize(1, 24);   // 이름 | 부제 가름선 — 라벨 테두리 대신(라벨 테두리는 sizeHint 에 여백이 더해져 줄임표 글이 짓눌려 보임)
+        auto* sub = elideLab(lab(QStringLiteral("발굴 평·단면"), "homeSub"), Qt::ElideRight);   // 이름 글꼴이 넓어도(Batang 없는 PC · offscreen) 왼쪽 칸 420 을 넘기지 않게 부제가 줄임(T1 — 「Trench」 가 「Kerf」 보다 길다)
+        nm->addWidget(sep, 0, Qt::AlignVCenter); nm->addWidget(sub, 1, Qt::AlignVCenter);
         v->addLayout(nm);
         auto* desc = lab(QStringLiteral("3MX · 3SM · OBJ 실사 메시에서 평면도 · 단면도를 잘라 보고서 도면 밑그림(SVG · DXF)까지 만듭니다."), "homeLead"); desc->setWordWrap(true);
         v->addWidget(desc);
@@ -1839,7 +1841,7 @@ void MainWindow::dlgCoordEntry() {
 // ---------------------------------------------------------------- 생성자
 MainWindow::MainWindow() {
     qApp->installEventFilter(this);   // 모든 단추의 키보드 초점 테(검토 UI 6)
-    setWindowTitle(QStringLiteral("Kerf %1").arg(QString::fromUtf8(kVersion)));
+    setWindowTitle(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
     setAcceptDrops(true);
     bilingual_ = QSettings().value("ui/bilingual", false).toBool();
     highContrast_ = QSettings().value("ui/highContrast", false).toBool();
@@ -2532,6 +2534,18 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         L << QStringLiteral("ui-audit depth-fade check=%1 label=%2 bound=%3 default-off=%4 at=%5%6").arg(int(check)).arg(int(label)).arg(int(bound)).arg(defOff)
                  .arg(shown ? QStringLiteral("header") : inMenu ? QStringLiteral("menu") : QStringLiteral("none")).arg(okf ? QString() : QStringLiteral("  FAIL"));
         ok &= okf;
+    }
+
+    // 7c) 앱 이름(사용자 결정 2026-10-10 「Trench」): 보이는 이름 — 창 제목 · 표시 이름 · 홈 이름 라벨 — 이 모두 Trench 이고 옛 이름이 남지 않는다.
+    //     내부 식별자(SectionViewer.exe · QSettings 이름)는 이 판정 밖(장부 Ruling 1)
+    {
+        const QString ttl = windowTitle(), dsp = QApplication::applicationDisplayName();
+        QLabel* hl = findChild<QLabel*>(QStringLiteral("heroName"));
+        const QString hero = hl ? hl->text() : QString();
+        const auto good = [](const QString& s) { return s.contains(QLatin1String("Trench")) && !s.contains(QLatin1String("Kerf")); };
+        const bool okn = good(ttl) && good(dsp) && hero == QLatin1String("Trench");
+        L << QStringLiteral("ui-audit app-name title=\"%1\" display=\"%2\" home=\"%3\"%4").arg(ttl, dsp, hero, okn ? QString() : QStringLiteral("  FAIL"));
+        ok &= okn;
     }
 
     // 2b) 좁은 창 1280×800 — 맨 끝에서(offscreen 에서는 resize 를 되돌려도 판 폭이 돌아오지 않아 뒤 항목을 망친다, 실측): 글자 숨김 · 타일 32 이하(스펙 §3.3 · §12)

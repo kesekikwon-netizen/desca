@@ -107,7 +107,7 @@ GeoRef planGeoRef(const SrsInfo& srs, double x0, double y1, double res) {
     g.scaleX = g.scaleY = res;
     g.epsg = srs.epsg();
     g.vertEpsg = srs.verticalEpsg();
-    g.citation = "ExcavSection plan orthophoto " + srs.shortLabel();
+    g.citation = "Trench plan orthophoto " + srs.shortLabel();
     return g;
 }
 
@@ -124,7 +124,7 @@ GeoRef sectionGeoRef(const SectionResult& r, double s0, double zTop, double res)
     g.epsg = 0;
     Vec3 A = r.srs.toWorld(Vec3(r.line.a.x, r.line.a.y, 0)), B = r.srs.toWorld(Vec3(r.line.b.x, r.line.b.y, 0));
     char b[512];
-    std::snprintf(b, sizeof b, "ExcavSection local section: X=distance from A (m), Y=elevation (m). %s A=(%.3f,%.3f) A'=(%.3f,%.3f) az=%.2f deg",
+    std::snprintf(b, sizeof b, "Trench local section: X=distance from A (m), Y=elevation (m). %s A=(%.3f,%.3f) A'=(%.3f,%.3f) az=%.2f deg",
                   r.srs.shortLabel().c_str(), A.x, A.y, B.x, B.y, sectionAzimuthDeg(r.line));
     g.citation = b;
     return g;

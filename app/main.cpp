@@ -1,4 +1,4 @@
-// Kerf(발굴 평·단면) 진입점. 명령줄 자동화(화면 캡처·내보내기 시험용):
+// Trench(발굴 평·단면) 진입점. 명령줄 자동화(화면 캡처·내보내기 시험용):
 //   SectionViewer [파일.3mx|.obj] [--line AX AY BX BY] [--local] [--front m] [--back m] [--size WxH] [--tab N]
 //                 [--shot out.png] [--export-png f] [--export-tiff f] [--export-geotiff f] [--export-dxf f] [--dxf3d]
 //                 [--export-plan f] [--plan-view] [--export-xyz f] [--export-las f] [--area whole|band|view] [--spacing m] [--norgb]
@@ -192,9 +192,9 @@ int main(int argc, char** argv) {
     QApplication app(argc, argv);
     QApplication::setOrganizationName("ExcavSection");
     QApplication::setApplicationName("SectionViewer");
-    // 표시 이름 = 창 제목 끝과 같게(「… — Kerf x.y.z」). Qt(Windows·X11)는 제목이 표시 이름으로 끝나지 않으면
+    // 표시 이름 = 창 제목 끝과 같게(「… — Trench x.y.z」). Qt(Windows·X11)는 제목이 표시 이름으로 끝나지 않으면
     // 「 - 표시 이름」을 덧붙여 앱 이름이 두 번 보였음(1.2.0 신고)
-    QApplication::setApplicationDisplayName(QStringLiteral("Kerf %1").arg(QString::fromUtf8(kVersion)));
+    QApplication::setApplicationDisplayName(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
     QFont f = theme::uiFont(13); f.setStyleStrategy(QFont::PreferAntialias);   // 한글 본문 13 px
     QApplication::setFont(f);
     app.setStyle("Fusion");

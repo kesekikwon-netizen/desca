@@ -608,7 +608,7 @@ bool MainWindow::exportPlanSheet(MeshSource& src, const PlanSheetParams& p, cons
         QPdfWriter w(path);
         w.setResolution(int(std::lround(sp.dpi)));
         w.setTitle(QStringLiteral("%1 — %2 · %3").arg(sp.title, sp.srsLabel, sp.heightLabel));
-        w.setCreator(QStringLiteral("Kerf %1").arg(QString::fromUtf8(kVersion)));
+        w.setCreator(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
         QPageSize ps(sp.spec.paper == Paper::A3 ? QPageSize::A3 : QPageSize::A4);
         w.setPageLayout(QPageLayout(ps, sp.spec.landscape ? QPageLayout::Landscape : QPageLayout::Portrait, QMarginsF(0, 0, 0, 0), QPageLayout::Millimeter));
         QPainter pt;
@@ -729,7 +729,7 @@ bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const Shee
         QPdfWriter w(path);
         w.setResolution(int(std::lround(p.dpi)));
         w.setTitle(QStringLiteral("%1 — %2 · %3").arg(p.title, p.srsLabel, p.heightLabel));
-        w.setCreator(QStringLiteral("Kerf %1").arg(QString::fromUtf8(kVersion)));
+        w.setCreator(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
         QPageSize ps(p.spec.paper == Paper::A3 ? QPageSize::A3 : QPageSize::A4);
         w.setPageLayout(QPageLayout(ps, p.spec.landscape ? QPageLayout::Landscape : QPageLayout::Portrait, QMarginsF(0, 0, 0, 0), QPageLayout::Millimeter));
         QPainter pt;

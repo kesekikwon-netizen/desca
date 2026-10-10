@@ -1,4 +1,4 @@
-# 발굴 단면뷰어 (Excavation Section Viewer)
+# Trench — 발굴 평·단면 (Excavation Section Viewer, 옛 이름 Kerf)
 
 3MX 실사 메시(iTwin Capture / ContextCapture)를 열어 평면에서 단면선을 긋고, 10 cm 레벨선이 있는 단면도를
 바로 보고 DXF · PNG/TIFF/GeoTIFF · 점군(XYZ/LAS)으로 내보내는 Windows 데스크톱 프로그램.
