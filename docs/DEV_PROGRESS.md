@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T10 입면 위 거리 눈금 + D 키 + 도면에도 끝** → 다음 T11(G8) 커서 5종 `app/cursors.{hpp,cpp}`. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T11 커서 5종 끝**(도구를 든 동안 · 손잡이 위에서만 십자 + 배지, 핫스폿 논리 px 를 실제 Windows 에서 확인) → 다음 T12(G9) 모션 상수 · 전환 `app/motion.hpp`. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -357,6 +357,15 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** core `~CoalescingWorker*` 51408 통과 · `--sheet-check dist-ticks=13 major=3 step=1m weight-px=0.564/1.411 expect=0.564/1.411 ok=1`(1:50 A4 가로 — 0.2 · 0.5 pt 가 레벨선과 같은 값) · 감사 합성 1280 · 1920 ×1 ok · 전체 매트릭스(10조합 · 1.25 · 1.75 · 실제 모델 · 실제 Windows 창)는 아래 줄 · 실제 창 캡처 `C:\dev\tmp\elev-bug\t10\sec.png`(영상 위 2 m 마다 세로선, 10 m 굵게, 아래 숫자와 같은 자리 · 머리 아이콘 넷).
 - **판정(Ruling):** ① 눈금은 아래 숫자의 간격(core `niceStep`)을 그대로 따라 줌에 따라 2 m · 1 m · 0.5 m 로 달라짐(기본 1 m 는 도면 1:50 에서) — 사용자 말 「아래 거리 숫자와 맞춰」 — 틀리면 간격 고정 옵션. ② 색은 새 토큰 없이 `Ink` + 투명도 — 틀리면 토큰 하나 더. ③ 도면 판의 켜기 · 끄기 칸은 T16(「그릴 것 ▾」 · 층 나눔)에서 — 그동안 도면은 기본 켬. ④ DXF 눈금 층은 T15(DXF 단계)에서 — 지금은 SVG · PDF · PNG · TIFF 만.
 - **남은 문제:** 없음(T10 끝). 다음 T11(G8) 커서 5종.
+
+### 2026-10-11 · Claude Code(Sonnet 5.5) — T11 (G8): 커서 5종 — 도구를 든 동안 · 손잡이 위에서만 십자 + 단계 배지
+- **원칙(캔버스 「커서」 화판):** 단추 · 판 위는 OS 커서 그대로, 도구를 든 동안(긋기 · 잘린 돌 · 윤곽)과 손잡이 위에서만 십자 + 단계 배지 — Qt 기본 십자는 1 px 검정이라 어두운 흙 · 밝은 자갈 위에서 안 보이므로 흰 테를 두른다.
+- **시험 먼저(RED):** `--cursor-sheet f.png`(모델 · 창 없이) — 7 모양(긋기 A · A′ · A′+Shift · 잘린 돌 · 윤곽 · 윤곽+Shift · 손잡이) × 배율 1 · 2 · 3 의 크기(32 × 배율) · devicePixelRatio · 핫스폿 · 가운데 틈(반지름 1 px 안은 투명) · 십자 팔 · 배지/고리 빨강을 재서 실패면 종료 코드 11. 그리기 스텁에서 `n=21 bad=21 … RESULT fail`(EXIT 11). `--ui-audit cursor stage-A stage-A2 shift end-arrow handle dpr` — 긋기 A 전 · A 뒤 · Shift · 끝 · 손잡이 위 · 배율(마우스 사건을 평면에 직접 보내 판정). 고치기 전 `stage-A=0 stage-A2=0 shift=0 handle=0  FAIL`.
+- **무엇을:** `app/cursors.{hpp,cpp}`(`kerf::toolCursor`, 배율 · Shift · 고대비별 캐시) · PlanView: 옛 `Qt::CrossCursor` · `OpenHandCursor` 대신 `useTool`/`useShape`(같은 모양이면 다시 걸지 않음) · `refreshCursor(modifiers)`(그리는 중 단계 · Shift) · 손잡이 위 = 십자 + 빨간 고리 · 끄는 동안 닫힌 손 유지 · 나침반 위 OS 손가락 · Shift 누름 · 뗌 · 마우스 움직임에 따라 A′ 커서가 축 색으로 굵어짐 · `event(DevicePixelRatioChange)` 에서 다시 굽기 · `setCursorHighContrast`(고대비 토글이 부름) · `handleScreenPos`(감사용).
+- **핫스폿 단위 확인(실제 Windows, 임시 탐침 — 커밋 안 함):** `QCursor(pixmap, 16, 16)` 의 핫스폿은 **논리 px** — 화면 배율 1.5(`QT_SCALE_FACTOR=1`)에서 OS 커서 핫스폿 24,24 · 48×48, 배율 3.0(`QT_SCALE_FACTOR=2`)에서 48,48 · 96×96, 구운 배율(1 · 2 · 3.0 · 화면 배율)에 상관없이 같음(Qt 가 화면 배율로 다시 맞춤). Qt 문서는 이 단위를 적지 않아 실측함.
+- **확인:** `--cursor-sheet` 실제 창 플랫폼 · offscreen 모두 `n=21 bad=0 RESULT ok` · 눈으로 본 PNG(`C:\dev\tmp\ui3\cursors-final.png` — 배지 · 흰 테 · 굵은 Shift · 고리) · 감사 합성 10조합 + 1920 ×1.25 · ×1.75 + 실제 모델 + **실제 Windows 창 플랫폼** 결과는 아래 줄 · 단위 시험 `~CoalescingWorker*` 통과 · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0.
+- **판정(Ruling):** ① 잘린 돌(H)과 윤곽(O) 커서는 그림 · 시험까지만 — 도구(H · O)는 T21 에서 켜므로 PlanView 에서는 아직 안 씀. ② 계산 중 · 꺼진 영역 클릭 안내는 커서를 안 바꿈(캔버스 규칙 그대로) — 이미 상태줄 진행 막대가 있음. ③ 커서 그림은 offscreen 에서 글꼴이 없어 「A」 가 네모로 보이지만 실제 창 플랫폼 시트에서 글자가 나옴을 확인. ④ 감사의 배율 판정은 화면 배율이 하나라 「구운 배율 = 위젯 배율」만 잼 — 여러 배율의 모양은 `--cursor-sheet` 가 잼.
+- **남은 문제:** 없음(T11 끝). 다음 T12(G9) 모션 상수 · 전환 `app/motion.hpp`.
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

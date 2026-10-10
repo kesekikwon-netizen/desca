@@ -1647,6 +1647,7 @@ void MainWindow::setSectionLineWidth(double px) {
 void MainWindow::applyHighContrast(bool on) {
     highContrast_ = on;
     QSettings().setValue("ui/highContrast", on);
+    if (plan_) plan_->setCursorHighContrast(on);
     qApp->setStyleSheet(theme::styleSheet(on));
     section_->setStyle(secStyle());
     secHeaderKey_.clear();   // 시트가 바뀌면 글 폭이 달라질 수 있다 — 머리를 다시 맞춘다
@@ -2442,6 +2443,67 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     ok &= drawRoOk != 0;
     L << QStringLiteral("ui-audit draw-step2-note=%1%2").arg(noteOk < 0 ? QStringLiteral("not-checked") : QString::number(noteOk)).arg(noteOk == 0 ? QStringLiteral("  FAIL") : QString());
     ok &= noteOk != 0;
+
+    // 4i) 도구 커서(T11 · G8): 도구를 든 동안(긋기 A · A′, Shift = 축 맞춤)과 손잡이 위에서만 십자 + 단계 배지 그림 커서, 그 밖은 OS 화살표 — 핫스폿 (16,16) 논리 px · 지금 화면 배율로 구움
+    {
+        auto redInBadge = [](const QCursor& c) {   // 오른쪽 아래 배지 자리의 빨강 화소 수(글자 A · A′)
+            const QImage im = c.pixmap().toImage().convertToFormat(QImage::Format_ARGB32);
+            const double k = c.pixmap().devicePixelRatio();
+            int n = 0;
+            for (int y = int(18 * k); y < im.height(); ++y) for (int x = int(18 * k); x < im.width(); ++x) { const QRgb p = im.pixel(x, y); if (qAlpha(p) > 128 && qRed(p) > 200 && qGreen(p) < 80 && qBlue(p) < 80) ++n; }
+            return n;
+        };
+        auto ringRed = [](const QCursor& c) {      // 손잡이 고리: 가운데에서 반지름 6–8 논리 px 사이의 빨강
+            const QImage im = c.pixmap().toImage().convertToFormat(QImage::Format_ARGB32);
+            const double k = c.pixmap().devicePixelRatio();
+            int n = 0;
+            for (int y = 0; y < im.height(); ++y) for (int x = 0; x < im.width(); ++x) {
+                const double d = std::hypot(x / k - 16.0, y / k - 16.0); const QRgb p = im.pixel(x, y);
+                if (d > 5.5 && d < 8.5 && qAlpha(p) > 128 && qRed(p) > 200 && qGreen(p) < 80 && qBlue(p) < 80) ++n;
+            }
+            return n;
+        };
+        auto sameImg = [](const QCursor& a, const QCursor& b) { return a.pixmap().toImage() == b.pixmap().toImage(); };
+        const SectionLine keepLn = plan_->line(); const bool hadLn = plan_->hasLine();
+        auto bitmap = [](const QCursor& c) { return c.shape() == Qt::BitmapCursor && !c.pixmap().isNull() && c.hotSpot() == QPoint(16, 16); };
+        QCursor cA, cB, cBs, cEnd, cH, cOff;
+        bool pressOk = false;
+        if (src_) {
+            plan_->setDrawMode(true); pump(50);
+            cA = plan_->cursor();
+            const QPointF mid(plan_->width() * 0.5, plan_->height() * 0.4);
+            QMouseEvent press(QEvent::MouseButtonPress, mid, plan_->mapToGlobal(mid), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(plan_, &press);
+            pressOk = plan_->drawStage() == 1;
+            cB = plan_->cursor();
+            const QPointF mv(mid.x() + 40, mid.y());
+            QMouseEvent move(QEvent::MouseMove, mv, plan_->mapToGlobal(mv), Qt::NoButton, Qt::NoButton, Qt::ShiftModifier);
+            QApplication::sendEvent(plan_, &move);
+            cBs = plan_->cursor();
+            plan_->setDrawMode(false); pump(50);
+            cEnd = plan_->cursor();
+            plan_->setLine(keepLn, hadLn); pump(50);
+            if (hadLn) {
+                const QPointF h = plan_->handleScreenPos(0);
+                QMouseEvent onH(QEvent::MouseMove, h, plan_->mapToGlobal(h), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+                QApplication::sendEvent(plan_, &onH);
+                cH = plan_->cursor();
+                const QPointF away(h.x() + 120, h.y() + 120);
+                QMouseEvent offH(QEvent::MouseMove, away, plan_->mapToGlobal(away), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+                QApplication::sendEvent(plan_, &offH);
+                cOff = plan_->cursor();
+            }
+        }
+        const bool stageAOk = bitmap(cA) && redInBadge(cA) > 0;
+        const bool stageBOk = pressOk && bitmap(cB) && redInBadge(cB) > 0 && !sameImg(cA, cB);
+        const bool shiftOk = bitmap(cBs) && !sameImg(cB, cBs);
+        const bool endOk = cEnd.shape() == Qt::ArrowCursor;
+        const bool handleOk = !hadLn || (bitmap(cH) && ringRed(cH) > 0 && cOff.shape() == Qt::ArrowCursor);
+        const bool dprOk = !stageAOk || std::fabs(cA.pixmap().devicePixelRatio() - plan_->devicePixelRatioF()) < 1e-6;
+        const bool cursorOk = !src_ || (stageAOk && stageBOk && shiftOk && endOk && handleOk && dprOk);
+        L << QStringLiteral("ui-audit cursor stage-A=%1 stage-A2=%2 shift=%3 end-arrow=%4 handle=%5 dpr=%6 hot=16,16%7").arg(stageAOk ? 1 : 0).arg(stageBOk ? 1 : 0).arg(shiftOk ? 1 : 0).arg(endOk ? 1 : 0).arg(handleOk ? 1 : 0).arg(dprOk ? 1 : 0).arg(cursorOk ? QString() : QStringLiteral("  FAIL"));
+        ok &= cursorOk;
+    }
     L << QStringLiteral("ui-audit guide-step2=%1 %2%3").arg(guide2 < 0 ? QStringLiteral("not-checked") : QString::number(guide2)).arg(guide2Why).arg(guide2 == 0 ? QStringLiteral("  FAIL") : QString());
     ok &= guide2 != 0;
     L << QStringLiteral("ui-audit next-hint-visible-while-tool=%1%2").arg(hint < 0 ? QStringLiteral("not-checked") : QString::number(hint)).arg(hint == 1 ? QStringLiteral("  FAIL") : QString());

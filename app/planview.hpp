@@ -9,6 +9,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include "cursors.hpp"
 #include "asec/section.hpp"
 #include "asec/tmx.hpp"
 #include "asec/stream.hpp"
@@ -104,6 +105,8 @@ public:
     std::function<void()> onOpenRequest;
     std::function<void(int stage, const asec::SectionLine&)> onDrawProgress;   // 그리는 중(0 A 대기, 1 A′ 대기): 지금 도구 줄 길이·방위
     int drawStage() const { return drawStage_; }
+    void setCursorHighContrast(bool on);   // 고대비: 커서 선 2 · 흰 테 1.5
+    QPointF handleScreenPos(int which) const;   // 손잡이 화면 위치(0 A · 1 A′ · 2 가운데) — 커서 감사가 손잡이 위로 마우스를 옮길 때 씀
 
 protected:
     void initializeGL() override;
@@ -117,8 +120,16 @@ protected:
     void wheelEvent(QWheelEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
     void leaveEvent(QEvent*) override;
+    void keyReleaseEvent(QKeyEvent*) override;   // Shift 를 놓으면 A′ 단계 커서가 보통 십자로(축 맞춤 끝)
+    bool event(QEvent*) override;                // 화면 배율이 바뀌면(DevicePixelRatioChange) 커서를 새 배율로 다시 굽는다(B5 규칙 ②)
 
 private:
+    // ---- 커서(G8): 도구를 든 동안 · 손잡이 위에서만 십자 + 배지, 그 밖은 OS 커서. 같은 모양이면 다시 걸지 않는다
+    void useShape(Qt::CursorShape s);
+    void useTool(kerf::ToolCursor k, bool shift);
+    void refreshCursor(Qt::KeyboardModifiers m);   // 지금 상태(그리는 중 단계 · 보조키)에 맞는 커서
+    int cursorKey_ = -1;                           // -1 없음 · 0.. 도구 커서(종류 × 2 + Shift) · 1000+ OS 모양
+    kerf::ToolCursor toolKind_ = kerf::ToolCursor::DrawA; bool toolShift_ = false, cursorHc_ = false;
     struct Gpu { GLuint vbo = 0, ibo = 0, tex = 0; GLsizei count = 0; bool hasTex = false; size_t bytes = 0; int texW = 0, texH = 0, texLevels = 0; };
     // 내려간 노드의 텍스처를 같은 크기 다음 노드가 다시 씀(새로 잡는 비용 = 소프트웨어 GL 에서 수~수십 ms 를 피함)
     struct PoolTex { GLuint tex; int w, h, levels; size_t bytes; };

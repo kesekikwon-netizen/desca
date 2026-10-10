@@ -870,9 +870,15 @@ Vec2 PlanView::lockAxis(const Vec2& w, Qt::KeyboardModifiers m) const {
     return std::fabs(d.x) >= std::fabs(d.y) ? Vec2(w.x, line_.a.y) : Vec2(line_.a.x, w.y);
 }
 
+QPointF PlanView::handleScreenPos(int which) const {
+    const double z = refZ() + center_.z;
+    const QPointF A = localToScreen(line_.a.x, line_.a.y, z), B = localToScreen(line_.b.x, line_.b.y, z);
+    return which == 0 ? A : which == 1 ? B : (A + B) / 2;
+}
+
 void PlanView::setDrawMode(bool on) {
     drawStage_ = on ? 0 : -1;
-    setCursor(on ? Qt::CrossCursor : Qt::ArrowCursor);
+    refreshCursor(Qt::NoModifier);
     if (on && onDrawProgress) onDrawProgress(0, line_);
     if (onDrawModeChanged) onDrawModeChanged(on);
     update();
@@ -966,11 +972,11 @@ void PlanView::mousePressEvent(QMouseEvent* e) {
     Vec2 w;
     bool ok = screenToLocalXY(e->position(), w);
     if (e->button() == Qt::LeftButton && drawStage_ >= 0 && ok) {
-        if (drawStage_ == 0) { line_.a = w; line_.b = w; drawStage_ = 1; hasLine_ = false; if (onDrawProgress) onDrawProgress(1, line_); }
+        if (drawStage_ == 0) { line_.a = w; line_.b = w; drawStage_ = 1; hasLine_ = false; refreshCursor(e->modifiers()); if (onDrawProgress) onDrawProgress(1, line_); }
         else {
             line_.b = lockAxis(w, e->modifiers());
             if (SectionFrame(line_).L > 1e-3) {
-                hasLine_ = true; drawStage_ = -1; setCursor(Qt::ArrowCursor);
+                hasLine_ = true; drawStage_ = -1; useShape(Qt::ArrowCursor);
                 if (onDrawModeChanged) onDrawModeChanged(false);
                 emitLine(true);
             }
@@ -983,11 +989,11 @@ void PlanView::mousePressEvent(QMouseEvent* e) {
         QPointF A = localToScreen(line_.a.x, line_.a.y, z), B = localToScreen(line_.b.x, line_.b.y, z);
         auto near = [&](QPointF q) { return std::hypot(q.x() - e->position().x(), q.y() - e->position().y()) < 11; };
         dragHandle_ = near(A) ? 0 : near(B) ? 1 : near((A + B) / 2) ? 2 : -1;
-        if (dragHandle_ >= 0) { dragStartMouse_ = e->position(); dragStartLine_ = line_; setCursor(Qt::ClosedHandCursor); return; }
+        if (dragHandle_ >= 0) { dragStartMouse_ = e->position(); dragStartLine_ = line_; useShape(Qt::ClosedHandCursor); return; }
     }
-    if (e->button() == Qt::LeftButton) { panning_ = true; orbitLift_ = false; setCursor(Qt::ClosedHandCursor); }
-    if (e->button() == Qt::MiddleButton) { orbiting_ = true; orbitLift_ = true; setCursor(Qt::SizeAllCursor); }
-    if (e->button() == Qt::RightButton) { orbiting_ = true; orbitLift_ = false; setCursor(Qt::SizeAllCursor); }
+    if (e->button() == Qt::LeftButton) { panning_ = true; orbitLift_ = false; useShape(Qt::ClosedHandCursor); }
+    if (e->button() == Qt::MiddleButton) { orbiting_ = true; orbitLift_ = true; useShape(Qt::SizeAllCursor); }
+    if (e->button() == Qt::RightButton) { orbiting_ = true; orbitLift_ = false; useShape(Qt::SizeAllCursor); }
 }
 
 void PlanView::mouseMoveEvent(QMouseEvent* e) {
@@ -1002,6 +1008,7 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         onCursor(W.x, W.y, W.z, hz, true);
     }
     if (drawStage_ == 1 && ok) {
+        refreshCursor(e->modifiers());   // Shift(축 맞춤)를 누르면 커서 십자가 굵어진다
         line_.b = lockAxis(w, e->modifiers()); update();
         if (onDrawProgress) onDrawProgress(1, line_);
         if (SectionFrame(line_).L > 0.05 && onLineChanged) onLineChanged(line_, false);
@@ -1034,18 +1041,20 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         update();
         return;
     }
+    if (drawStage_ >= 0) { refreshCursor(e->modifiers()); return; }   // 도구를 든 동안: 단계(A · A′)와 Shift(축 맞춤)가 커서에 보인다
     if (hasLine_ && hasScene_) {
         double z = refZ() + center_.z;
         QPointF A = localToScreen(line_.a.x, line_.a.y, z), B = localToScreen(line_.b.x, line_.b.y, z);
         auto near = [&](QPointF q) { return std::hypot(q.x() - e->position().x(), q.y() - e->position().y()) < 11; };
-        setCursor(drawStage_ >= 0 ? Qt::CrossCursor : (near(A) || near(B) || near((A + B) / 2)) ? Qt::OpenHandCursor : compassHit(e->position()) ? Qt::PointingHandCursor : Qt::ArrowCursor);
+        if (near(A) || near(B) || near((A + B) / 2)) useTool(kerf::ToolCursor::Handle, false);   // 이 점을 끌 수 있다: 십자 + 빨간 고리(끄는 동안은 OS 닫힌 손)
+        else useShape(compassHit(e->position()) ? Qt::PointingHandCursor : Qt::ArrowCursor);
     }
 }
 
 void PlanView::mouseReleaseEvent(QMouseEvent*) {
     if (dragHandle_ >= 0) { dragHandle_ = -1; emitLine(true); }
     panning_ = orbiting_ = false;
-    setCursor(drawStage_ >= 0 ? Qt::CrossCursor : Qt::ArrowCursor);
+    refreshCursor(Qt::NoModifier);
 }
 
 void PlanView::mouseDoubleClickEvent(QMouseEvent* e) {
@@ -1096,8 +1105,44 @@ void PlanView::wheelZoom(const QPointF& at, double notches) {
 }
 
 void PlanView::keyPressEvent(QKeyEvent* e) {
-    if (e->key() == Qt::Key_Escape && drawStage_ >= 0) { drawStage_ = -1; setCursor(Qt::ArrowCursor); if (onDrawModeChanged) onDrawModeChanged(false); update(); return; }
+    if (e->key() == Qt::Key_Escape && drawStage_ >= 0) { drawStage_ = -1; useShape(Qt::ArrowCursor); if (onDrawModeChanged) onDrawModeChanged(false); update(); return; }
+    if (e->key() == Qt::Key_Shift && drawStage_ == 1) { useTool(kerf::ToolCursor::DrawB, true); return; }   // Shift = 축 맞춤: 십자가 축 색 · 굵게
     QOpenGLWidget::keyPressEvent(e);
+}
+
+void PlanView::keyReleaseEvent(QKeyEvent* e) {
+    if (e->key() == Qt::Key_Shift && drawStage_ == 1) { useTool(kerf::ToolCursor::DrawB, false); return; }
+    QOpenGLWidget::keyReleaseEvent(e);
+}
+
+bool PlanView::event(QEvent* e) {
+    if (e && e->type() == QEvent::DevicePixelRatioChange && cursorKey_ >= 0 && cursorKey_ < 1000) { const int k = cursorKey_; cursorKey_ = -1; useTool(toolKind_, toolShift_); (void)k; }   // 화면을 옮겨 배율이 바뀜 → 새 배율로 다시 굽는다
+    return QOpenGLWidget::event(e);
+}
+
+void PlanView::useShape(Qt::CursorShape s) {
+    const int key = 1000 + int(s);
+    if (cursorKey_ == key) return;
+    cursorKey_ = key; setCursor(s);
+}
+
+void PlanView::useTool(kerf::ToolCursor k, bool shift) {
+    const int key = int(k) * 2 + (shift ? 1 : 0);
+    if (cursorKey_ == key) return;
+    cursorKey_ = key; toolKind_ = k; toolShift_ = shift;
+    setCursor(kerf::toolCursor(k, devicePixelRatioF(), shift, cursorHc_));
+}
+
+void PlanView::setCursorHighContrast(bool on) {
+    if (cursorHc_ == on) return;
+    cursorHc_ = on;
+    if (cursorKey_ >= 0 && cursorKey_ < 1000) { cursorKey_ = -1; useTool(toolKind_, toolShift_); }
+}
+
+void PlanView::refreshCursor(Qt::KeyboardModifiers m) {
+    if (drawStage_ == 0) useTool(kerf::ToolCursor::DrawA, false);
+    else if (drawStage_ == 1) useTool(kerf::ToolCursor::DrawB, m.testFlag(Qt::ShiftModifier));
+    else useShape(Qt::ArrowCursor);
 }
 
 void PlanView::leaveEvent(QEvent*) { if (onCursor) onCursor(0, 0, 0, false, false); }

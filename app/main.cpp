@@ -9,7 +9,7 @@
 //   --hover: 평면 보기 가운데로 마우스 이동을 흉내 → 좌표줄 Z 와 Z 출처(대략 → 잎 표면)를 로그
 //   --perf-log: 평면 보기 카메라 경로(맞춤→확대→이동→축소)를 재생하며 프레임마다 시간·LOD 상태를 CSV 로 기록
 //   1.2: --settings DIR(설정을 DIR 의 INI 로 — 시험용) --export-pdf f / --export-sheet-png f / --export-sheet-tiff f / --export-sheet-dxf f
-//        [--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split] --export-dialog-shot f --undo-test --ctx-shot f --ui-audit DIR --icon-sheet f.png
+//        [--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split] --export-dialog-shot f --undo-test --ctx-shot f --ui-audit DIR --icon-sheet f.png --cursor-sheet f.png
 //        --extra-line AX AY BX BY(단면 목록에 더함, 반복 가능) --start-shot f(파일 없이: 시작 화면)
 //   --cut-check: 잘린 면 정확도(단면선 윗면 vs 잎 연직 피킹, 미리보기 vs 최종) + 단면선이 배경 위에 순수 빨강으로 그려졌는지(화면·내보내기)
 //   --vex N: 단면 화면 세로 과장(1·2·5·10, 화면만) / 창 제목 중복 검사는 항상 로그(window-title=…)
@@ -42,6 +42,7 @@
 #include "asec/pick.hpp"
 #include "mainwindow.hpp"
 #include "guideband.hpp"
+#include "cursors.hpp"
 #include "theme.hpp"
 
 using namespace asec;
@@ -236,6 +237,7 @@ int main(int argc, char** argv) {
     QString file, shot, logPath, perfPath, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, uiAuditDir, sheetBatch;
     QString iconSheetPng; bool iconSheet = false;
     int splashEsc = -1;   // --splash-esc N: 여는 화면을 띄우고 N ms 에 Esc 를 눌러 건너뛰는지 잰다(종료 6 = 늦게 닫힘)
+    QString cursorSheetPng;   // --cursor-sheet f.png: 도구 커서 전부 × 배율 1 · 2 · 3 을 격자 PNG 로 쓰고 눈 검사(실패 종료 코드 11)
     QString appIconDir;   // --app-icon DIR: 앱 아이콘 PNG 다섯 장을 쓰고 눈 검사(실패 종료 코드 12)
     bool undoTest = false, split = false; double sheetScale = 0, sectionScale = 0;
     QString lodShot;
@@ -282,6 +284,7 @@ int main(int argc, char** argv) {
         else if (s == "--export-dialog-shot") dialogShot = nx();
         else if (s == "--ctx-shot") ctxShot = nx();
         else if (s == "--app-icon") appIconDir = nx();
+        else if (s == "--cursor-sheet") cursorSheetPng = nx();
         else if (s == "--splash-esc") splashEsc = nx().toInt();
         else if (s == "--icon-sheet") { iconSheet = true; iconSheetPng = nx(); }   // v5 A3: 아이콘 이름 검사 + 격자 캡처(실패 종료 코드 10)
         else if (s == "--lod-shot") lodShot = nx();
@@ -305,6 +308,11 @@ int main(int argc, char** argv) {
         else if (!s.startsWith("--")) file = s;
     }
 
+    if (!cursorSheetPng.isEmpty()) {   // 모델 · 창 없이 돈다 — 커서는 캡처에 안 찍히므로 이 PNG 를 눈으로 본다(G8)
+        QString rep; const bool ok = kerf::writeCursorSheet(cursorSheetPng, &rep);
+        fprintf(stdout, "%s\n", rep.toUtf8().constData());
+        return ok ? 0 : 11;
+    }
     if (!appIconDir.isEmpty()) {   // 모델 · 창 없이 돈다 — packaging/assets/make_app_ico.py 가 이 PNG 로 app.ico 를 만든다
         QString rep; const bool ok = kerf::writeAppIcons(appIconDir, &rep);
         fprintf(stdout, "%s\n", rep.toUtf8().constData());
