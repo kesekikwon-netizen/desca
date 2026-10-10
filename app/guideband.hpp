@@ -26,6 +26,7 @@ public:
     void setReserveRight(int px) { reserveRight_ = px; place(); }
     QString title() const;
     QString hint() const;
+    QStringList keys() const { return keys_; }   // 감사용: 지금 키 캡 글
     bool titleShown() const;   // 감사용: 도구 이름(단계)이 보이는가
     QString debugWidths() const;   // 감사용: 문장 라벨 폭/권장 · 칩 폭/권장
     qint64 iconCacheKey() const;   // 감사용: 지금 아이콘 장의 cacheKey(dpr 바뀌어 다시 구우면 달라진다 — B5)

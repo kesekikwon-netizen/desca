@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T4 좌표계(투영 값이 이름을 이김 · 상태줄 배지 표시만) 끝** → 다음 T5(G2) 좌표 입력 · 단면 찾기 · 영어 병기 삭제. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시). 실제 모델 감사에 `home-clipped` 한 가지가 남음(R6b) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T5 좌표 입력 · 단면 찾기 · 영어 병기 삭제 끝**(1280 리본 타일 20 → 24) → 다음 T6(G3) 리본 정리(평활 · 정보 · 끝내기 · 더보기 삭제 · 점군 하나로). 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시). 실제 모델 감사에 `home-clipped` 한 가지가 남음(R6b) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -304,6 +304,15 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** `SRS:*` 10 케이스 151 assertion 통과 · 전체 `asec_tests` 51371 중 실패 1 = 알려진 `CoalescingWorker: 끄는 동안의 미리보기…` 뿐(`~CoalescingWorker*` 51360 통과) · 합성 감사 1280×800 ×1 · 1920×1040 ×1 · 3840×2160 ×2 `RESULT ok`(`srs-text=수평 EPSG:5186 · 중부원점(GRS80)`) · **실제 모델 Production_1.3sm** 1920: 배지 `수평 EPSG:5187 · 동부원점(GRS80)` · `icons-missing=0`(알림 띠 사라짐) · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0 · 실제 창 캡처 `C:\dev\tmp\elev-bug\t4\status.png`(배지 글 · ▾ 없음 확인).
 - **판정(Ruling):** ① REMARK · WKT ID 로 정한 번호는 건드리지 않음(명시 선언은 존중, 이름만 약한 단서) — 잘못이면: ID 와 값이 다른 파일은 경고 띠가 계속 뜸. ② 경고(알림 띠)는 지우지 않음 — 표의 어느 것과도 안 맞는 진짜 불일치 · 지리 좌표계는 계속 알려야 함. 이 모델의 띠만 사라짐. ③ 원점 이름은 내장 표에 있는 번호만(5174 등은 번호만) — 이름으로 번호를 짐작하지 않음. ④ 높이 배지 · 지정 창 삭제는 T8(G5) — 이번에는 수평 배지만.
 - **남은 문제:** 실제 모델 감사의 `home-clipped`(1280 에서 홈 표의 긴 폴더 「C: › Users › 권을」 · 「EPSG:5187」 칸 줄임)는 T4 와 무관한 기존 결함 → backlog R6b(T8 뒤 다시 재서 고침). T5(G2) 다음.
+
+### 2026-10-11 · Claude Code(Sonnet 5.5) — T5 (G2 · R3): 좌표 입력 · 단면 찾기 · 영어 병기 삭제
+- **사용자 결정(2026-10-10 확인 ③):** 좌표 입력(리본 오른쪽 끝 · 오른쪽 판 「좌표 입력… Enter」 · 그리는 중 Enter) · 단면 찾기(칸 · Ctrl+F) · 영어 병기를 지운다.
+- **시험 먼저(RED):** `--ui-audit` 새 줄 `removed ribbon-corner=%1 coord-entry=%2 find-box=%3 bilingual=%4`(`ribbonCorner` 단추 수 · 동작 `coord` + 「좌표 입력」 글자 단추 · `ribbonSearch` 칸 + `QKeySequence::Find` 단축키 · 동작 `lang` — 모두 0 이어야 ok). 지우기 전 `ribbon-corner=1 coord-entry=3 find-box=2 bilingual=1  FAIL`(EXIT 9).
+- **무엇을:** 리본 오른쪽 끝 묶음(`setCorner` · 좌표 입력 단추 · 단면 찾기 칸) · Ctrl+F · `filterSectionList` · 홈/모델 닫기의 찾기 칸 비움 · 오른쪽 판 「좌표 입력…」 단추 · 동작 `coord`(Return) · `coordEntryDialog` · `dlgCoordEntry` · `PlanView::finishDrawAt` · `--coord-shot` · 동작 `lang` · `bilingual_` · `retranslate` · `labels_`(동작에는 아무 일도 안 하던 장치) · `Ico::Lang` · QSS `ribbonCorner` · `ribbonSearch` · F1 키 표의 「Enter (그리는 중) A/A′ 좌표 직접 입력」 · README · 읽어보기의 영어 병기 문장. 오른쪽 판의 「복사」 단추는 남김(T7 에서 판째 없앰).
+- **같이 바뀐 것(결과):** 오른쪽 끝 270 px 가 비어 리본 폭 예산이 need50 1916 → 1644 · need32 1682 → 1410 · need20 1280 → 1008 이 되었고, 1280 에서 창 폭에 들어가는 가장 큰 크기가 20 → **24** 가 됐다(`narrow rule-at-1280 look=24`). 감사 기대 `kNarrowTile` 와 스펙 §2.1 · §3.3 을 실측값으로 고침(2026-10-09 사용자 결정 「스펙을 실제로 고친다」와 같은 방식).
+- **같이 고친 것(칩):** 그리는 중 A′ 단계 안내 칩의 「Enter」 키 캡과 「숫자 = 길이」 문장은 지운 좌표 입력을 가리키고 실제로는 아무 일도 안 해(길이를 치는 처리 없음) 함께 지움 — 감사 `guide-step2 keys=Esc`(고치기 전 `keys=Enter+Esc … FAIL`), 스펙 §5 문장 정정. v6 의 「길이 숫자 입력 칸」(`DESIGN_SPEC_v6.md` §…)은 별도 계획 기능이라 건드리지 않음.
+- **확인:** 합성 감사 1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2 열 가지 모두 `RESULT ok`(칩 고친 뒤 1920 ×1 · 1280 ×1 · 3840 ×2 재확인) · 실제 모델 Production_1.3sm 1920: `removed … 0` · `guide-step2=1 keys=Esc` · `icons-missing=0`, `RESULT fail` 은 기존 `home-clipped` 하나뿐(backlog R6b) · `~CoalescingWorker*` 51360 통과 · `--sheet-check` · `--icon-sheet` · `--undo-test` · `--ctx-shot` EXIT 0 · 실제 창 캡처 `C:\dev\tmp\elev-bug\t5\`(work · draw · start, 리본 오른쪽 끝 비어 있음 · 칩 「Shift = 축 맞춤 [Esc]」).
+- **판정(Ruling):** ① 1280 리본 타일 20 → 24 는 사용자 요청(삭제)의 필연적 결과 — 창 폭에 맞는 가장 큰 크기를 고르는 규칙은 그대로, 틀리면: 1280 타일이 기대보다 큼(읽기 쉬워짐). ② 정밀 좌표로 단면선을 만드는 길이 이제 없다(평면에서 클릭만) — 사용자 결정 그대로, 필요해지면 새 요청. ③ 동작 이름표 영어(`en`)는 툴팁 괄호에만 남김(영어 병기 토글이 아니라 툴팁 안의 표기).
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

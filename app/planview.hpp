@@ -103,8 +103,6 @@ public:
     std::function<void(bool)> onDrawModeChanged;
     std::function<void()> onOpenRequest;
     std::function<void(int stage, const asec::SectionLine&)> onDrawProgress;   // 그리는 중(0 A 대기, 1 A′ 대기): 지금 도구 줄 길이·방위
-    /// 좌표 입력(Enter)으로 A·A′ 를 정해 그리기 끝내기(로컬 XY)
-    void finishDrawAt(const asec::SectionLine& l);
     int drawStage() const { return drawStage_; }
 
 protected:

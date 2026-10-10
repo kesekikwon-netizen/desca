@@ -129,8 +129,6 @@ public:
     void dlgChooseSheet();                            // 평면 / 단면 조판 고르기
     void dlgHeightDatum();
     QDialog* heightDatumDialog();
-    void dlgCoordEntry();
-    QDialog* coordEntryDialog();
     void dlgSheet();                                   // 단면도 조판
     void dlgPlanSheet();                               // 평면도 조판
     QDialog* buildSheetDialog(SheetParams& io, bool& accepted);   // 자동화(창 캡처)에서도 씀
@@ -198,11 +196,8 @@ private:
     int ribbonCtx_ = 1;
     QWidget* depthBox_ = nullptr;       // 리본 「입면」 묶음의 뒤 깊이 칩 · 뒤 · 앞 칸
     QToolButton* sheetChip_ = nullptr;  // 「도면」 칩(단면 탭에서 흙색, 도면 탭에서 보기 켜짐 모양)
-    QLineEdit* findBox_ = nullptr;      // 리본 오른쪽 끝 「단면 찾기」
-    QToolButton* coordBtn_ = nullptr;   // 리본 오른쪽 끝 「좌표 입력」(단면 문맥에서만 켜짐 — 검토 I2)
     QWidget* docTabsRow_ = nullptr;
     QLabel* docTabCorner_ = nullptr;
-    void filterSectionList(const QString& text);
     int pendingSection_ = -1;           // 홈 썸네일로 연 뒤 고를 단면 번호(restoreModelState 가 씀)
     QStackedWidget* body_ = nullptr;      // 0 시작 화면, 1 작업, 조판은 별도 위젯
     QTabBar* viewTabs_ = nullptr;
@@ -348,9 +343,6 @@ private:
     QString heightBadgeText(QString* state, QString* tip) const;
     QString heightDatumShort() const;   // 높이 기준 짧은 이름(배지 · 홈 카드 공통)
     std::map<QString, QAction*> act_;
-    struct Label { QObject* obj; QString ko, en; int kind; };  // kind 0 탭 1 그룹라벨 2 동작 3 제목
-    std::vector<Label> labels_;
-    bool bilingual_ = false;
 
     std::shared_ptr<asec::MeshSource> src_;
     QString path_, kind_;
@@ -381,7 +373,6 @@ private:
     QAction* makeAction(const QString& key, const QString& ko, const QString& en, theme::Ico ico, const QString& shortcut = {}, bool checkable = false);
     QWidget* buildRibbon();
     QWidget* buildCoordBar();
-    void retranslate();
     void requestSection(bool final);
     void onSectionDone(asec::SectionOutput&& out, uint64_t gen, bool final, const QString& err);
     void runTask(const QString& what, std::function<bool(QString*)> work, std::function<void(bool, const QString&)> done);

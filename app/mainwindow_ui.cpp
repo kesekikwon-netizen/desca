@@ -279,19 +279,10 @@ QAction* MainWindow::makeAction(const QString& key, const QString& ko, const QSt
     a->setIconText(ko);
     act_[key] = a;
     addAction(a);
-    labels_.push_back({a, ko, en, 2});
     return a;
 }
 
-void MainWindow::retranslate() {
-    for (auto& L : labels_) {
-        QString t = bilingual_ ? QStringLiteral("%1 %2").arg(L.ko, L.en) : L.ko;
-        if (L.kind >= 100 && L.kind < 200) static_cast<QTabBar*>(L.obj)->setTabText(L.kind - 100, t);
-        else if (L.kind == 1) static_cast<QLabel*>(L.obj)->setText(t);
-    }
-}
-
-// ---------------------------------------------------------------- 리본(디자인 v5 §3: 탭 없음 · 묶음 7 · 타일 칩 · 오른쪽 끝 좌표 입력 · 단면 찾기)
+// ---------------------------------------------------------------- 리본(디자인 v5 §3: 탭 없음 · 묶음 7 · 타일 칩 — 오른쪽 끝 단추 칸 없음, T5)
 QWidget* MainWindow::buildRibbon() {
     using K = kerf::ChipKind;
     ribbon_ = new Ribbon(theme::chipColors());
@@ -393,7 +384,7 @@ QWidget* MainWindow::buildRibbon() {
     // ---- 내보내기: 도면(흙색 주 단추 — 단면 탭에서 한 화면의 유일한 흙색)
     ribbon_->addGroup(QStringLiteral("out"), QStringLiteral("내보내기"));
     sheetChip_ = add("out", "sheet", K::Primary, "sheet", QStringLiteral("도면"));
-    // ---- 기타: 단축키 · 더보기 ▾(정보 · 영상 불투명도 · 단면선 굵기 · 매끈하게 · 영어 병기 · 끝내기)
+    // ---- 기타: 단축키 · 더보기 ▾(정보 · 영상 불투명도 · 단면선 굵기 · 매끈하게 · 끝내기)
     ribbon_->addGroup(QStringLiteral("etc"), QStringLiteral("기타"));
     add("etc", "keys", K::Normal, "keyboard", QStringLiteral("단축키"));
     { auto* mn = new QMenu(this);
@@ -407,28 +398,11 @@ QWidget* MainWindow::buildRibbon() {
         auto* lwBox = rowOf({lab(QStringLiteral("단면선 굵기"), "hint"), lineWidthMenu_}); lwBox->setContentsMargins(12, 4, 12, 4);
         auto* wa2 = new QWidgetAction(mn); wa2->setDefaultWidget(lwBox); mn->addAction(wa2); lineWidthMenuAct_ = wa2;
         mn->addSeparator();
-        mn->addAction(action("smooth")); mn->addAction(action("lang"));
+        mn->addAction(action("smooth"));
         mn->addSeparator();
         mn->addAction(action("about")); mn->addAction(action("quit"));
         action("more")->setMenu(mn); }
     add("etc", "more", K::Normal, "ellipsis", QStringLiteral("더보기"));
-    // ---- 오른쪽 끝(Strata 「지역」 + 「주소·지번 찾기」 자리): 좌표 입력 · 단면 찾기
-    auto* corner = new QWidget; { auto* ch = new QHBoxLayout(corner); ch->setContentsMargins(0, 0, 0, 0); ch->setSpacing(6);
-        coordBtn_ = new QToolButton; auto* coordBtn = coordBtn_; coordBtn->setObjectName("ribbonCorner");
-        coordBtn->setIcon(kerf::icon(QStringLiteral("crosshair"), 16, theme::Hand)); coordBtn->setIconSize(QSize(16, 16));
-        coordBtn->setText(QStringLiteral("좌표 입력")); coordBtn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon); coordBtn->setFocusPolicy(Qt::NoFocus);
-        coordBtn->setToolTip(QStringLiteral("A · A′ 좌표를 쳐서 새 단면 (Enter)"));
-        coordBtn->setFixedSize(100, 40);   // Strata 「지역」 자리(77×40)와 같은 높이
-        QObject::connect(coordBtn, &QToolButton::clicked, this, [this] { if (!src_) return; if (!plan_->drawMode()) plan_->setDrawMode(true); dlgCoordEntry(); });
-        ch->addWidget(coordBtn);
-        findBox_ = new QLineEdit; findBox_->setObjectName("ribbonSearch"); findBox_->setPlaceholderText(QStringLiteral("단면 찾기  Ctrl+F")); findBox_->setClearButtonEnabled(true);
-        findBox_->setToolTip(QStringLiteral("단면 목록을 이름으로 거릅니다 (Ctrl+F)"));
-        findBox_->addAction(kerf::icon(QStringLiteral("search"), 14, theme::Faint), QLineEdit::LeadingPosition);   // Strata 찾기 칸의 돋보기
-        findBox_->setFixedSize(142, 32);   // Strata 「주소·지번 찾기」 158×32 과 같은 줄 — 둥근 입면 칩 사이 2 px 를 벌어 1920 에서 타일 50 을 지키려 8 px 좁힘
-        QObject::connect(findBox_, &QLineEdit::textChanged, this, [this](const QString& t) { filterSectionList(t); });
-        ch->addWidget(findBox_); }
-    ribbon_->setCorner(corner);
-    { auto* sc = new QShortcut(QKeySequence::Find, this); QObject::connect(sc, &QShortcut::activated, this, [this] { findBox_->setFocus(); findBox_->selectAll(); }); }
     // 입면 아래 줄은 칩 높이 안에 두 줄이 들어갈 때만(글자 보이는 크기 — 1920 · 2560 …). 안 들어가면(글자 숨김 크기 — 1280 …) 숨기고 더보기 안의 같은 칸을 보인다
     ribbon_->setLookHook([this, elevBlock](const RibbonLook& L, int chipH) {
         const int topH = depthBox_->sizeHint().height();
@@ -463,14 +437,6 @@ void MainWindow::discardSheetTab() {
     if (viewTabs_ && viewTabs_->count() > 2) { QSignalBlocker b(viewTabs_); viewTabs_->removeTab(2); }
     if (sheetHost_) { if (body_) body_->removeWidget(sheetHost_); sheetHost_->deleteLater(); sheetHost_ = nullptr; }
     embeddedSave_ = nullptr;
-}
-
-// 리본 오른쪽 「단면 찾기」: 이름에 글자가 든 줄만 보인다(빈 글이면 전부)
-void MainWindow::filterSectionList(const QString& text) {
-    if (!secList_) return;
-    const QString t = text.trimmed();
-    for (int i = 0; i < secList_->count() && i < int(sections_.size()); ++i)
-        secList_->item(i)->setHidden(!t.isEmpty() && !QString::fromStdString(sections_[size_t(i)].name).contains(t, Qt::CaseInsensitive));
 }
 
 // 키보드로 온 초점에만 테를 그린다(QSS [kbdFocus="true"]:focus) — 리본 칩뿐 아니라 모든 단추(검토 UI 6). 창 전환 · 팝업은 이전 값을 지킨다(검토 M8)
@@ -520,8 +486,8 @@ void MainWindow::updateCtx(int stage, const SectionLine& l) {
     }
     const double L = SectionFrame(l).L;
     guide_->setTool(QStringLiteral("section-line"), QStringLiteral("단면선 긋기 › A′ 찾는 중"));
-    guide_->setHint(QStringLiteral("끝점 A′를 클릭하세요 · Shift = 축 맞춤 · 숫자 = 길이"));   // 스펙 §5 그대로 — 길이는 평면 A′ 이름표 「A′ · 7.43 m」가 든다
-    guide_->setKeys({QStringLiteral("Enter"), QStringLiteral("Esc")});
+    guide_->setHint(QStringLiteral("끝점 A′를 클릭하세요 · Shift = 축 맞춤"));   // 스펙 §5 — 길이는 평면 A′ 이름표 「A′ · 7.43 m」가 든다(T5: 「숫자 = 길이」 · Enter 는 좌표 입력과 함께 지움)
+    guide_->setKeys({QStringLiteral("Esc")});
     if (inspNote_) inspNote_->setText(QStringLiteral("A 찍음 · 끝점 A′를 찍으세요"));   // 화판 2
     if (inspLen_ && inspBody_ && L > 1e-6) {
         const Vec3 org = src_ ? src_->srs.origin : Vec3();
@@ -1081,17 +1047,15 @@ QWidget* MainWindow::buildInspector() {
     inspBody_ = new QLabel; inspBody_->setObjectName("mono"); inspBody_->setWordWrap(true); inspBody_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     v->addWidget(inspBody_);
     v->addStretch();
-    // v4: 「이 단면으로 도면」은 리본 「도면」과 같아 목록 오른쪽 클릭으로만. 판 아래는 좌표 입력 · 복사(읽기 전용 판)
+    // v4: 「이 단면으로 도면」은 리본 「도면」과 같아 목록 오른쪽 클릭으로만. 판 아래는 복사(읽기 전용 판)
     auto* row = new QHBoxLayout; row->setSpacing(6);
-    auto* coordBtn = new QPushButton(kerf::icon(QStringLiteral("crosshair"), 16, theme::Hand), QStringLiteral("좌표 입력…  Enter")); coordBtn->setProperty("iconName", QStringLiteral("crosshair"));
-    QObject::connect(coordBtn, &QPushButton::clicked, this, [this] { if (src_) dlgCoordEntry(); });
     auto* copyBtn = new QPushButton(kerf::icon(QStringLiteral("copy"), 16, theme::Hand), QStringLiteral("복사")); copyBtn->setProperty("iconName", QStringLiteral("copy"));
     copyBtn->setToolTip(QStringLiteral("끝점 좌표 · 길이 · 방위를 글로 복사"));
     QObject::connect(copyBtn, &QPushButton::clicked, this, [this] {
         QGuiApplication::clipboard()->setText(inspBody_->text());
         showStatus(QStringLiteral("단면 수치를 복사했습니다"));
     });
-    row->addWidget(coordBtn, 1); row->addWidget(copyBtn);
+    row->addWidget(copyBtn, 1);
     v->addLayout(row);
     { auto* note = lab(QStringLiteral("이 판은 읽기만 합니다. 값을 바꾸는 곳은 리본과 평면입니다."), "faint"); note->setWordWrap(true); v->addWidget(note); }
     return w;
@@ -1156,7 +1120,6 @@ void MainWindow::refreshSectionList() {
         }
         if (secCount_) secCount_->setText(QString::number(sections_.size()));
     }
-    if (findBox_ && !findBox_->text().trimmed().isEmpty()) filterSectionList(findBox_->text());   // 거르기는 목록을 다시 만들어도 남는다(검토 I5)
     refreshSheetList();
 }
 
@@ -1747,7 +1710,7 @@ void MainWindow::dlgKeys() {
     t->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     const char* rows[][2] = {
         {"Ctrl+O", "모델 열기"}, {"Ctrl+Shift+O", "최근 모델 다시 열기(마지막 단면선·화면 그대로)"}, {"S", "단면선 그리기 — A 클릭, A′ 클릭"},
-        {"Shift (그리는 중)", "동서·남북으로 고정"}, {"Enter (그리는 중)", "A/A′ 좌표 직접 입력"}, {"Esc", "그리기 취소"},
+        {"Shift (그리는 중)", "동서·남북으로 고정"}, {"Esc", "그리기 취소"},
         {"1 2 3 4 5", "뒤 깊이 0.5 / 1 / 2 / 3 / 5 m (기본 3 m — 입면도용 배경)"}, {"[  ]", "평행 이동 −0.1 / +0.1 m (보는 쪽 +)"}, {"{  }", "평행 이동 −1 / +1 m"},
         {"X", "세로 과장 ×1 → ×2 → ×5 → ×10 (화면만 · 도면은 1:1)"},
         {"R", "방향 반전(A↔A′)"}, {"N", "새 단면 추가"}, {"I · L · V", "입면 영상 · 단면선 · 레벨선 켜기/끄기"},
@@ -1768,78 +1731,11 @@ void MainWindow::dlgKeys() {
     d.exec();
 }
 
-QDialog* MainWindow::coordEntryDialog() {
-    if (!src_) return nullptr;
-    const Vec3 o = srs().origin;
-    SectionLine cur = plan_->line();
-    bool haveA = plan_->drawStage() == 1;
-    auto* d = new QDialog(this);
-    d->setWindowTitle(QStringLiteral("좌표 입력"));
-    d->setFixedWidth(560);
-    auto* v = new QVBoxLayout(d);
-    v->setContentsMargins(24, 20, 24, 20);
-    v->setSpacing(12);
-    auto* q = new QLabel(QStringLiteral("A와 A′는 어디입니까?"));
-    QFont serif;
-    serif.setFamilies({QStringLiteral("Batang"), QStringLiteral("Noto Serif KR"), QStringLiteral("Malgun Gothic")});
-    serif.setPixelSize(20);
-    q->setFont(serif);
-    v->addWidget(q);
-    auto* hint = new QLabel(QStringLiteral("실좌표(m)입니다. 메시 로컬에 SRSOrigin을 더한 값이고, 높이는 바꾸지 않습니다."));
-    hint->setWordWrap(true);
-    hint->setObjectName("hint");
-    v->addWidget(hint);
-    auto* g = new QGridLayout;
-    auto mk = [&](double val) { auto* s = new QDoubleSpinBox; s->setRange(-1e8, 1e8); s->setDecimals(3); s->setValue(val); return s; };
-    double ax = cur.a.x + o.x, ay = cur.a.y + o.y, bx = cur.b.x + o.x, by = cur.b.y + o.y;
-    if (!plan_->hasLine() && !haveA) { ax = plan_->cameraX() + o.x; ay = plan_->cameraY() + o.y; bx = ax + 10; by = ay; }
-    auto *sax = mk(ax), *say = mk(ay), *sbx = mk(bx), *sby = mk(by);
-    g->addWidget(lab(QStringLiteral("X (동)"), "hint"), 0, 1);
-    g->addWidget(lab(QStringLiteral("Y (북)"), "hint"), 0, 2);
-    g->addWidget(lab(QStringLiteral("A"), "title"), 1, 0);
-    g->addWidget(sax, 1, 1);
-    g->addWidget(say, 1, 2);
-    g->addWidget(lab(QStringLiteral("A′"), "title"), 2, 0);
-    g->addWidget(sbx, 2, 1);
-    g->addWidget(sby, 2, 2);
-    v->addLayout(g);
-    auto* foot = new QHBoxLayout;
-    foot->addStretch();
-    auto* cancel = new QPushButton(QStringLiteral("취소"));
-    auto* ok = new QPushButton(QStringLiteral("단면선 적용"));
-    ok->setObjectName("primary");
-    ok->setDefault(true);
-    foot->addWidget(cancel);
-    foot->addWidget(ok);
-    v->addLayout(foot);
-    QObject::connect(cancel, &QPushButton::clicked, d, &QDialog::reject);
-    QObject::connect(ok, &QPushButton::clicked, d, [this, d, sax, say, sbx, sby, o] {
-        SectionLine l;
-        l.a = {sax->value() - o.x, say->value() - o.y};
-        l.b = {sbx->value() - o.x, sby->value() - o.y};
-        l.front = front_->value();
-        l.back = back_->value();
-        if (SectionFrame(l).L <= 1e-3) { QMessageBox::warning(this, windowTitle(), QStringLiteral("A 와 A′ 가 같습니다")); return; }
-        if (plan_->drawStage() >= 0) plan_->finishDrawAt(l);
-        else { plan_->setLine(l, true); fitNextResult_ = true; requestSection(true); syncCurrentSection(); commitState(QStringLiteral("단면선 좌표 입력")); }
-        d->accept();
-    });
-    return d;
-}
-
-void MainWindow::dlgCoordEntry() {
-    QDialog* d = coordEntryDialog();
-    if (!d) return;
-    d->exec();
-    d->deleteLater();
-}
-
 // ---------------------------------------------------------------- 생성자
 MainWindow::MainWindow() {
     qApp->installEventFilter(this);   // 모든 단추의 키보드 초점 테(검토 UI 6)
     setWindowTitle(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
     setAcceptDrops(true);
-    bilingual_ = QSettings().value("ui/bilingual", false).toBool();
     highContrast_ = QSettings().value("ui/highContrast", false).toBool();
     using I = theme::Ico;
     undo_ = new QUndoStack(this);
@@ -1887,8 +1783,6 @@ MainWindow::MainWindow() {
     makeAction("hatch", QStringLiteral("잘린 돌 칠하기"), "Hatch Cut Stone", I::Band, "H", true)->setEnabled(false);   // A1 UI(F단계)에서 켠다
     makeAction("outline", QStringLiteral("윤곽 따기"), "Trace Outline", I::Draw, "O", true)->setEnabled(false);          // A3 UI(G단계)에서 켠다
     makeAction("contrast", QStringLiteral("고대비"), "High Contrast", I::Band, QString(), true)->setChecked(highContrast_);
-    makeAction("lang", QStringLiteral("영어 병기"), "English", I::Lang, QString(), true)->setChecked(bilingual_);
-    makeAction("coord", QStringLiteral("좌표 입력"), "Enter Coordinates", I::Draw, "Return")->setEnabled(false);
     makeAction("esc", QStringLiteral("그리기 취소"), "Cancel", I::Close, "Esc")->setEnabled(false);
     makeAction("undo", QStringLiteral("되돌리기"), "Undo", I::Undo, "Ctrl+Z")->setEnabled(false);
     makeAction("redo", QStringLiteral("다시"), "Redo", I::Redo, "Ctrl+Y")->setEnabled(false);
@@ -1939,7 +1833,6 @@ MainWindow::MainWindow() {
     v->addWidget(body_, 1);
     v->addWidget(buildCoordBar());
     setCentralWidget(central);
-    retranslate();
     setRibbonContext(src_ ? 1 : 0);
     rebuildRecentMenu();
     setActiveView(0);
@@ -2003,7 +1896,7 @@ MainWindow::MainWindow() {
         if (on) updateCtx(0, SectionLine{});
         guide_->setVisible(on); undoBtns_->setVisible(on);
         if (on) { guide_->place(); undoBtns_->place(); }
-        action("coord")->setEnabled(on); action("esc")->setEnabled(on);
+        action("esc")->setEnabled(on);
         section_->setDrawingHint(on);   // 단면 화면 위 「A′를 찍으면 단면이 여기에 나옵니다」(화판 2)
         updateEnabled();                // 그리는 동안 도면 · 자료 내보내기 꺼짐(화판 2 · 검토 UI 5)
         if (on) updateHeader();         // 정보 줄 「단면선을 긋는 중 …」 + 잘린 선 · 입면 글 비움(updateHeader 가 그리는 중을 안다 — 검토 I2)
@@ -2018,7 +1911,6 @@ MainWindow::MainWindow() {
     plan_->onDrawProgress = [this](int stage, const SectionLine& l) {
         updateCtx(stage, l);
     };
-    QObject::connect(action("coord"), &QAction::triggered, this, [this] { if (plan_->drawMode()) dlgCoordEntry(); });
     QObject::connect(action("esc"), &QAction::triggered, this, [this] { if (plan_->drawMode()) plan_->setDrawMode(false); });
     QObject::connect(action("flip"), &QAction::triggered, this, [this] {
         if (!plan_->hasLine()) return;
@@ -2089,7 +1981,6 @@ MainWindow::MainWindow() {
     });
     QObject::connect(action("secimport"), &QAction::triggered, this, [this] { importSectionsJson(); });
     QObject::connect(action("contrast"), &QAction::toggled, this, [this](bool on) { applyHighContrast(on); });
-    QObject::connect(action("lang"), &QAction::toggled, this, [this](bool on) { bilingual_ = on; QSettings().setValue("ui/bilingual", on); retranslate(); });
     auto bandChanged = [this] {
         plan_->setBand(front_->value(), back_->value());
         if (!applyingState_) { backUserSet_ = true; QSettings().setValue("section/backUserSet", true); }   // 사용자가 바꿈
@@ -2178,7 +2069,6 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             if (r.right() >= width() || r.bottom() >= height() || r.left() < 0 || r.top() < 0) { ++overflow; if (over.size() < 6) over << name; }   // right() = x + w − 1 이라 >= 라야 1 px 넘침도 잡힌다(B5 검토 N1)
         };
         for (auto* b : ribbon_->chips()) check(b, b->text());
-        check(coordBtn_, QStringLiteral("coord")); check(findBox_, QStringLiteral("find"));
         check(srsLabel_, QStringLiteral("srs-badge")); check(heightBadge2_, QStringLiteral("height-badge"));
         check(docTabCorner_, QStringLiteral("doc-corner")); check(inspector_, QStringLiteral("inspector"));
         const int minW = minimumSizeHint().width();
@@ -2363,28 +2253,17 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     for (const QString& d : dupIcons) L << QStringLiteral("dup-icon: %1").arg(d);
     ok &= dupIcons.isEmpty();
 
-    // 3c) 리본 문맥(검토 I1): 홈에서는 단면 · 자료 · 도면 동작과 「좌표 입력」이 꺼지고 「닫기」는 살아 있다 — updateEnabled() 뒤에도 그대로여야 한다
+    // 3c) 리본 문맥(검토 I1): 홈에서는 단면 · 자료 · 도면 동작이 꺼지고 「닫기」는 살아 있다 — updateEnabled() 뒤에도 그대로여야 한다
     int ctxBad = 0;
     {
         const int keepCtx = ribbonCtx_;
         setRibbonContext(0); updateEnabled();
         for (const char* k : {"draw", "addsec", "flip", "move", "sheet", "csv", "plan", "xyz", "las"}) if (action(k)->isEnabled()) ++ctxBad;
         if (src_ && !action("close")->isEnabled()) ++ctxBad;
-        if (coordBtn_ && coordBtn_->isEnabled()) ++ctxBad;
         setRibbonContext(keepCtx); updateEnabled();
     }
     L << QStringLiteral("ui-audit context-home enabled-wrong=%1%2").arg(ctxBad).arg(ctxBad ? QStringLiteral("  FAIL") : QString());
     ok &= ctxBad == 0;
-
-    // 3d) 「단면 찾기」 거르기는 목록을 다시 만들어도 남는다(검토 I5)
-    int filterKeep = -1;
-    if (findBox_ && secList_ && secList_->count() > 0) {
-        findBox_->setText(QStringLiteral("\u2603zzz")); refreshSectionList(); pump(50);
-        filterKeep = secList_->count() > 0 && secList_->item(0)->isHidden() ? 1 : 0;
-        findBox_->clear(); refreshSectionList(); pump(50);
-    }
-    L << QStringLiteral("ui-audit filter-persists=%1%2").arg(filterKeep < 0 ? QStringLiteral("not-checked") : QString::number(filterKeep)).arg(filterKeep == 0 ? QStringLiteral("  FAIL") : QString());
-    ok &= filterKeep != 0;
 
     // 4) 축척 칸 · 높이 배지는 화면에 하나씩
     int scales = 0, badges = 0;
@@ -2400,6 +2279,17 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
              .arg(srsLabel_ && srsLabel_->text().endsWith(QChar(0x25BE)) ? 1 : 0).arg(heightBadge2_ && heightBadge2_->text().endsWith(QChar(0x25BE)) ? 1 : 0).arg(srsStatic ? 1 : 0)
              .arg(srsLabel_ ? srsLabel_->text() : QString()).arg(badgeOk ? QString() : QStringLiteral("  FAIL"));
     ok &= badgeOk;
+
+    // 4c) 지운 것(T5 · G2 · 사용자 결정 2026-10-10): 리본 오른쪽 끝 단추 칸 · 좌표 입력(리본 · 판 단추 · 그리는 중 Enter) · 단면 찾기(칸 · Ctrl+F) · 영어 병기 — 화면에도 동작 표에도 하나도 없어야 한다
+    int removedCorner = int(findChildren<QToolButton*>(QStringLiteral("ribbonCorner")).size());
+    int removedCoord = int(act_.count(QStringLiteral("coord")));
+    for (auto* b : findChildren<QAbstractButton*>()) if (b->text().startsWith(QStringLiteral("좌표 입력"))) ++removedCoord;
+    int removedFind = int(findChildren<QLineEdit*>(QStringLiteral("ribbonSearch")).size());
+    for (auto* sc : findChildren<QShortcut*>()) if (sc->key() == QKeySequence(QKeySequence::Find)) ++removedFind;
+    int removedLang = int(act_.count(QStringLiteral("lang")));
+    const bool removedOk = removedCorner == 0 && removedCoord == 0 && removedFind == 0 && removedLang == 0;
+    L << QStringLiteral("ui-audit removed ribbon-corner=%1 coord-entry=%2 find-box=%3 bilingual=%4%5").arg(removedCorner).arg(removedCoord).arg(removedFind).arg(removedLang).arg(removedOk ? QString() : QStringLiteral("  FAIL"));
+    ok &= removedOk;
 
     // 5) 그리는 동안 상태줄 「다음:」 문장이 없는가
     int hint = -1, band = -1, guide2 = -1, compassOk = -1, noteOk = -1; QString guide2Why;
@@ -2418,7 +2308,8 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             const bool inside = guide_->rect().contains(guide_->childrenRect());
             const bool apart = !undoBtns_->geometry().intersects(guide_->geometry()) && undoBtns_->geometry().right() <= planHost_->width();
             // 문장은 스펙 §5 그대로여야 한다. 글꼴이 없는 offscreen 은 글자가 네모(폭 2배)라 평면 폭을 다 써도 줄임표가 남을 수 있다 — 그때는 칩이 평면 폭을 다 썼는지로 판정(실측 Ruling)
-            const QString spec = QStringLiteral("끝점 A′를 클릭하세요 · Shift = 축 맞춤 · 숫자 = 길이");
+            const QString spec = QStringLiteral("끝점 A′를 클릭하세요 · Shift = 축 맞춤");   // T5: 「숫자 = 길이」 · Enter 는 좌표 입력과 함께 없어짐 — 눌러도 아무 일도 없는 안내를 두지 않는다
+            const bool keysOk = guide_->keys() == QStringList{QStringLiteral("Esc")};
             const bool textOk = guide_->hint() == spec || (guide_->hint().startsWith(spec.left(6)) && guide_->width() >= planHost_->width() - 2 * 12 - 32);   // 줄임표 알갱이(글자 한두 개) 허용
             // 도구 이름(단계)은 평면 폭에 들어가면 보여야 한다(검토 UI 5): 숨겼다면 칩이 평면 폭을 거의 다 쓴 경우만
             const bool titleOk = guide_->titleShown() || guide_->width() >= planHost_->width() - 2 * 12 - 32;
@@ -2427,8 +2318,8 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             const qint64 key0 = guide_->iconCacheKey();
             { QEvent dprEv(QEvent::DevicePixelRatioChange); QApplication::sendEvent(guide_, &dprEv); }
             const bool dprOk = guide_->iconCacheKey() != key0;
-            guide2 = inside && apart && textOk && titleOk && dprOk ? 1 : 0;
-            guide2Why = QStringLiteral("inside=%1 apart=%2 text=%3 title=%4 dpr-rerender=%9 guide-w=%5 host-w=%6 %8 hint=\"%7\"").arg(inside ? 1 : 0).arg(apart ? 1 : 0).arg(textOk ? 1 : 0).arg(titleOk ? 1 : 0).arg(guide_->width()).arg(planHost_->width()).arg(guide_->hint()).arg(guide_->debugWidths()).arg(dprOk ? 1 : 0);
+            guide2 = inside && apart && textOk && titleOk && dprOk && keysOk ? 1 : 0;
+            guide2Why = QStringLiteral("keys=") + guide_->keys().join(QLatin1Char('+')) + QStringLiteral(" inside=%1 apart=%2 text=%3 title=%4 dpr-rerender=%9 guide-w=%5 host-w=%6 %8 hint=\"%7\"").arg(inside ? 1 : 0).arg(apart ? 1 : 0).arg(textOk ? 1 : 0).arg(titleOk ? 1 : 0).arg(guide_->width()).arg(planHost_->width()).arg(guide_->hint()).arg(guide_->debugWidths()).arg(dprOk ? 1 : 0);
             if (!dir.isEmpty()) grab().save(QDir(dir).filePath(QStringLiteral("draw2.png")));
         }
         plan_->setDrawMode(false); plan_->setLine(keep, hadLine); pump(100);
@@ -2608,7 +2499,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             if (st == QLatin1String("1280w")) { F.tickStep = plan_->tickLabelStepM(); F.tickPxPerM = plan_->metersPerPixel() > 0 ? 1.0 / plan_->metersPerPixel() : 0; }
         }
     };
-    constexpr int kNarrowTile = 20;   // DESIGN_SPEC §2.1 · §3.3 · §12 — 사용자 결정 2026-10-09 「스펙을 실제(1280 → 20)로 고친다」(need32 = 1682 라 32 는 1280 에 안 들어감)
+    constexpr int kNarrowTile = 24;   // DESIGN_SPEC §2.1 · §3.3 · §12 — 창 폭에 들어가는 가장 큰 크기(1280 에서 need32 = 1410 · need24 ≤ 1280). 2026-10-09 사용자 결정 「스펙을 실제로 고친다」에 따라 실측값을 적는다: 20 → 24 (T5 에서 오른쪽 끝 좌표 입력 · 단면 찾기를 지워 270 px 가 비었다)
     const RibbonLook nk = Ribbon::looks().at(Ribbon::chooseLook(lw, 1280));   // lookWidths 에 리본 좌우 여백이 이미 들어 있다
     const QSize keepSize = size();
     const QString keepMsg2 = msg_ ? msg_->text() : QString(); const bool planActive2 = planTitle_ && planTitle_->property("active").toBool();

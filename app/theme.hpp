@@ -104,10 +104,6 @@ QToolButton#ribbonChip:disabled { color: #696862; }
 QToolButton#ribbonChip:checked:disabled, QToolButton#ribbonChip[primary="true"]:disabled { font-weight: 400; color: #696862; }
 QToolButton#ribbonChip[kbdFocus="true"]:focus { border: 1px solid #141413; }
 QToolButton#ribbonChip::menu-indicator { image: none; width: 0px; height: 0px; }
-QToolButton#ribbonCorner { min-height: 38px; padding: 0 6px; border: 1px solid #C2C0B6; border-radius: 8px; background: #FFFFFF; color: #141413; font-size: 13px; }
-QToolButton#ribbonCorner:hover { background: #F5F4ED; border-color: #B0AEA5; }
-QLineEdit#ribbonSearch { min-height: 32px; max-height: 32px; min-width: 142px; max-width: 142px; border: 1px solid #C2C0B6; border-radius: 8px; background: #FFFFFF; padding: 0 10px; font-size: 12px; }
-QLineEdit#ribbonSearch:focus { border: 2px solid #141413; padding: 0 9px; }
 
 QWidget#docTabsRow { background: #F0EEE6; border-bottom: 1px solid #DEDCD1; }
 QLabel#docTabCorner { color: #5E5D59; font-size: 13px; padding-right: 8px; }
@@ -240,11 +236,11 @@ QLabel#sheetDone { font-size: 12px; color: #3F6B31; }
 QFrame#sideRule { background: #DEDCD1; border: none; }
 QLabel#inspName { font-family: Batang, "Noto Serif KR", "Malgun Gothic"; font-size: 20px; font-weight: 500; color: #141413; }
 QLabel#ccEmpty { font-size: 20px; color: #5E5D59; }
-QToolButton#ribbonCorner:disabled, QToolButton#homeBtn:disabled, QPushButton#homeBtn:disabled { color: #696862; background: #F5F4ED; border-color: #DEDCD1; }
-QLineEdit#ribbonSearch:disabled, QLineEdit#homeFind:disabled { background: #F0EEE6; color: #73726C; border-color: #DEDCD1; }
+QToolButton#homeBtn:disabled, QPushButton#homeBtn:disabled { color: #696862; background: #F5F4ED; border-color: #DEDCD1; }
+QLineEdit#homeFind:disabled { background: #F0EEE6; color: #73726C; border-color: #DEDCD1; }
 QPushButton[kbdFocus="true"]:focus { border: 2px solid #141413; padding: 5px 15px; }
 QPushButton#primary[kbdFocus="true"]:focus { border: 2px solid #141413; }
-QToolButton#statusBadge[kbdFocus="true"]:focus, QToolButton#ribbonCorner[kbdFocus="true"]:focus { border: 2px solid #141413; }
+QToolButton#statusBadge[kbdFocus="true"]:focus { border: 2px solid #141413; }
 QListWidget#sectionList:focus { border: 1px solid #141413; border-radius: 8px; }
 QLabel#sheetName { font-family: Batang, "Noto Serif KR", "Malgun Gothic"; font-size: 20px; font-weight: 500; color: #141413; }
 QToolButton#sheetTile { min-width: 64px; max-width: 64px; min-height: 46px; max-height: 46px; padding: 0; border: 1px solid #DEDCD1; border-radius: 8px; background: #FFFFFF; font-size: 11px; color: #141413; }
@@ -337,7 +333,7 @@ QToolButton:checked, QToolButton#chip:checked { border-color: #141413; }
 }
 
 // ---- 아이콘: 먹색 선(데이터 색 아이콘만 빨강·회색 획 유지)
-enum class Ico { Open, Draw, Flip, Plan, Fit, Orbit, Image, Line, Levels, Dxf, Png, Smooth, Tif, Geo, Xyz, Las, Csv, ZoomIn, ZoomOut, Close, Info, Clear, View1, View2, Lang, Band,
+enum class Ico { Open, Draw, Flip, Plan, Fit, Orbit, Image, Line, Levels, Dxf, Png, Smooth, Tif, Geo, Xyz, Las, Csv, ZoomIn, ZoomOut, Close, Info, Clear, View1, View2, Band,
                  Recent, Sheet, Undo, Redo, Measure, Height, Move, Add, Max, Picture, Keys, Vex };
 
 /// Ico → SVG 이름(app/icons/, 디자인 v5 §11). 새 Ico 를 더하면 여기와 icons.cmake 목록에 같이 더한다
@@ -351,7 +347,7 @@ inline const char* iconName(Ico k) {
     case Ico::Las: return "cloud-las";      case Ico::Csv: return "csv";           case Ico::ZoomIn: return "zoom-in";
     case Ico::ZoomOut: return "zoom-out";   case Ico::Close: return "x";           case Ico::Info: return "info";
     case Ico::Clear: return "x";            case Ico::View1: return "map";         case Ico::View2: return "profile";
-    case Ico::Lang: return "file-text";     case Ico::Band: return "fade";     case Ico::Recent: return "clock";
+    case Ico::Band: return "fade";     case Ico::Recent: return "clock";
     case Ico::Sheet: return "sheet";        case Ico::Undo: return "undo-2";       case Ico::Redo: return "redo-2";
     case Ico::Measure: return "crosshair";  case Ico::Height: return "height";     case Ico::Move: return "move";
     case Ico::Add: return "plus";           case Ico::Max: return "maximize";      case Ico::Picture: return "image";

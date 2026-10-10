@@ -870,15 +870,6 @@ Vec2 PlanView::lockAxis(const Vec2& w, Qt::KeyboardModifiers m) const {
     return std::fabs(d.x) >= std::fabs(d.y) ? Vec2(w.x, line_.a.y) : Vec2(line_.a.x, w.y);
 }
 
-void PlanView::finishDrawAt(const SectionLine& l) {
-    line_.a = l.a; line_.b = l.b;
-    if (SectionFrame(line_).L <= 1e-3) return;
-    hasLine_ = true; drawStage_ = -1; setCursor(Qt::ArrowCursor);
-    if (onDrawModeChanged) onDrawModeChanged(false);
-    update();
-    emitLine(true);
-}
-
 void PlanView::setDrawMode(bool on) {
     drawStage_ = on ? 0 : -1;
     setCursor(on ? Qt::CrossCursor : Qt::ArrowCursor);

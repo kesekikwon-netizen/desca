@@ -255,8 +255,6 @@ void MainWindow::updateEnabled() {
     for (auto* c : depthChip_) if (c) c->setEnabled(sc && secCtx);
     if (depthBox_) depthBox_->setEnabled(sc && secCtx);
     for (QWidget* wd : {elevRow2_, static_cast<QWidget*>(opacityMenu_), lineWidthMenu_}) if (wd) wd->setEnabled(sc && secCtx);   // 입면 아래 줄 · 더보기의 같은 칸도 입면 칸과 같이
-    if (findBox_) findBox_->setEnabled(!home);
-    if (coordBtn_) coordBtn_->setEnabled(sc && !busy && secCtx);   // 리본 오른쪽 끝 「좌표 입력」도 단면 문맥에서만(검토 I2)
     action("open")->setEnabled(!busy); action("recent")->setEnabled(!busy && !recentFiles().isEmpty());
 }
 
@@ -330,7 +328,6 @@ void MainWindow::applyScene(OpenedScene&& s) {
     info_->setText(streaming_ ? QStringLiteral("%1%2 · LOD 스트리밍").arg(kind_, s.layers > 1 ? QStringLiteral(" · 레이어 %1개").arg(s.layers) : QString())
                               : QStringLiteral("%1 · 화면 %2만 삼각형").arg(kind_).arg(displayTris_ / 10000.0, 0, 'f', 1));
     setWindowTitle(QStringLiteral("%1 — Trench %2").arg(QFileInfo(path_).fileName(), QString::fromUtf8(kVersion)));
-    if (findBox_) findBox_->clear();   // 검토 M5
     showStart(false);
     addRecent(path_);
     restoreModelState();
@@ -358,7 +355,6 @@ void MainWindow::closeScene() {
     srsLabel_->style()->unpolish(srsLabel_); srsLabel_->style()->polish(srsLabel_);
     notice_->setVisible(false); srsReport_ = SrsReport();
     src_.reset(); path_.clear();
-    if (findBox_) findBox_->clear();   // 거르기 글은 모델과 함께 끝(검토 M5)
     sections_.clear(); thumbs_.clear(); current_ = -1; refreshSectionList();
     undo_->clear();
     setWindowTitle(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));

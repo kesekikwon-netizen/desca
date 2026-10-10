@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
     int sheetWheel = 0;
     int sheetPick = -1;   // --sheet-pick N: 조판 탭 왼쪽 도면 목록 N 번째 줄을 누름(0 = 평면도)
     bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
-    QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, coordShot, uiAuditDir, sheetBatch;
+    QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, uiAuditDir, sheetBatch;
     QString iconSheetPng; bool iconSheet = false;
     int splashEsc = -1;   // --splash-esc N: 여는 화면을 띄우고 N ms 에 Esc 를 눌러 건너뛰는지 잰다(종료 6 = 늦게 닫힘)
     QString appIconDir;   // --app-icon DIR: 앱 아이콘 PNG 다섯 장을 쓰고 눈 검사(실패 종료 코드 12)
@@ -281,7 +281,6 @@ int main(int argc, char** argv) {
         else if (s == "--settings") nx();
         else if (s == "--export-dialog-shot") dialogShot = nx();
         else if (s == "--datum-shot") datumShot = nx();
-        else if (s == "--coord-shot") coordShot = nx();
         else if (s == "--ctx-shot") ctxShot = nx();
         else if (s == "--app-icon") appIconDir = nx();
         else if (s == "--splash-esc") splashEsc = nx().toInt();
@@ -665,16 +664,6 @@ int main(int argc, char** argv) {
         } else m = "unknown export kind";
         log(QStringLiteral("export-%1 %2: %3").arg(kind, ok ? "ok" : "FAILED", QString(m).replace('\n', " | ")));
         if (!ok) rc = 4;
-    }
-    if (!coordShot.isEmpty() && w.source()) {
-        std::unique_ptr<QDialog> dlg(w.coordEntryDialog());
-        if (dlg) {
-            dlg->show();
-            processFor(400);
-            bool ok = dlg->grab().save(coordShot);
-            log(QStringLiteral("coord-shot %1: %2").arg(ok ? "ok" : "FAILED", coordShot));
-            dlg->close();
-        }
     }
     if (!datumShot.isEmpty() && w.source()) {
         std::unique_ptr<QDialog> dlg(w.heightDatumDialog());
