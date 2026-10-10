@@ -221,4 +221,48 @@ ui-audit home-clipped=0 cells-elided=0 elide-tip-missing=0 min-width=1280 at=run
       - ▾ 가 16 px 아이콘 안 6 × 3.6 px 라 작다(검토자 눈 확인 몫).
       - 감사 `carets` 는 구운 ▾ 를 속성 `caretBaked` 로 믿는다. 픽셀 검사는 아니다. 그래서 UI S1 의 실제 근거는 캡처 `work-1280.png` · `draw-1280.png` 다.
       - 125 · 175 % 진짜 모니터는 못 봤다(offscreen V2 로 갈음).
-    - 범위 메모: `secTogglesMenu_->setAccessibleName("그릴 것")`(code note 1 — 조정자가 범위 밖으로 둔 note)를 같은 줄을 고치며 한 줄 넣었다(`00c9a43`). 되돌리는 커밋은 만들지 않았다.
+    - 범위 메모(회차 2): `secTogglesMenu_->setAccessibleName("그릴 것")`(code note 1 — 조정자가 범위 밖으로 둔 note)를 같은 줄을 고치며 한 줄 넣었다(`00c9a43`). 되돌리는 커밋은 만들지 않았다.
+- **수정 회차 3(사용자 허가 — 한도 2 를 넘는 회차, 사용자 답 「한 번 더 고친 뒤 병합 (추천)」)**. 범위는 ⓐ ⓑ 두 건뿐이다(재검토 넷 pass). 근거는 `review.md` code-reviewer 2차 should A · C, kerf-ui-reviewer 2차 S1′ · S2, 「종합 2차」.
+  - **ⓐ 1920 이상 홈 칸 배치를 옛 모양으로**(code C · UI S2) — `5526b5c`.
+    - `fitHomeCells` 는 먼저 옛 비율 폴더 2 : 나머지 1(반올림 경계)로 칸 폭을 잡는다.
+    - 그다음 실제 글 폭(`horizontalAdvance`)으로 확인한다: 칸 이름 전부와 칸 1–5 값이 여백 12 로 들어가는가(+1 px 보험), 폴더가 「C:…」를 담는가.
+    - 들어가면 그 배치를 그대로 쓰고, 아니면 rework 2 의 좁은 창 규칙으로 간다. 판단은 창 폭 상수가 아니라 글 폭이다.
+    - DESIGN_SPEC §7 에 「넉넉하면 2 : 1, 줄임표가 생길 때만 좁은 창 규칙」을, §12 에 `cells-mode` 를 적었다.
+  - **ⓑ 구운 ▾ 를 보이게**(code A · UI S1′) — `02688be`.
+    - `kerf::caretTriangle(px)`(16 px 에서 8 × 5, 오른쪽 아래 끝) 한 곳을 그리기와 감사가 같이 쓴다.
+    - `iconWithCaret` 은 바탕색 테(펜 2 · 둥근 이음 + 바탕색 채움)를 먼저 깔고, 그 위에 펜 없이 먹색으로 채운다. 단추 폭은 그대로다.
+    - 감사 `carets` 는 속성 대신 픽셀로 판정한다: 「▾ 삼각형 안쪽 먹색 픽셀 ≥ 리본 메뉴 칩 ▾ 넓이(6 × 4 삼각형 = 12 논리 px²) × 배율²」. 줄에 `caret-ink=가장 작은 값/필요` 를 찍는다.
+  - **RED**(`97f5525`, 감사 1280x800 · 1920x1040 · 2560x1440 ×1, `C:\dev\tmp\n1280\ui-r3t1-*`) — 세 실행 모두 RESULT fail(exit 9):
+```
+1280: ui-audit sec-header-overlap=0 kept=1 toggles-reachable=1 carets=0 caret-ink=0/12 refit=1/0 …  FAIL
+1920: ui-audit home-clipped=0 cells-elided=0 cells-mode=run:content,1280w:content … min-width=1280 …  FAIL
+2560: ui-audit home-clipped=0 cells-elided=0 cells-mode=run:content,1280w:content … min-width=1280 …  FAIL
+```
+  - **GREEN:**
+```
+ⓐ 1920 · 2560 · 긴 이름 1920: ui-audit home-clipped=0 cells-elided=0 cells-mode=run:ratio,1280w:content elide-tip-missing=0 min-width=1280 at=run:0:0,1280w:0:0
+ⓐ 1280 · 긴 이름 1280:        ui-audit home-clipped=0 cells-elided=0 cells-mode=run:content,1280w:content … (rework 2 모양 그대로)
+ⓑ 1280 ×1 / ×1.25 / ×1.75 / ×2: carets=1 caret-ink=16/12 · 24/19 · 46/37 · 72/48, sec-header-overlap=0, RESULT ok
+```
+  - **판별력(ⓑ):** 그리기를 옛 순서(먹색 채운 뒤 같은 윤곽에 테 1.5)로 임시로 되돌렸다. 그러면 1280 ×1 이 `carets=0 caret-ink=4/12 … FAIL`(exit 9)이다(`ui-r3red-*`). 되돌린 뒤 커밋하지 않았다(`TEMP-` 표시 없음 확인).
+  - **판정:**
+    1. **(시험 판정 변경)** RED 커밋에서는 carets 를 「맨 아이콘보다 더해진 먹색(오른쪽 아래 사분면)」으로 쟀다. 새 8 × 5 ▾ 가 그 기준으로는 11/12 · 47/48 · 15/19 로 모자랐다. ▾ 가 아이콘 획과 겹친 자리는 「더해진」 것으로 세지 않기 때문이다. 그래서 GREEN 커밋에서 「▾ 삼각형 안쪽 먹색」으로 바꿨다. 기준값 12(리본 ▾ 넓이)는 그대로이고, 판별력은 옛 그리기로 다시 보였다(4/12 FAIL). 잘못이면: 삼각형 모양을 감사가 그리기와 같은 함수에서 가져오므로, 둘이 함께 틀리면 못 잡는다(캡처로 갈음).
+    2. **cells-mode 기대 = 실행 크기 1920 이상 → ratio, 1280(합성) → content.** 1280 의 content 는 합성 모델 글 폭에서 나온 기대다. 판단 자체는 글 폭이다(창 폭 상수가 아님). 잘못이면: 아주 짧은 값의 모델에서는 1280 도 ratio 가 맞을 수 있는데, 감사는 합성 모델만 돈다.
+    3. 옛 비율 판정에 +1 px 보험을 넣었다(code note 5 의 정수 글 폭 경계).
+  - **검증**(HEAD `02688be`, worktree 깨끗):
+    - V8 `-UiSizes 1280x800,1920x1040,3440x1440,3840x2160 -UiScales 1,2` → **RESULT PASS**(verify.md 10:17). 8 줄 모두 `RESULT ok`, 빌드 새 경고 0, 빠른 시험 51325, asec-section `polylines=1 vertices=54`.
+    - 그 뒤 `-UiSizes 1280x800,2560x1440 -UiScales 1.25,1.75` → **RESULT PASS**(10:22, 4 줄 ok).
+    - 따로 `-UiSizes 2560x1440 -UiScales 1`(기준 모니터 TFG39Q14V) → **RESULT PASS**(10:24): `carets=1 caret-ink=16/12` · `cells-mode=run:ratio,1280w:content`.
+    - 회귀: `--icon-sheet n=62 missing=0 RESULT ok` · `--sheet-check RESULT ok`(`level-pt … ok=1`) · `--ctx-shot ok … guide=1`. core/tests/CMake/CI diff 는 비어 있다.
+  - **캡처**(실제 화면 150 %) `C:\dev\tmp\n1280-rework3\`:
+    - `home-1920.png` · `home-1920-long.png`: 칸이 폴더 2 : 나머지 1(옛 배치), 글은 다 보인다.
+    - `home-2560.png` · `home-2560-long.png`: 이 화면(논리 2296 폭)에 잘려 2296 폭으로 찍혔고, 역시 2 : 1 이다. 진짜 2560 은 offscreen 감사로 갈음했다.
+    - `home-1280.png` · `home-1280-long.png`: rework 2 모양 그대로다(칸 이름 · 값 전부 보임, 폴더만 줄임).
+    - `work-1280.png` · `draw-1280.png`: 머리 겹침이 없다.
+    - `caret-crop-1280.png`: 고친 뒤 ▾ 를 6 배로 키워 리본 「더보기」 칩 ▾ 와 나란히 놓았다. 두 ▾ 의 크기가 비슷하게 또렷하다.
+    - `caret-crop-1280-before.png`: rework 2 의 같은 자리. ▾ 가 2–3 px 점이다.
+  - **남은 위험:**
+    - 마우스를 올리면 바탕이 #F5F4ED 라 ▾ 둘레 1 px 흰 테가 옅게 보인다(code note 10, 작음).
+    - 125 · 175 % 진짜 모니터는 못 봤다(offscreen V2 로 갈음).
+    - 범위 밖 should(refit `== 1` · 정보 줄 열쇠 · stripCut 숨김 등)는 종합 2차대로 후속으로 넘긴다.
+  - 커밋(회차 3): `97f5525`(RED) · `5526b5c`(ⓐ) · `02688be`(ⓑ). push 하지 않았다.

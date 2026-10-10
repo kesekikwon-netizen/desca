@@ -281,3 +281,54 @@
 3. **전체 시험(`CoalescingWorker` 포함)** — core/tests 변경 없음(diff 비어 있음)이라 빠른 시험만.
 4. **실제 125 · 175 % 모니터 · 3440 · 3840 실제 화면** — 이 PC 는 150 % 하나 · 화면에 잘림. offscreen V8 · V2 로 갈음(B5 와 같은 방식).
 5. **「목록에서 지우기」 클릭 · 「그릴 것」 메뉴를 연 모양(체크 · 키 글) · 긴 단면 이름(`1280L`) 실제 화면** — 감사 키(`home-stale-children=0` · `toggles-reachable=1` · `1280L:5:0`)로만 간접 확인.
+## 검증 2026-10-10 10:17 · **PASS** · HEAD `02688be73475427ddd17ef34c4420bb0160997ea`
+- 기준 `308daac82e8e46189600488c209d43020e046cc2` · 바뀐 파일 11개: app/icons.cpp, app/icons.hpp, app/mainwindow.hpp, app/mainwindow_ui.cpp, app/planview.cpp, app/planview.hpp, app/ribbon.cpp, app/ribbon.hpp, app/sectionview.cpp, app/sheetexport.cpp, docs/design/DESIGN_SPEC.md
+- 시험 범위: 빠른 시험(~CoalescingWorker*) · ui-audit: on (크기 1280x800,1920x1040,3440x1440,3840x2160 · 배율 1,2)
+- 로그 폴더(미커밋, 이 PC): `C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828`
+
+| 단계 | 판정 | 종료 코드 | 초 | 요약 | 명령 · 로그 |
+| --- | --- | --- | --- | --- | --- |
+| configure | SKIP |  |  | 건너뜀: 이미 구성됨(CMakeCache.txt 있음) |  |
+| build | PASS | 0 | 1 | 빌드 성공, 새 경고 0개(기존 CRT deprecated · fopen · mirrored 만) | `cmake --build C:\dev\kerf-wt\20261010-01-narrow-1280-build` · `build.log` |
+| tests(quick) | PASS | 0 | 3 | assertions: 51325 ¦ 51325 passed /  | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec_tests.exe "~CoalescingWorker*"` · `tests-quick.log` |
+| asec-section | PASS | 0 | 1 | tiles(leaf)=12 tris=186272 rawSeg=602 polylines=1 vertices=54 z=[44.20,47.50] image=3000x825 res=0.0040  collect=11ms cut=1ms image=14ms | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec-section.exe C:\dev\kerf-synth\Synthetic.3mx 200002 450006 200014 450006 --out C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\sec` · `asec-section.log` |
+| ui-audit 1280x800 ×1 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1280x800 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\settings-1280x800-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\ui-audit-1280x800-x1 --quit` · `ui-audit.txt` |
+| ui-audit 1280x800 ×2 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1280x800 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\settings-1280x800-x2 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\ui-audit-1280x800-x2 --quit` · `ui-audit.txt` |
+| ui-audit 1920x1040 ×1 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1920x1040 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\settings-1920x1040-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\ui-audit-1920x1040-x1 --quit` · `ui-audit.txt` |
+| ui-audit 1920x1040 ×2 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1920x1040 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\settings-1920x1040-x2 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\ui-audit-1920x1040-x2 --quit` · `ui-audit.txt` |
+| ui-audit 3440x1440 ×1 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 3440x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\settings-3440x1440-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\ui-audit-3440x1440-x1 --quit` · `ui-audit.txt` |
+| ui-audit 3440x1440 ×2 | PASS | 0 | 68 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 3440x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\settings-3440x1440-x2 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\ui-audit-3440x1440-x2 --quit` · `ui-audit.txt` |
+| ui-audit 3840x2160 ×1 | PASS | 0 | 67 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 3840x2160 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\settings-3840x2160-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\ui-audit-3840x2160-x1 --quit` · `ui-audit.txt` |
+| ui-audit 3840x2160 ×2 | PASS | 0 | 69 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 3840x2160 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\settings-3840x2160-x2 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-100828\ui-audit-3840x2160-x2 --quit` · `ui-audit.txt` |
+| ci(base) | WARN | 3 |  | CI 308daac none (이 커밋의 실행 없음 — push 안 됨 또는 아직 시작 전) | `ci-status.ps1 -Sha 308daac82e8e46189600488c209d43020e046cc2` |
+
+## 검증 2026-10-10 10:22 · **PASS** · HEAD `02688be73475427ddd17ef34c4420bb0160997ea`
+- 기준 `308daac82e8e46189600488c209d43020e046cc2` · 바뀐 파일 11개: app/icons.cpp, app/icons.hpp, app/mainwindow.hpp, app/mainwindow_ui.cpp, app/planview.cpp, app/planview.hpp, app/ribbon.cpp, app/ribbon.hpp, app/sectionview.cpp, app/sheetexport.cpp, docs/design/DESIGN_SPEC.md
+- 시험 범위: 빠른 시험(~CoalescingWorker*) · ui-audit: on (크기 1280x800,2560x1440 · 배율 1.25,1.75)
+- 로그 폴더(미커밋, 이 PC): `C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-101810`
+
+| 단계 | 판정 | 종료 코드 | 초 | 요약 | 명령 · 로그 |
+| --- | --- | --- | --- | --- | --- |
+| configure | SKIP |  |  | 건너뜀: 이미 구성됨(CMakeCache.txt 있음) |  |
+| build | PASS | 0 | 1 | 빌드 성공, 새 경고 0개(기존 CRT deprecated · fopen · mirrored 만) | `cmake --build C:\dev\kerf-wt\20261010-01-narrow-1280-build` · `build.log` |
+| tests(quick) | PASS | 0 | 3 | assertions: 51325 ¦ 51325 passed /  | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec_tests.exe "~CoalescingWorker*"` · `tests-quick.log` |
+| asec-section | PASS | 0 | 1 | tiles(leaf)=12 tris=186272 rawSeg=602 polylines=1 vertices=54 z=[44.20,47.50] image=3000x825 res=0.0040  collect=11ms cut=1ms image=15ms | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec-section.exe C:\dev\kerf-synth\Synthetic.3mx 200002 450006 200014 450006 --out C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-101810\sec` · `asec-section.log` |
+| ui-audit 1280x800 ×1.25 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1280x800 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-101810\settings-1280x800-x1.25 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-101810\ui-audit-1280x800-x1.25 --quit` · `ui-audit.txt` |
+| ui-audit 1280x800 ×1.75 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 1280x800 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-101810\settings-1280x800-x1.75 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-101810\ui-audit-1280x800-x1.75 --quit` · `ui-audit.txt` |
+| ui-audit 2560x1440 ×1.25 | PASS | 0 | 67 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 2560x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-101810\settings-2560x1440-x1.25 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-101810\ui-audit-2560x1440-x1.25 --quit` · `ui-audit.txt` |
+| ui-audit 2560x1440 ×1.75 | PASS | 0 | 67 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 2560x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-101810\settings-2560x1440-x1.75 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-101810\ui-audit-2560x1440-x1.75 --quit` · `ui-audit.txt` |
+| ci(base) | WARN | 3 |  | CI 308daac none (이 커밋의 실행 없음 — push 안 됨 또는 아직 시작 전) | `ci-status.ps1 -Sha 308daac82e8e46189600488c209d43020e046cc2` |
+
+## 검증 2026-10-10 10:24 · **PASS** · HEAD `02688be73475427ddd17ef34c4420bb0160997ea`
+- 기준 `308daac82e8e46189600488c209d43020e046cc2` · 바뀐 파일 11개: app/icons.cpp, app/icons.hpp, app/mainwindow.hpp, app/mainwindow_ui.cpp, app/planview.cpp, app/planview.hpp, app/ribbon.cpp, app/ribbon.hpp, app/sectionview.cpp, app/sheetexport.cpp, docs/design/DESIGN_SPEC.md
+- 시험 범위: 빠른 시험(~CoalescingWorker*) · ui-audit: on (크기 2560x1440 · 배율 1)
+- 로그 폴더(미커밋, 이 PC): `C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-102257`
+
+| 단계 | 판정 | 종료 코드 | 초 | 요약 | 명령 · 로그 |
+| --- | --- | --- | --- | --- | --- |
+| configure | SKIP |  |  | 건너뜀: 이미 구성됨(CMakeCache.txt 있음) |  |
+| build | PASS | 0 | 1 | 빌드 성공, 새 경고 0개(기존 CRT deprecated · fopen · mirrored 만) | `cmake --build C:\dev\kerf-wt\20261010-01-narrow-1280-build` · `build.log` |
+| tests(quick) | PASS | 0 | 3 | assertions: 51325 ¦ 51325 passed /  | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec_tests.exe "~CoalescingWorker*"` · `tests-quick.log` |
+| asec-section | PASS | 0 | 1 | tiles(leaf)=12 tris=186272 rawSeg=602 polylines=1 vertices=54 z=[44.20,47.50] image=3000x825 res=0.0040  collect=12ms cut=1ms image=14ms | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\asec-section.exe C:\dev\kerf-synth\Synthetic.3mx 200002 450006 200014 450006 --out C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-102257\sec` · `asec-section.log` |
+| ui-audit 2560x1440 ×1 | PASS | 0 | 66 | ui-audit RESULT ok | `C:\dev\kerf-wt\20261010-01-narrow-1280-build\app\SectionViewer.exe C:\dev\kerf-synth\Synthetic.3mx --line 200002 450006 200014 450006 --size 2560x1440 --settings C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-102257\settings-2560x1440-x1 --ui-audit C:\dev\kerf-wt\20261010-01-narrow-1280-build\logs\20261010-102257\ui-audit-2560x1440-x1 --quit` · `ui-audit.txt` |
+| ci(base) | WARN | 3 |  | CI 308daac none (이 커밋의 실행 없음 — push 안 됨 또는 아직 시작 전) | `ci-status.ps1 -Sha 308daac82e8e46189600488c209d43020e046cc2` |
