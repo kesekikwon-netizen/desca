@@ -1,7 +1,7 @@
 ---
 id: 20261010-02-msvc-c2026
 title: MSVC 빌드 고침: theme.hpp QSS 원시 문자열 16 KB 아래로(C2026)
-status: approved          # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
+status: merged            # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
 rework_count: 0           # 최대 2. 넘으면 needs-human
 ai_review: pass           # pending | pass | fail  (검토자 셋·UI 검토 결과 종합)
 user_approval: approved   # pending | approved | rejected  (사용자가 /factory approve 로 말한 뒤에만 approved)
@@ -10,11 +10,11 @@ base_sha: 373c0e7dee7c05a9d71689ef8272f73305fefc82
 branch: factory/20261010-02-msvc-c2026
 worktree: C:\dev\kerf-wt\20261010-02-msvc-c2026
 build_dir: C:\dev\kerf-wt\20261010-02-msvc-c2026-build
-head_sha: 044ab95e15e9995de134b3ee9c00b48a5b234559
-last_verify: PASS (2026-10-10 18:19)
+head_sha: 362e331c655031eeb5caadfeaeb015ac6a056fbd
+last_verify: PASS (2026-10-10 18:29)
 human_review_required:    # 사람 검토 필수 영역에 해당하면 그 이유(좌표계·단위·수직 기준·수치 알고리즘 / 파일 형식·호환 / 원본 덮어쓰기·삭제 / 빌드·의존성·패키징·CI / 비밀정보·권한)
 created: 2026-10-10 17:52
-updated: 2026-10-10 18:19
+updated: 2026-10-10 18:29
 ---
 # 20261010-02-msvc-c2026 — MSVC 빌드 고침: theme.hpp QSS 원시 문자열 16 KB 아래로(C2026)
 
@@ -31,6 +31,8 @@ updated: 2026-10-10 18:19
 | 2026-10-10 13:20 | build → verify · review | builder → factory | 커밋 `044ab95`(theme.hpp 6+/3−, 빈 줄 셋 → `)" R"(` · 규칙 주석). builder: MSVC 증분 빌드 exit 0 · C2026 0 · clang-cl V8 PASS · QSS 바이트 같음(len 20241 · 343) · 조각 최대 6783 · 캡처 work/start/draw 해시 같음. test-runner(MSVC 깨끗한 빌드 포함) + code-reviewer 시작. **판정:** 화면 불변(캡처 해시 같음) · 좌표 · 입력 · 파일 무관이라 correctness · security · kerf-ui 검토는 해당 없음 |
 
 | 2026-10-10 13:50 | verify · review → approved | factory | test-runner: MSVC `--clean-first` exit 0 · error 0 · C2026 0(기존 C4551 만) · clang-cl V4 PASS · QSS equal(20241 · 343) · 조각 ≤ 6783. code-reviewer pass(note 4, 같은 문제 다른 파일 없음). AC5 는 builder 캡처 해시 비교(work/start/draw 같음). 화면 불변 고장 수리 → 사전 허가 R1.5 로 승인. 다음: 통합 · `-Full` 재검증 · 병합 |
+
+| 2026-10-10 14:05 | merged | factory | 본 저장소 `--no-ff` → **`5331124`**. push 안 함 — GitHub Actions 초록불 확인은 push 뒤(SKILL §5-6) |
 
 ## 참조
 - 명세 `spec.md` · 구현 요약 `build.md` · 검증 `verify.md` · 검토 `review.md` · 승인 `approval.md`

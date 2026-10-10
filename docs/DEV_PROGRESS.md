@@ -246,6 +246,11 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **판정:** 2차 재검토 뒤 1920 이상 칸 배치 변경(명세 §1 과 어긋남)과 ▾ 안 보임은 자동으로 넘기지 않고 사용자에게 물음(R1.5 예외) → 「한 번 더 고친 뒤 병합」. 남은 should · note 는 대기 R1b.
 - **남은 문제:** push 전. worktree · 브랜치 삭제는 사용자 확인 뒤. 기록 `factory/jobs/20261010-01-narrow-1280/`.
 
+### 2026-10-10 · Claude Code — R0 MSVC 빌드 고침(팩토리 `20261010-02-msvc-c2026`) — 병합 `5331124`
+- **무엇을:** `app/theme.hpp` 의 QSS 원시 문자열(20241 바이트 한 조각 — MSVC C2026)을 이미 있는 빈 줄 셋에서 `)" R"(` 로 나눠 4조각(4096 · 6783 · 5208 · 4154)으로, 규칙 주석(조각 ≤ 8000 바이트 · 빈 줄에서 나눔 · 출처 MS 문서 C2026).
+- **확인:** RED = VS 2022 생성기 빌드 exit 1(C2026 하나). GREEN = `--clean-first` exit 0 · error 0(기존 C4551 경고만) · clang-cl `-Full` 51339 통과 · 감사 8조합 RESULT ok · QSS 바이트 같음(20241 · 343) · 캡처 work/start/draw 해시 같음. code-reviewer pass.
+- **판정:** correctness · security · UI 검토는 해당 없음(화면 · 좌표 · 입력 무관). GitHub Actions 초록불은 push 뒤에만 확인 가능(Qt 6.8.3 헤더는 이 PC에 없음).
+
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.
 0. **(2026-10-10) 최종 점검 끝 · 사용자 결정 Q0–Q6 받음(모두 추천안, Q0 = 「모델마다 다르다」) → 정본 대기 목록 R0–R23(`factory/backlog.md` 맨 위 표).** 순서: R1(#3c) → R0(MSVC) → 최종 점검 worktree E4–E7 → R2 기준 화면 → R3–R9 화면 정리 · 좌표계 · 높이 · F1 · 눈금 → R10 제거 25 → R11–R15 도면(진북 화살 · DXF · 층 · 범례 · 표제란) → R16–R17 H · O → R18 저장 실패 안내 → R19–R20 기준 화면 다듬기 · 첫 창 → R21–R22 도구 · CI → R23 문서. (아래는 결정 전 기록)
