@@ -22,13 +22,13 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-10 · Claude Code — **최종 점검 문서 [`docs/REVIEW_2026-10-10.md`](REVIEW_2026-10-10.md) 완료 → 사용자 결정 대기(Q0–Q6)**: 실행 점검에서 GitHub CI Windows 실패 원인 = MSVC 컴파일 오류(`theme.hpp` C2026) 발견 → R0. #3c(1280 좁은 창 + 홈 겹침 버그)는 마지막 수정(rework 2/2) 중. 이전: **B5(해상도 · DPI)를 팩토리 작업 `20261009-01-b5-dpi` 로 끝내고 병합(`8cc67fb`)**. 남은 단계는 모두 팩토리로(`factory/backlog.md` #3c → #3 → #3b → #4 → #4b → #5 → #6 → #7 → #8 → #8b → #9). 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` · 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` |
+| 마지막 갱신 | 2026-10-10 · Claude Code — **#3c(1280 좁은 창 + 홈 겹침 · 지우기 버그) 병합 `3c9b0d4`** — 수정 3회차(사용자 허가 「한 번 더 고친 뒤 병합」) 뒤 검토 넷 · 독립 검증 통과. 다음은 정본 대기 목록(`factory/backlog.md`) R0(MSVC 빌드 고침)부터 6단계(R23)까지 순서대로(사용자 /goal 「6단계가지 순차적으로 진행」). 점검 문서 [`docs/REVIEW_2026-10-10.md`](REVIEW_2026-10-10.md) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
 | 바뀐 파일(내용) | 모두 커밋됨(단계마다 커밋 — 사용자 지시 2026-10-09 「단계마다 깃커밋해줘」). 로컬 `feature/design-v2` 는 `origin`(`0f7fbfe`)보다 앞섬 — **push 는 사용자 말 때**(또는 「자동 깃 커밋 푸시」 세션). `git log --oneline 0f7fbfe..HEAD` |
-| 빌드 | 성공 — `C:\dev\kerf-v4c` (§2), 병합 `8cc67fb` 뒤 다시 빌드 exit 0 · 새 경고 0 |
-| 시험 | 병합 뒤 `asec_tests "~CoalescingWorker*"` 51325 통과 · 1 건너뜀. 팩토리 검증(worktree, 통합 커밋 `b378b3f`): 전체 `asec_tests` 51339 통과 · `--ui-audit` **1280×800 · 1920×1040 · 3440×1440 · 3840×2160 × 배율 1 · 2 모두 RESULT ok** + 1920 ×1.25 · ×1.75 ok · 실제 화면 1920 ok · `--sheet-check` ok · `--icon-sheet` ok · `--ctx-shot` guide=1 · GitHub Actions: push 전(기준 `0f7fbfe` 는 Windows 작업 failure — 원인 미조사) |
+| 빌드 | 성공 — `C:\dev\kerf-v4c` (§2), 병합 `3c9b0d4` 뒤 다시 빌드 exit 0 |
+| 시험 | 병합 뒤 `asec_tests "~CoalescingWorker*"` 51325 통과. 팩토리 통합 검증(`9a77d61`): 전체 51339 통과 · `--ui-audit` 1280×800 · 1920×1040 · 3440×1440 · 3840×2160 × 1 · 2 + 1280 · 2560 × 1 · 1.25 · 1.75 모두 RESULT ok · GitHub Actions: Windows 작업은 MSVC C2026 으로 실패 중(R0) |
 | 최근 캡처 | `C:\dev\tmp\kerf-shots\b5-merged-work.png`(병합 빌드 1920×1040 실제 화면) · `C:\dev\tmp\b5-shots\`(work-1280 · 1920 · 1920-x1.25 · 1920-x2 · 3440 · 3840 · draw-1280 · start-1280) · offscreen 감사 `C:\dev\kerf-wt\20261009-01-b5-dpi-build\logs\` (이 PC에만) |
 
 ## 2. 이 PC에서 빌드 · 실행 (검증된 명령)
@@ -239,6 +239,13 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 문서만 바꿈 — 빌드 · 시험 대상 아님. `git status --short`: 새 파일 2개 + 이 파일 + `CLAUDE.md` + 다른 세션(팩토리 `20261010-01-narrow-1280`)의 `factory/jobs/…` 파일들(건드리지 않음). 문서 속 경로 · 절 번호는 `Grep`으로 대조.
 - **판정(Ruling):** ① v5 본문 `DESIGN_SPEC.md` 를 덮어쓰지 않고 변경분 문서로 — 진행 중인 팩토리 작업 `20261010-01-narrow-1280`(#3c)이 v5 §2.1 · §12 를 고치고 v5 본문으로 검증 중 — 잘못이면: 문서가 두 개라 읽는 사람이 겹쳐 읽어야 함(V12 에서 합치고 변경분 삭제). ② 화판 원본은 저장소에 넣지 않고 링크만 — 소유자만 열리는 링크, `support.js` 없이는 안 그려짐 — 잘못이면: 링크가 사라지면 그림이 없음(스펙 글에 치수 · 문구를 다 적어 둠). ③ 스펙을 먼저 쓰고 코드는 안 바꿈 — 뒤집는 v5 결정(한 동작 한 자리 · 판 폭 고정 · 읽기 전용 · 11 px · 단면 찾기 칸 · 도면 판 구성)이 많아 사용자 확인 뒤에만 — 잘못이면: 없음(코드 변경 없음).
 - **남은 문제:** 팩토리 대기 목록에 v6 작업(V1–V11)은 아직 안 넣음 — #3c 병합 뒤 사용자 확인 받고 넣는다. 대기 #3(D2)은 V7 과 합칠 것. 열린 질문(자동 저장 시각 근거 · 연습 모델 크기 · 걸음 누름 ↔ Ctrl+Tab) = 스펙 §13.
+
+### 2026-10-10 · Claude Code — #3c 1280 좁은 창 · 홈 겹침 버그를 팩토리 작업 `20261010-01-narrow-1280` 으로 — 병합 `3c9b0d4`
+- **무엇을:** 창 폭 1280 에서 단면 머리 · 정보 줄 · 평면 눈금 글 · 홈 한 줄 글을 정해진 순서로 줄이고(사용자 답 Q1 A · Q2 A · Q3) `--ui-audit` 판정으로 잠금, 리본 1280 기대값 20, B5 검토 should 7건, **사용자 보고 버그(홈에 옛 위젯이 겹치고 「목록에서 지우기」가 안 됨, AC14)** 고침. 수정 3회: ① 문서 키 ② 홈 「<모델> 기준」 사라짐 · 칸 이름 줄임표 · 빈 구간 꼬리 · 머리 맞춤 한 번 · ▾ ③(사용자 허가) 1920 이상 카드 칸 옛 2 : 1 · ▾ 8 × 5 보이게 + 감사 픽셀 판정.
+- **확인:** 독립 검증 3차 13조합 RESULT ok · 통합 `9a77d61` 전체 시험 51339 · V8 + 1280/2560 × 1 · 1.25 · 1.75 RESULT PASS · 회귀 `--icon-sheet` · `--sheet-check` · `--ctx-shot` EXIT 0 · 긴 이름 1280 · 1920 ok. 검토 code · correctness · security · kerf-ui 모두 pass. 캡처 `C:\dev	mp
+1280-rework3\`.
+- **판정:** 2차 재검토 뒤 1920 이상 칸 배치 변경(명세 §1 과 어긋남)과 ▾ 안 보임은 자동으로 넘기지 않고 사용자에게 물음(R1.5 예외) → 「한 번 더 고친 뒤 병합」. 남은 should · note 는 대기 R1b.
+- **남은 문제:** push 전. worktree · 브랜치 삭제는 사용자 확인 뒤. 기록 `factory/jobs/20261010-01-narrow-1280/`.
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

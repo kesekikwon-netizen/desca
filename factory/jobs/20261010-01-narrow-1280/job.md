@@ -1,7 +1,7 @@
 ---
 id: 20261010-01-narrow-1280
 title: 1280 좁은 창: 단면 머리 · 정보 줄 · 평면 눈금 · 리본 기대값 20 + B5 검토 should 7건
-status: approved          # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
+status: merged            # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
 rework_count: 3           # 최대 2. 넘으면 needs-human
 ai_review: pass           # pending | pass | fail  (검토자 셋·UI 검토 결과 종합)
 user_approval: approved   # pending | approved | rejected  (사용자가 /factory approve 로 말한 뒤에만 approved)
@@ -14,7 +14,7 @@ head_sha: 9a77d61
 last_verify: PASS (2026-10-10 11:41)
 human_review_required: 화면 · 감사(`app/mainwindow_ui.cpp` --ui-audit 판정 추가 · 리본 1280 기대값 32 → 20 · DESIGN_SPEC 기대값 변경, profile §8). CI · 좌표 · 파일 형식 해당 없음
 created: 2026-10-10 00:03
-updated: 2026-10-10 12:10
+updated: 2026-10-10 12:15
 ---
 # 20261010-01-narrow-1280 — 1280 좁은 창: 단면 머리 · 정보 줄 · 평면 눈금 · 리본 기대값 20 + B5 검토 should 7건
 
@@ -40,6 +40,7 @@ updated: 2026-10-10 12:10
 | 2026-10-10 10:35 | verify → review(3차) | builder → factory | 회차 3 커밋 3(`97f5525` RED: `cells-mode` · `carets` 픽셀 판정 → `5526b5c` ⓐ 넉넉하면 폴더 2 : 나머지 1, 줄임표 생길 때만 내용 폭 → `02688be` ⓑ ▾ 8 × 5 · 테 먼저 · 펜 없이 채움 · 감사 `caret-ink`). builder V8 PASS(10:17) · 1280/2560 ×1.25/×1.75 PASS(10:22) · 2560 ×1 PASS(10:24) · 회귀 셋 ok. builder 는 보고 직전 문맥 한도로 멈췄으나 커밋 · build.md · verify.md 는 다 써 둠(worktree 깨끗). 팩토리 눈 확인: `home-1920.png` 2 : 1 · `caret-crop-1280.png` ▾ 가 리본 ▾ 와 같은 크기. **판정:** 재검토는 code + kerf-ui(이번 차분은 아이콘 그리기 · 홈 칸 폭 · 감사 판정 · 문서뿐 — 입력 · 파일 · 좌표 무관이라 security · correctness 는 2차 pass 유지) + test-runner 독립 검증 |
 | 2026-10-10 11:05 | verify(3차, rework 3, HEAD 02688be) | test-runner | **PASS** — ① V8(1280·1920·3440·3840 × ×1·×2) RESULT PASS · ② 1280·2560 ×1.25·×1.75 RESULT PASS · ③ 2560 ×1 RESULT PASS(13조합 ui-audit 모두 RESULT ok · FAIL 0) · 회귀 `--icon-sheet` · `--sheet-check` · `--ctx-shot` EXIT 0 · core/tests/CMake/CI diff 비어 있음. 새 판정 확인: 1920 이상 `cells-mode=run:ratio,1280w:content`(9조합) · 1280 `run:content,1280w:content`(4조합) · 전 조합 `carets=1 caret-ink=N/M`(N ≥ M, 최소 16/12). rework 2 키 그대로. 이번 변경의 실패 없음. 수동 1(AC11 루브릭 = kerf-ui-reviewer) · 미실행 4(판별력 임시 변경 증명 · 긴 이름 감사 · 실제 125/175 % · 전체 시험) — `verify.md` 「검증 3차」 |
 | 2026-10-10 11:15 | review(3차) → approved | factory | 재검토 code pass(should 3 → R1b) · kerf-ui pass(should 0) · test-runner 3차 PASS(13조합) · 긴 이름 1280 · 1920 감사 ok(팩토리 직접, `C:\dev\tmp\n1280-v3long\`) → ai_review pass · 종합 3차. 사용자 선택 「한 번 더 고친 뒤 병합」의 조건 충족 + R1.5 → 승인(approval.md). 다음: worktree 에 feature/design-v2 merge(기준 뒤 본 브랜치 코드 변경 없음 — DESIGN_SPEC_v6.md 새 파일뿐) → `-Full` + UI 재검증 → 재승인 → `--no-ff` 병합 |
+| 2026-10-10 12:15 | merged | factory | 본 저장소 `git merge --no-ff` → **`3c9b0d4`**. 본 빌드 C:\dev\kerf-v4c 다시 빌드 exit 0 · 빠른 시험 51325 통과(바탕화면 바로가기가 고친 앱을 엶). push 안 함. worktree · 브랜치 삭제는 나중에(사용자 확인) |
 
 ## 참조
 - 명세 `spec.md` · 구현 요약 `build.md` · 검증 `verify.md` · 검토 `review.md` · 승인 `approval.md`
