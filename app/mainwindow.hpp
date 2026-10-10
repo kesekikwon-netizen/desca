@@ -292,7 +292,7 @@ private:
 public:
     struct ViewState {
         asec::SectionLine line; bool hasLine = false; double front = 0, back = 0.5;
-        bool image = true, profile = true, levels = true, fade = true, smooth = false;
+        bool image = true, profile = true, levels = true, fade = false, smooth = false;
         int heightDecl = 0; int current = 0;
         bool operator==(const ViewState& o) const;
     };

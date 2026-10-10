@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-10 · Claude Code — **#3c(1280 좁은 창 + 홈 겹침 · 지우기 버그) 병합 `3c9b0d4`** — 수정 3회차(사용자 허가 「한 번 더 고친 뒤 병합」) 뒤 검토 넷 · 독립 검증 통과. 다음은 정본 대기 목록(`factory/backlog.md`) R0(MSVC 빌드 고침)부터 6단계(R23)까지 순서대로(사용자 /goal 「6단계가지 순차적으로 진행」). 점검 문서 [`docs/REVIEW_2026-10-10.md`](REVIEW_2026-10-10.md) |
+| 마지막 갱신 | 2026-10-10 · Claude Code — **입면이 하얗게 보임 → 단면 머리 「깊이 음영」 체크 칸 · 기본 끔**(사용자 지시, 실제 모델 Production_1.3sm 으로 확인). 다음: 더보기의 영상 불투명도 · 단면선 굵기를 리본 입면 아래 줄로(R4 일부). 그 뒤 정본 대기 목록(`factory/backlog.md`) R1b 부터 |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -250,6 +250,14 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **무엇을:** `app/theme.hpp` 의 QSS 원시 문자열(20241 바이트 한 조각 — MSVC C2026)을 이미 있는 빈 줄 셋에서 `)" R"(` 로 나눠 4조각(4096 · 6783 · 5208 · 4154)으로, 규칙 주석(조각 ≤ 8000 바이트 · 빈 줄에서 나눔 · 출처 MS 문서 C2026).
 - **확인:** RED = VS 2022 생성기 빌드 exit 1(C2026 하나). GREEN = `--clean-first` exit 0 · error 0(기존 C4551 경고만) · clang-cl `-Full` 51339 통과 · 감사 8조합 RESULT ok · QSS 바이트 같음(20241 · 343) · 캡처 work/start/draw 해시 같음. code-reviewer pass.
 - **판정:** correctness · security · UI 검토는 해당 없음(화면 · 좌표 · 입력 무관). GitHub Actions 초록불은 push 뒤에만 확인 가능(Qt 6.8.3 헤더는 이 PC에 없음).
+
+### 2026-10-10 · Claude Code — 입면이 하얗게 보임(깊이 음영) → 「깊이 음영」 체크 칸 · 기본 끔
+- **사용자 보고 · 지시(말 그대로):** 「현재 앱의 입면이 보이지 않는다 단면선도 중요하지만 입면이 보이지 않아 약간 하얗게 나온다. 모든개발은 슈퍼파워skills 를 사용하여 개발을 하라.」 · 「모든테스트는 "C:\Users\권을\Downloads\Production_1.3sm" 이것으로하라」 · 「깊이 음영 체크를 만들라.」 → AskUserQuestion 답 「단면 머리, 입면 바로 위」 · 「기본 끔」.
+- **원인(systematic-debugging):** 고장 아님 — 깊이 음영(`kDepthFadeStrength` 0.55, 기준 깊이 max(뒤, 2 m))이 기본으로 켜져 뒤쪽 면을 흰색 쪽으로 섞음. 실제 모델(뒤 5 m) 입면 평균 밝기 켬 143 · 끔 91, 색 진하기 15.9 · 22.4. 끄는 곳은 단면 머리 넷째 아이콘뿐이라 못 찾음.
+- **무엇을:** 단면 머리 넷째 아이콘 토글 → 글자 있는 체크 칸 「☐ 깊이 음영」(`depthFadeCheck`, 아이콘 `fade`, 같은 QAction 에 양방향 묶음) · 기본값 끔(`section/depthFade` 기본 false, `SectionStyle` · `ViewState` 기본 false) · `--ui-audit depth-fade check label bound default-off` · 스펙 §4 · §12 한 줄씩.
+- **확인:** RED — 새 감사 줄 `check=0 label=0 bound=0 default-off=0 FAIL`(실제 · 합성 모델 EXIT 9) → GREEN: 감사 행렬 1280×800 · 1920×1040 · 3440×1440 · 3840×2160 × 1 · 2 를 합성 · 실제 모델 둘 다 — 16조합 모두 `depth-fade check=1 label=1 bound=1 default-off=1`(1280 = 「그릴 것 ▾」 메뉴, 나머지 = 머리), 합성 8조합 `RESULT ok`. 빠른 시험 51325 통과. 회귀 `--undo-test` · `--sheet-check`(합성 · 실제) · `--ctx-shot`(실제) · `--icon-sheet` 모두 EXIT 0. 실제 모델 캡처 `C:\dev\tmp\elev-bug\after-*.png`(이 PC만 — 실좌표) 눈 확인: 입면이 원래 흙색 · 나무 색, 체크하면 바램.
+- **판정:** ① 체크 칸에 아이콘도 붙임 — 감사 「글자 있는 단추는 아이콘」 규칙 — 잘못이면: 칸 폭 약 20 px 더 씀. ② offscreen 1920 감사에서 단면 머리 단계 1 → 3(「크게」 숨김 · 세로 아이콘만), 실제 화면 1920 캡처는 단계 1 그대로(글꼴 차이) · 2560 은 0 — 잘못이면: 1920 에서 「크게」가 숨을 수 있음(리본 「보기」에 같은 일). ③ 깊이 음영 세기(0.55)는 그대로 — 요청은 체크와 기본값뿐.
+- **남은 문제(이번에 안 고침, 기록):** (a) 명령줄 `--depth-fade off` 는 단면선을 긋기 전에 토글을 바꿔 단면 방향이 뒤집혀 찍힘(시험 장치) — 설정 INI 로 우회. (b) 실제 모델에서만 감사 실패 둘(변경 전 RED 실행에도 있음): `home-clipped`(1280 홈 「C: › Users › 권을」 · 「EPSG:5183」 칸 잘림) · `icons-missing=2`(좌표계 확인 알림 띠 「높이 기준 지정…」 · 「자세히」). 이어서 과제 ②(더보기의 영상 불투명도 · 단면선 굵기 → 리본 입면 아래 줄, R4 일부).
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

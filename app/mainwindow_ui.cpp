@@ -573,13 +573,26 @@ QWidget* MainWindow::buildSectionFrame() {
     {
         auto* box = secToggles_ = new QWidget; box->setObjectName("viewToggles"); box->setAttribute(Qt::WA_StyledBackground);
         auto* bl = new QHBoxLayout(box); bl->setContentsMargins(2, 2, 2, 2); bl->setSpacing(2);
-        const std::pair<const char*, theme::Ico> tg[] = {{"image", theme::Ico::Image}, {"line", theme::Ico::Line}, {"levels", theme::Ico::Levels}, {"fade", theme::Ico::Band}};
+        const std::pair<const char*, theme::Ico> tg[] = {{"image", theme::Ico::Image}, {"line", theme::Ico::Line}, {"levels", theme::Ico::Levels}};
         for (const auto& [key, ico] : tg) {
             auto* b = new QToolButton; b->setObjectName("viewToggle"); b->setIcon(theme::icon(ico, 16)); b->setIconSize(QSize(16, 16));
             b->setFocusPolicy(Qt::NoFocus); b->setFixedSize(28, 24);
             bindButton(b, action(key));
             b->setAccessibleName(action(key)->text());
             bl->addWidget(b);
+        }
+        // 깊이 음영은 글자 있는 체크 칸(사용자 지시 2026-10-10 「깊이 음영 체크를 만들라」 — 아이콘만으로는 못 찾았다). 같은 QAction 이라 메뉴 · 되돌리기 · 설정과 함께 움직인다
+        {
+            QAction* fa = action("fade");
+            auto* cb = new QCheckBox(fa->text()); cb->setObjectName("depthFadeCheck");
+            cb->setIcon(theme::icon(theme::Ico::Band, 16)); cb->setIconSize(QSize(16, 16)); cb->setProperty("iconName", QString::fromLatin1(theme::iconName(theme::Ico::Band)));
+            cb->setFocusPolicy(Qt::NoFocus); cb->setFixedHeight(24);
+            auto sync = [cb, fa] { cb->setEnabled(fa->isEnabled()); cb->setToolTip(fa->toolTip()); QSignalBlocker bk(cb); cb->setChecked(fa->isChecked()); };
+            sync();
+            QObject::connect(fa, &QAction::changed, cb, sync);
+            QObject::connect(fa, &QAction::toggled, cb, sync);
+            QObject::connect(cb, &QCheckBox::toggled, fa, [fa](bool on) { if (fa->isChecked() != on) fa->setChecked(on); });
+            bl->addWidget(cb);
         }
         h->addWidget(box);
         // 좁은 창(스펙 §4 4단계): 상자 대신 「그릴 것 ▾」 메뉴 단추 하나 — 같은 QAction 넷이라 체크 상태 · 키 I · L · V 가 그대로(깊이 음영은 키가 없어 마우스로 닿아야 함)
@@ -1852,7 +1865,7 @@ MainWindow::MainWindow() {
     makeAction("redo", QStringLiteral("다시"), "Redo", I::Redo, "Ctrl+Y")->setEnabled(false);
     action("redo")->setShortcuts({QKeySequence("Ctrl+Y"), QKeySequence("Ctrl+Shift+Z")});
     action("smooth")->setChecked(QSettings().value("section/smooth", false).toBool());
-    action("fade")->setChecked(QSettings().value("section/depthFade", true).toBool());
+    action("fade")->setChecked(QSettings().value("section/depthFade", false).toBool());   // 기본 끔(사용자 답 2026-10-10 — 켜 두면 입면이 하얗게 바래 보였다)
     {
         auto* m = new QMenu(this);
         m->addAction(QStringLiteral("보는 쪽으로 0.1 m   ]"), this, [this] { shiftLine(0.1); });
@@ -2408,6 +2421,32 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     for (const QString& n : noIcon) L << QStringLiteral("no-icon: %1").arg(n);
     for (const QString& n : noTip) L << QStringLiteral("no-tooltip: %1").arg(n);
     ok &= noIcon.isEmpty() && noTip.isEmpty();
+
+    // 7b) 깊이 음영 체크(사용자 지시 2026-10-10 「깊이 음영 체크를 만들라」 · 답 「단면 머리 · 기본 끔」): 단면 머리에 글자 있는 체크 칸 —
+    //     좁아서 켜기 · 끄기 상자가 「그릴 것 ▾」로 접히면 그 메뉴의 같은 동작. 체크 ↔ 동작 ↔ 그리기 설정(secStyle)이 함께 움직이고, 저장값이 없으면 꺼짐
+    {
+        auto* cb = secTitleBar_->findChild<QCheckBox*>(QStringLiteral("depthFadeCheck"));
+        QAction* fa = action("fade");
+        const bool inMenu = secTogglesMenu_ && secTogglesMenu_->isVisibleTo(secTitleBar_) && secTogglesMenu_->menu() && secTogglesMenu_->menu()->actions().contains(fa);
+        const bool shown = cb && cb->isVisibleTo(secTitleBar_);
+        const bool check = cb && (shown || inMenu);
+        const bool label = shown ? cb->text() == QStringLiteral("깊이 음영") && cb->width() >= cb->sizeHint().width() : (cb && inMenu && fa->text() == QStringLiteral("깊이 음영"));
+        const int defOff = QSettings().contains(QStringLiteral("section/depthFade")) ? -1 : (fa->isChecked() ? 0 : 1);   // -1 = 저장값이 있어 기본값을 잴 수 없음
+        bool bound = false;
+        if (cb) {
+            const bool was = fa->isChecked();
+            cb->click();   // 체크 칸 → 동작 · 그리기 설정
+            pump(50);
+            const bool fwd = fa->isChecked() == !was && secStyle().depthFade == !was && cb->isChecked() == !was;
+            fa->toggle();  // 동작(메뉴 · 되돌리기 쪽) → 체크 칸
+            pump(50);
+            bound = fwd && cb->isChecked() == was && secStyle().depthFade == was;
+        }
+        const bool okf = check && label && bound && defOff != 0;
+        L << QStringLiteral("ui-audit depth-fade check=%1 label=%2 bound=%3 default-off=%4 at=%5%6").arg(int(check)).arg(int(label)).arg(int(bound)).arg(defOff)
+                 .arg(shown ? QStringLiteral("header") : inMenu ? QStringLiteral("menu") : QStringLiteral("none")).arg(okf ? QString() : QStringLiteral("  FAIL"));
+        ok &= okf;
+    }
 
     // 2b) 좁은 창 1280×800 — 맨 끝에서(offscreen 에서는 resize 를 되돌려도 판 폭이 돌아오지 않아 뒤 항목을 망친다, 실측): 글자 숨김 · 타일 32 이하(스펙 §3.3 · §12)
     // 고르기 규칙 + 실제로 줄어든 창(B5): 창 폭 ≤ 1280 · 그 리본 타일 ≤ 32 · 글자 숨김 · 맞춤 상태의 평면 · 단면 그림이 잘리지 않음(자동 맞춤) ·
