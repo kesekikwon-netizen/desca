@@ -26,6 +26,7 @@ updated: 2026-10-10 17:52
 | --- | --- | --- | --- |
 | 2026-10-10 17:52 | queued | factory | 작업 생성. 기준 feature/design-v2 @ 373c0e7dee7c05a9d71689ef8272f73305fefc82 |
 
+| 2026-10-10 12:40 | spec → build | spec-writer → factory | spec.md AC1–AC5(MSVC 빌드 exit 0 · clang-cl V8 PASS · QSS 바이트 동일 증명 · 조각 ≤ 8000 바이트 + 규칙 주석 · 캡처 같음). 빈 줄을 `)" R"(` 로 바꿔 나눔(121 · 201 · 265행 권장). 열린 질문 없음 · 사람 검토 필수 아님. RED 는 팩토리가 이미 실행(MSVC exit 1, C2026 하나 — C:/dev/tmp/r0-msvc-build.txt). builder 시작 |
+
 ## 참조
 - 명세 `spec.md` · 구현 요약 `build.md` · 검증 `verify.md` · 검토 `review.md` · 승인 `approval.md`
-| 2026-10-10 12:40 | spec → build | spec-writer → factory | spec.md AC1–AC5(MSVC 빌드 exit 0 · clang-cl V8 PASS · QSS 바이트 동일 증명 · 조각 ≤ 8000 바이트 + 규칙 주석 · 캡처 같음). 빈 줄을 `)" R"(` 로 바꿔 나눔(121 · 201 · 265행 권장). 열린 질문 없음 · 사람 검토 필수 아님. RED 는 팩토리가 이미 실행(MSVC exit 1, C2026 하나 — C:/dev/tmp/r0-msvc-build.txt). builder 시작 |
