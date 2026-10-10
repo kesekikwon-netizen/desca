@@ -34,6 +34,7 @@ updated: 2026-10-09 23:54
 | 2026-10-09 23:50 | review (승인 대기) | factory | 사용자 답: 「후속 작업으로 빼고 B5 는 승인 보고서로」 · 「스펙을 실제(1280 → 20)로 고친다」 → 1280 좁은 창 문제 + should 7건 = backlog #3c. review.md 종합 ai_review pass, approval.md 승인 보고서 작성. **사용자 승인 대기**(/factory approve 20261009-01-b5-dpi) |
 | 2026-10-09 23:58 | approved | 사용자 → factory | 사용자 「승인 (추천)」 · 「병합까지 진행 (추천)」. 승인 SHA 66737c5. SKILL §5 병합 절차 시작(worktree 에 feature/design-v2 merge → 전체 검증 → 재승인 → 본 저장소 --no-ff). push 없음 |
 | 2026-10-10 00:07 | merged | factory | 재승인(b378b3f) 뒤 본 저장소 feature/design-v2 에 --no-ff 병합 → **8cc67fb**. push 없음(사용자 말 때). GitHub Actions 는 push 뒤 `factory ci 8cc67fb -Wait`. worktree · 브랜치 삭제는 사용자 확인 뒤 |
+| 2026-10-10 00:42 | merged(정리됨) | 사용자 → factory | 사용자 「지운다 (추천)」 → `git worktree remove C:\dev\kerf-wt\20261009-01-b5-dpi` · `git branch -d factory/20261009-01-b5-dpi`(was b378b3f) · 빌드 폴더 삭제. 로그(verify 원본)는 verify.md 요약만 남음 |
 
 ## 참조
 - 명세 `spec.md` · 구현 요약 `build.md` · 검증 `verify.md` · 검토 `review.md` · 승인 `approval.md`

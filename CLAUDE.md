@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 지금 진행 중인 개발은 **Kerf 디자인 v5**다. 작업을 시작하기 전에 `docs/DEV_PROGRESS.md`를 끝까지 읽고 「다음 할 일」부터 이어서 한다.
 - **단계 하나를 마칠 때마다 `docs/DEV_PROGRESS.md`를 고친다**(상태 표 · 기록 · 다음 할 일). 기록 없이 다음 단계로 가지 않는다.
 - 화면 기준은 `docs/design/DESIGN_SPEC.md`(v5, 화판 `docs/design/boards/kerf-design-v5.html`). v4 `docs/design-v4/FINAL_PLAN.md` · `Buttons1/2.dc.html`은 v5에 없는 내용만 참고한다(어긋나면 v5).
+- **디자인 v6 채택(사용자 2026-10-10 「전체 채택」):** `docs/design/DESIGN_SPEC_v6.md`는 v5 위에 겹쳐 읽는 변경분이다 — 어긋나면 v6이 이긴다. 각 항목은 해당 구현 작업(계획 `docs/superpowers/plans/2026-10-10-design-v6.md`)이 시작될 때 효력이 생기며, 진행 중인 팩토리 작업은 v5 본문으로 검증한다.
 - 끝났다고 말하기 전 · 커밋 전에 `/verify`(`desca:verify`, `.claude/skills/verify`)를 돌리고 그 결과를 보고한다.
 - **개발 방식(사용자 지시 2026-10-09, DEV_RULES R1):** superpowers 스킬을 Skill 도구로 실제로 부른 뒤 한다 — 새 기능 `brainstorming → writing-plans → executing-plans`, 코드 수정 `test-driven-development`, 버그 `systematic-debugging`, 끝나기 전 `verification-before-completion`, 기능 하나 끝나면 `requesting-code-review`(cpp-reviewer · UI는 ui-reviewer), 브랜치 마무리 `finishing-a-development-branch`. Qt · C++ API가 확실치 않으면 **context7**(`resolve-library-id` → `query-docs`, Qt는 `/websites/doc_qt_io_qt-6_8`)로 확인한 뒤 쓴다 — 지어내지 않는다. 목적에 맞는 다른 skills · MCP · hooks(ui-visual-check · cpp-build-fix · /verify …)는 사용자 요청 없이도 쓴다.
 - **해상도 · DPI(사용자 지시 2026-10-09):** 4K · 와이드 · 100–200 % 배율 어디서나 안정이어야 한다. 치수는 논리 픽셀, 아이콘은 dpr별로 굽는다. `--ui-audit`는 화면 변경마다 1920×1040, 단계 끝(B5 뒤로는 과제마다)에 1280×800 · 3440×1440 · 3840×2160까지 × `QT_SCALE_FACTOR` 1 · 2 모두 ok(DEV_RULES R3.3, 계획 Task B5).
