@@ -225,6 +225,13 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **판정:** 「n장 저장됨 · 폴더 열기」 줄은 묶음 저장(폴더 대화상자) 뒤에만 보여 캡처로 확인하지 못함 — 코드 경로 + `--sheet-batch` 결과로 갈음 — 잘못이면: 글 모양을 눈으로 못 봄(다음 실제 저장 때 확인). DXF · PDF · PNG · TIFF 묶음도 같은 함수(형식 칩대로) — SVG 만 `--sheet-batch` 로 판정.
 - **남은 문제:** B5(해상도 · DPI) → D2 · D3 → F · G · H · I. 사용자 화면의 「no Qt platform plugin」 대화상자: `C:\dev\desca-build\app\platforms` 에 `qoffscreen.dll` 이 없어 offscreen 실행이 뜨지 못한 것(이 PC 의 다른 빌드 폴더) — 복사해 둠.
 
+### 2026-10-09 · Claude Code — CI 고침: MSVC 문자열 길이 한계(C2026) — 커밋 `614633f`
+- **무엇을:** `0f7fbfe`(E4) push 뒤 GitHub Actions 「Windows · 앱 전체」가 실패(Linux 코어는 통과). 로그: `app/theme.hpp(319,1): error C2026: string too big, trailing characters truncated`. `styleSheet()`의 원시 문자열 하나가 20280 바이트로 MSVC 한계(16380 바이트)를 넘음. 빈 줄 자리에서 `QStringLiteral` 두 조각(9839 · 10462 바이트)으로 나눔 — 화면 모양 변화 없음.
+- **확인:** 클라우드 세션(Linux, Qt 없음)이라 앱 빌드는 못 함. 바뀐 함수만 떼어 g++로 컴파일 → 결과 스타일시트 길이가 고치기 전과 같음(일반 20241 · 고대비 20584 바이트). push 뒤 GitHub Actions run #13(`614633f`) → **success**(Windows 앱 · Linux 코어 둘 다).
+- **판정:** 이 PC의 clang-cl은 이 한계가 없어 로컬 `/verify`로는 잡히지 않음 — 스타일시트에 줄을 더할 때 한 조각이 16 KB를 넘지 않게 나눈다 — 잘못이면: Windows CI만 다시 깨짐(로컬은 통과).
+- **남은 문제:** 없음.
+- **병합 메모(2026-10-11):** 이 PC 의 `5331124`(R0)가 같은 문제를 4조각으로 이미 고쳐 두어, 병합 때 `app/theme.hpp` 는 이 PC 판을 그대로 둠(결과 스타일시트는 같음).
+
 ### 2026-10-09 ~ 10 · Claude Code — 디자인 v5 B5(해상도 · DPI)를 팩토리 작업 `20261009-01-b5-dpi` 로 — 병합 `8cc67fb`
 - **사용자 지시(말 그대로, 2026-10-09):** 「이것은 리눅스에 개발이 아니다 윈도우만을 대상으로 개발하라.」 → DEV_RULES R7.4 · 「최종 완성이 되면 포터블로 다른컴퓨터에서도 실행될 구조로 개발할것이며 포터블로 전환은 사용자 요청이없으면 하지마라.」 → R7.5 · 「지금 개발설정을 지켜가며 개발하라. 니맘대로하지말고」 → B5 부터 **팩토리**로(AskUserQuestion 선택) · 「단계마다 깃커밋해줘」 → R5.1 · /goal 「남은 개발작업을 플랜을 작게 나누고 나눠서 /factory 개발을 진행」 → backlog #3c–#9(계획 Task 하나 = 작업 하나).
 - **무엇을(팩토리 작업, worktree `C:\dev\kerf-wt\20261009-01-b5-dpi`, 기준 `0f7fbfe`):** spec-writer 명세 AC1–AC11 → builder 커밋 7(`b5640c0` RED 감사 줄 → `30a8413` `--size` 요청 크기(홈 한 줄 라벨 넷이 최소 폭 1591 을 밀어내던 것, `Ignored`) → `c9b081e` 아이콘 배율 1 · 1.25 · 1.5 · 1.75 · 2 · 3(`kerf::iconDprs()` 한 곳) → `504e6c1` 안내 칩 `QEvent::DevicePixelRatioChange` 다시 굽기 + `place()` 안전판 → `73493e2` `fitted_`: 창 크기 바뀌면 맞춤 상태의 평면 · 단면만 다시 맞춤, 사용자 확대 · 이동은 축척 유지 → `066455a` CI Linux 작업 삭제 + 감사를 `Start-Process` 로 기다려 판정 + 3840×2160 ×2 → `66737c5` env 줄 실제 화면 판정 범위) → test-runner 독립 검증 PASS → 검토자 넷 → 사용자 승인(`66737c5`) → worktree 에 `feature/design-v2` merge(`b378b3f`) → 전체 검증 `-Full` + 8조합 PASS → 재승인 → 본 저장소 `--no-ff` 병합 **`8cc67fb`**. 기록 전부 `factory/jobs/20261009-01-b5-dpi/`(spec · build · verify · review · review-code · review-correctness · approval).
