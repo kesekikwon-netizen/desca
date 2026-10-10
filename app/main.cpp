@@ -139,7 +139,22 @@ static void runCutCheck(MainWindow& w, LogFn log) {
     }
 }
 
-// 여는 화면 창: 테두리 없는 맨 위 창, 화면 가운데. t = 지난 시간 / 전체(5 초)
+#ifdef Q_OS_WIN
+// windows.h 를 끌어오면 min/max 매크로가 이 파일의 std::min 을 깨므로 필요한 함수 하나만 선언한다(user32 — Qt 가 이미 링크). SPI_GETCLIENTAREAANIMATION = 0x1042,
+// pvParam = BOOL 변수(TRUE = 애니메이션 켜짐) — Microsoft Learn 「SystemParametersInfoW」 · 「Client area animation parameter」
+extern "C" __declspec(dllimport) int __stdcall SystemParametersInfoW(unsigned uiAction, unsigned uiParam, void* pvParam, unsigned fWinIni);
+#endif
+// Windows 「애니메이션 효과」(설정 › 접근성 › 시각 효과)가 꺼져 있으면 여는 화면 모션을 건너뛰고 끝 장면만 보인다
+static bool clientAreaAnimationsOn() {
+#ifdef Q_OS_WIN
+    int on = 1;
+    if (SystemParametersInfoW(0x1042, 0, &on, 0)) return on != 0;
+#endif
+    return true;
+}
+
+// 여는 화면 창: 테두리 없는 맨 위 창, 화면 가운데. 전체 길이 MainWindow::kOpeningSplashMs(1 초). Esc · 클릭 = 건너뜀(끝 장면을 0.3 초 보이고 열림).
+// 시스템 애니메이션이 꺼져 있으면 처음부터 끝 장면 0.3 초
 class OpeningSplash : public QWidget {
 public:
     OpeningSplash() : QWidget(nullptr, Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint) {
@@ -147,23 +162,29 @@ public:
         setAttribute(Qt::WA_OpaquePaintEvent);
         if (QScreen* sc = QGuiApplication::primaryScreen()) move(sc->availableGeometry().center() - rect().center());
     }
-    void run(int ms, const QString& captureDir = QString()) {
+    // captureDir 이 있으면 장면 시각(120 · 400 · 700 · 1000 ms)마다 그 창을 직접 찍는다(시험용 --splash-live)
+    void run(int ms, const QString& captureDir = QString(), int escAtMs = -1) {   // escAtMs ≥ 0 = 그 시각에 Esc 를 눌러 건너뛰기 시험(--splash-esc)
         total_ = ms;
-        int nextCap = 1000;   // captureDir 이 있으면 1·2·3·4·5 초 장면을 그 창에서 직접 찍음(시험용)
+        if (!clientAreaAnimationsOn()) { finalOnly_ = true; skipMs_ = 300; skipClock_.start(); }
+        const int caps[] = {120, 400, 700, 1000};
+        int nextCap = 0;
         clock_.start();
+        if (escAtMs >= 0) QTimer::singleShot(escAtMs, this, [this] { QKeyEvent ev(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier); keyPressEvent(&ev); });
         show(); raise(); activateWindow();
         QTimer tick; tick.setInterval(16);
         QEventLoop loop;
         QObject::connect(&tick, &QTimer::timeout, this, [&] {
             repaint();
             const qint64 e = clock_.elapsed();
-            if (!captureDir.isEmpty() && (e >= nextCap || e >= total_) && nextCap <= total_) {
-                grab().save(QStringLiteral("%1/splash_live_%2s.png").arg(captureDir).arg(nextCap / 1000));
+            if (!captureDir.isEmpty() && nextCap < 4 && e >= caps[nextCap]) {
+                grab().save(QStringLiteral("%1/splash_live_%2ms.png").arg(captureDir).arg(caps[nextCap]));
                 fprintf(stdout, "splash-live %d ms (t=%.2f) visible=%d pos=%d,%d\n", int(e), std::min(1.0, e / double(total_)), isVisible() ? 1 : 0, x(), y());
                 fflush(stdout);
-                nextCap += 1000;
+                ++nextCap;
             }
-            if (e >= total_ && (captureDir.isEmpty() || nextCap > total_)) loop.quit();
+            const bool capturesDone = captureDir.isEmpty() || nextCap >= 4;
+            if (skipMs_ >= 0) { if (skipClock_.elapsed() >= skipMs_) loop.quit(); }
+            else if (e >= total_ && capturesDone) loop.quit();
         });
         tick.start();
         loop.exec();
@@ -173,12 +194,17 @@ public:
 protected:
     void paintEvent(QPaintEvent*) override {
         QPainter p(this);
-        const double t = total_ > 0 ? std::min(1.0, clock_.elapsed() / double(total_)) : 1.0;
+        const double t = (finalOnly_ || skipMs_ >= 0) ? 1.0 : (total_ > 0 ? std::min(1.0, clock_.elapsed() / double(total_)) : 1.0);
         MainWindow::paintOpeningSplash(p, size(), t);
     }
+    void keyPressEvent(QKeyEvent* e) override { if (e->key() == Qt::Key_Escape) skip(); else QWidget::keyPressEvent(e); }
+    void mousePressEvent(QMouseEvent*) override { skip(); }
 private:
-    QElapsedTimer clock_;
-    int total_ = 5000;
+    void skip() { if (skipMs_ < 0) { skipMs_ = 300; skipClock_.start(); } }
+    QElapsedTimer clock_, skipClock_;
+    int total_ = MainWindow::kOpeningSplashMs;
+    int skipMs_ = -1;          // ≥ 0 = 끝 장면만 보이는 중(건너뜀 · 애니메이션 끔) — 이 시간(ms)이 지나면 닫힘
+    bool finalOnly_ = false;
 };
 
 int main(int argc, char** argv) {
@@ -202,12 +228,13 @@ int main(int argc, char** argv) {
     app.setWindowIcon(kerf::appIcon());   // Trench 앱 아이콘 — 같은 SVG(app/icons/app/)에서 .ico 도 만든다(T2)
 
     QStringList a = app.arguments();
-    QString splashLive;   // --splash-live DIR: 실제 여는 화면 창을 5 초 돌리며 1초마다 찍음
+    QString splashLive;   // --splash-live DIR: 실제 여는 화면 창을 1 초 돌리며 장면 시각(120 · 400 · 700 · 1000 ms)마다 찍음
     int sheetWheel = 0;
     int sheetPick = -1;   // --sheet-pick N: 조판 탭 왼쪽 도면 목록 N 번째 줄을 누름(0 = 평면도)
     bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
     QString file, shot, logPath, perfPath, heightDatum, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, datumShot, coordShot, uiAuditDir, sheetBatch;
     QString iconSheetPng; bool iconSheet = false;
+    int splashEsc = -1;   // --splash-esc N: 여는 화면을 띄우고 N ms 에 Esc 를 눌러 건너뛰는지 잰다(종료 6 = 늦게 닫힘)
     QString appIconDir;   // --app-icon DIR: 앱 아이콘 PNG 다섯 장을 쓰고 눈 검사(실패 종료 코드 12)
     bool undoTest = false, split = false; double sheetScale = 0, sectionScale = 0;
     QString lodShot;
@@ -257,6 +284,7 @@ int main(int argc, char** argv) {
         else if (s == "--coord-shot") coordShot = nx();
         else if (s == "--ctx-shot") ctxShot = nx();
         else if (s == "--app-icon") appIconDir = nx();
+        else if (s == "--splash-esc") splashEsc = nx().toInt();
         else if (s == "--icon-sheet") { iconSheet = true; iconSheetPng = nx(); }   // v5 A3: 아이콘 이름 검사 + 격자 캡처(실패 종료 코드 10)
         else if (s == "--lod-shot") lodShot = nx();
         else if (s == "--section-scale") sectionScale = nx().toDouble();
@@ -284,23 +312,34 @@ int main(int argc, char** argv) {
         fprintf(stdout, "%s\n", rep.toUtf8().constData());
         return ok ? 0 : 12;
     }
-    if (!splashLive.isEmpty()) { QDir().mkpath(splashLive); OpeningSplash sp; sp.run(5000, splashLive); return 0; }
-    if (!splashShot.isEmpty() && file.isEmpty()) {
-        QImage im = MainWindow::renderOpeningSplash(QSize(960, 600));
-        bool ok = im.save(splashShot);
-        for (double tt : {0.2, 0.45, 0.7}) {   // 중간 장면(움직임 확인용): 이름 뒤에 _tNN
-            QString f = splashShot; f.insert(f.lastIndexOf('.') < 0 ? f.size() : f.lastIndexOf('.'), QStringLiteral("_t%1").arg(int(tt * 100)));
-            MainWindow::renderOpeningSplash(QSize(960, 600), tt).save(f);
-        }
-        fprintf(stdout, "splash-shot %s: %s (%dx%d)\n", ok ? "ok" : "FAILED", splashShot.toUtf8().constData(), im.width(), im.height());
+    if (splashEsc >= 0) {   // Esc 건너뜀 시험: 끝 장면 0.3 초를 보이고 닫혀야 한다(Esc 시각 + 300 ms 부근, 창 띄우는 시간 여유 300 ms)
+        OpeningSplash sp; QElapsedTimer et; et.start();
+        sp.run(MainWindow::kOpeningSplashMs, QString(), splashEsc);
+        const qint64 ms = et.elapsed();
+        const bool ok = ms >= splashEsc + 250 && ms <= splashEsc + 300 + 300;
+        fprintf(stdout, "splash-esc esc-at=%d closed-ms=%lld%s\n", splashEsc, static_cast<long long>(ms), ok ? "" : "  FAIL");
         return ok ? 0 : 6;
+    }
+    if (!splashLive.isEmpty()) { QDir().mkpath(splashLive); OpeningSplash sp; sp.run(MainWindow::kOpeningSplashMs, splashLive); return 0; }
+    if (!splashShot.isEmpty() && file.isEmpty()) {   // 장면 네 장(t = .12 · .40 · .70 · 1.0 — 끝 장면이 splashShot, 나머지는 이름 뒤 _tNN) + 길이 판정(T3: 네 장 · 1000 ms, 아니면 종료 6)
+        const double times[] = {0.12, 0.40, 0.70, 1.0};
+        bool ok = true; int frames = 0; QSize sz;
+        for (double tt : times) {
+            const QImage im = MainWindow::renderOpeningSplash(QSize(960, 600), tt);
+            QString f = splashShot;
+            if (tt < 1.0) f.insert(f.lastIndexOf('.') < 0 ? f.size() : f.lastIndexOf('.'), QStringLiteral("_t%1").arg(std::lround(tt * 100)));
+            ok = im.save(f) && ok; ++frames; sz = im.size();
+        }
+        const bool timing = frames == 4 && MainWindow::kOpeningSplashMs == 1000;
+        fprintf(stdout, "splash-shot %s: %s (%dx%d) frames=%d total-ms=%d%s\n", ok ? "ok" : "FAILED", splashShot.toUtf8().constData(), sz.width(), sz.height(), frames, MainWindow::kOpeningSplashMs, timing ? "" : "  FAIL");
+        return ok && timing ? 0 : 6;
     }
     MainWindow w;
     if (W > 0 && H > 0) { w.resize(W, H); w.setProperty("auditSize", QSize(W, H)); }   // --ui-audit env: 요청한 크기로 열렸는지(B5)
     if (file.isEmpty() && startShot.isEmpty() && shot.isEmpty() && !quit) {
-        // 여는 화면: 화면 가운데 맨 위에 5 초 동안 선 그림 모션(초당 60 번 다시 그림)
+        // 여는 화면: 화면 가운데 맨 위에 1 초 「T를 판다」 모션(초당 60 번 다시 그림, Esc · 클릭 = 건너뜀)
         OpeningSplash splash;
-        splash.run(5000);
+        splash.run(MainWindow::kOpeningSplashMs);
     }
     w.show();
     if (file.isEmpty() && !startShot.isEmpty()) {   // 시작 화면 캡처

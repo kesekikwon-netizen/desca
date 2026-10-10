@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T2 앱 아이콘 「T는 트렌치의 단면」 끝**(앱 · .ico 한 SVG), 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 다음: T3 여는 화면 「T를 판다」 1.0 s → T4(G1) 좌표계 5187. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T3 여는 화면 「T를 판다」 1.0 s 끝** → G0(이름 · 아이콘 · 여는 화면) 전부 끝. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 다음: T4(G1) 좌표계 5183 → 5187(advisor 먼저). 검토는 전부 끝난 뒤 한 번(사용자 지시) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -289,6 +289,13 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** GREEN `app-icon n=5 bad=0 RESULT ok`(EXIT 0) · ico 5 크기 모두 앱 렌더와 픽셀 동일 · exe 에 실제로 박힘(`app.rc` touch 뒤 재빌드, 탐색기용 32 px 추출이 새 아이콘) · `--icon-sheet n=65 missing=0` · 합성 모델 감사 10조합 `RESULT ok`(마지막 변경 뒤 4조합 재확인) · 빠른 시험 51325 통과 · 홈 캡처 2560(Batang)에서 「T」 모양 확인(`C:\dev\tmp\elev-bug\t2-shots\`).
 - **판정(Ruling):** ① 앱 아이콘 SVG 는 `icons.cmake` 목록(`kAll`)에 들어가 `--icon-sheet` 에도 보인다(65개) — 별도 목록을 만들 만큼의 이득이 없음. ② 설치 프로그램 그림(`header.bmp` · `wizard.bmp` · `app_1024.png`)은 옛 Kerf 그림 그대로 — 설치판은 사용자 요청 때만 만든다(R7.5). ③ 어두운 작업 표시줄에서의 윤곽은 크림 타일 자체가 충분히 밝아 따로 테를 두지 않음.
 - **남은 문제:** 여는 화면은 아직 옛 그림 → T3.
+
+### 2026-10-11 · Claude Code(Sonnet 5.5) — T3 (G0c): 여는 화면 「T를 판다」 1.0 초
+- **시험 먼저(RED):** `--splash-shot` 판정을 「네 장(t = .12 · .40 · .70 · 1.0) · `kOpeningSplashMs == 1000`」으로 고치고 상수를 지금 길이 5000 으로 두어 `frames=4 total-ms=5000  FAIL`(EXIT 6) 확인 → 상수를 1000 으로 + 새 장면.
+- **무엇을:** `MainWindow::kOpeningSplashMs = 1000`(한 곳 — `OpeningSplash::run` · `--splash-live` · 판정이 같은 값). `paintOpeningSplash` 다시 씀(캔버스 Splash 화판): 타일 160 px 떠오름 → 지표선 → 트렌치가 파 내려감(크림이 위에서 아래로) → 빨간 단면선이 벽면을 따라(길이 46 격자, 앞에서부터) → 「rench」(명조, 「h」 키 = 타일 높이, 기준선 = 타일 아래 모서리, 글꼴이 넓으면 오른쪽 여백 안으로 줄임) → 부제 · 상태 글(.30 「잠시 후…」 · .85 「준비 완료」) · 진행 막대 1 초 시계. 끝 장면(t ≥ .85)의 타일은 `kerf::appPixmap`(앱 아이콘)을 그대로 그림. `OpeningSplash`: Esc · 클릭 = 건너뜀(끝 장면 0.3 초 뒤 닫힘), Windows 「애니메이션 끔」(`SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION = 0x1042)` — Microsoft Learn 로 확인, windows.h 대신 함수 하나만 선언해 min/max 매크로 충돌 없음)이면 처음부터 끝 장면 0.3 초, `--splash-live` 는 120 · 400 · 700 · 1000 ms 에 창을 직접 찍음, `--splash-esc N`(Esc 건너뜀 시험).
+- **확인:** GREEN `splash-shot … frames=4 total-ms=1000`(EXIT 0, 실제 창 플랫폼 — 글자 정상) · 네 장 눈 확인(`C:\dev\tmp\elev-bug\t3\sheet.png`: T 타일 + rench 가 Trench 로 읽힘) · `--splash-live` 실제 창이 1 002 ms 에 끝 장면, 프로세스 전체 1.1 s · `--splash-esc 100` 이 530 ms · `--splash-esc 400` 이 707 ms 에 닫힘(Esc + 300 ms 부근) · 파일로 열 때는 여는 화면 없음(코드 조건 그대로 `file.isEmpty()`) · 합성 감사 10조합 `RESULT ok` · 빠른 시험 51325 · `--sheet-check` · `--icon-sheet` · `--app-icon` · `--undo-test` EXIT 0.
+- **판정(Ruling):** ① 키 · 클릭 입력은 앱 시험 장치로만 확인(Esc 는 `keyPressEvent` 직접 호출) — 실제 키보드 · 마우스는 사용자가 한 번 눌러 봐야 함(플랫폼이 SplashScreen 창에 초점을 주는지는 Windows 에서 처음 한 번 확인 필요). ② 진행 막대는 실제 준비와 무관한 1 초 시계 — 준비가 더 걸리면 열기가 늦어질 뿐 막대는 끝에 머묾(옛 5 초도 같았음). ③ 상수 `kOpeningSplashMs` 가 5000 → 1000 이라 옛 `--splash-shot` 의 t = .2 · .45 · .7 중간 장면 이름이 바뀜(`_t12 · _t40 · _t70`).
+- **남은 문제:** 없음(T3 끝). 다음 T4(G1) 좌표계 — advisor 먼저.
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

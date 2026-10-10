@@ -94,8 +94,9 @@ public:
     ~MainWindow() override;
 
     // ---- 작업(동기). 대화상자는 작업 스레드에서, 명령줄 자동화는 GUI 스레드에서 직접 호출 ----
+    static constexpr int kOpeningSplashMs = 1000;   // 여는 화면 전체 길이(ms) — 한 곳. OpeningSplash::run · --splash-live · --splash-shot 판정이 같은 값을 쓴다 (T3: 1000)
     static QImage renderOpeningSplash(const QSize& size, double t = 1.0);   // t 0~1: 선 그림이 그려지는 정도(1 = 완성)
-    static void paintOpeningSplash(QPainter& p, const QSize& size, double t);   // 여는 화면 한 장면(t 0~1 = 5 초)
+    static void paintOpeningSplash(QPainter& p, const QSize& size, double t);   // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs, 1 초)
     static bool loadScene(const QString& path, OpenedScene& out, QString* err, const std::function<void(double)>& progress = {});
     void applyScene(OpenedScene&& s);
     bool computeNow(const asec::SectionLine& l, QString* err);  // 동기 단면(자동화용)

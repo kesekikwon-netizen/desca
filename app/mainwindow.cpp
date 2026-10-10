@@ -927,92 +927,92 @@ void MainWindow::dlgInfo() {
     QMessageBox mb(this); mb.setWindowTitle(QStringLiteral("단면 정보 (Section Info)")); mb.setTextFormat(Qt::RichText); mb.setText(t); mb.exec();
 }
 
+// 여는 화면 「T를 판다」(Trench, kOpeningSplashMs = 1.0 초 — 캔버스 「여는 화면」 화판): 크림 타일에 지표선이 서고 → 트렌치가 파 내려가고 → 빨간 단면선이 벽면을 따라 그어지고
+// → 「rench」 가 들어와 Trench 가 완성된다. t 0~1 = 전체 길이. 시간표(t): 타일 0–.14 · 지표선 .02–.14 · 파기 .12–.50 · 단면선 .45–.85 · 「rench」 .55–.80 · 부제 .80–1.0
+// (모두 OutCubic). 값은 960×600 기준을 k = 너비/960 으로 키운다. 끝 장면(t ≥ .85)의 타일은 앱 아이콘 그림(kerf::appPixmap) 그대로 — 아이콘과 한 SVG 에서 나온다.
 void MainWindow::paintOpeningSplash(QPainter& p, const QSize& sz, double t) {
-    // 사진 없이 선과 색 면으로만 그린 일러스트 모션: 레벨선이 내려오고 → A·A′ 가 서고 → 흙 면과 단면선이 왼쪽부터 그려진다.
     t = std::clamp(t, 0.0, 1.0);
     auto seg = [&](double a, double b) { double u = std::clamp((t - a) / (b - a), 0.0, 1.0); return 1 - std::pow(1 - u, 3.0); };   // OutCubic
     const QRect im(QPoint(0, 0), sz.isEmpty() ? QSize(960, 600) : sz);
-    p.fillRect(im, QColor(0xFA, 0xF9, 0xF5));
+    p.fillRect(im, theme::Ground);
     p.setRenderHint(QPainter::Antialiasing);
     p.setRenderHint(QPainter::TextAntialiasing);
     const double k = im.width() / 960.0;
-    auto X = [&](double s) { return (80 + s * 260) * k; };
-    auto Y = [&](double z) { return (150 + (57.6 - z) * 150) * k; };
-    // 1) 레벨선: 위에서 아래로 한 줄씩(선마다 시차), 50 cm 선이 조금 진함
-    const double lv = seg(0.05, 0.32);
-    for (int i = 0; i <= 16; ++i) {
-        double z = 57.6 - i * 0.1;
-        double u = std::clamp(lv * 17.0 - i * 0.8, 0.0, 1.0);
-        if (u <= 0) continue;
-        bool major = (i % 5) == 1 && z <= 57.5 + 1e-6;
-        p.setPen(QPen(major ? QColor(0xA0, 0x9E, 0x97) : QColor(0xEE, 0xED, 0xE7), std::max(1.0, (major ? 1.1 : 0.75) * k)));
-        p.drawLine(QPointF(60 * k, Y(z)), QPointF((60 + 840 * u) * k, Y(z)));
-    }
-    // 2) 단면선 모양
-    QPainterPath cut;
-    cut.moveTo(X(0), Y(57.25));
-    cut.cubicTo(X(0.6), Y(57.2), X(0.9), Y(56.3), X(1.4), Y(56.15));
-    cut.cubicTo(X(1.9), Y(56.05), X(2.2), Y(56.4), X(2.6), Y(57.22));
-    cut.lineTo(X(3.2), Y(57.28));
-    const double reveal = seg(0.38, 0.80);
-    // 3) 흙 면(층 띠): 단면선 아래, 왼쪽에서 오른쪽으로 드러남. 사진 대신 평평한 색 띠
-    if (reveal > 0) {
-        QPainterPath soil = cut;
-        soil.lineTo(X(3.2), Y(55.9)); soil.lineTo(X(0), Y(55.9)); soil.closeSubpath();
+    const double tileIn = seg(0.0, 0.14), ground = seg(0.02, 0.14), dig = seg(0.12, 0.50), cut = seg(0.45, 0.85), word = seg(0.55, 0.80), sub = seg(0.80, 1.0);
+
+    // 1) 타일 160 px at (110, 180): 위로 10 px 떠오르며 나타남
+    const double side = 160 * k;
+    const QRectF tile(110 * k, 180 * k + (1 - tileIn) * 10 * k, side, side);
+    p.setOpacity(tileIn);
+    if (t >= 0.85) {   // 끝 장면 = 앱 아이콘 그대로
+        QPixmap ic = kerf::appPixmap(int(std::lround(side)), p.device()->devicePixelRatioF());
+        p.drawPixmap(tile.topLeft(), ic);
+    } else {
+        const double u = side / 24.0;   // 24 격자(아이콘 SVG 와 같은 좌표)
+        auto X = [&](double g) { return tile.left() + g * u; };
+        auto Y = [&](double g) { return tile.top() + g * u; };
         p.save();
-        p.setClipRect(QRectF(0, 0, (X(0) + (X(3.2) - X(0)) * reveal), im.height()));
-        p.setClipPath(soil, Qt::IntersectClip);
-        struct Band { double z0, z1; QColor c; };
-        const Band bands[] = {{57.6, 57.05, QColor(0xE3, 0xDA, 0xCC)}, {57.05, 56.6, QColor(0xD9, 0xB9, 0x9B)}, {56.6, 56.25, QColor(0xB5, 0x57, 0x3A)}, {56.25, 55.9, QColor(0x8F, 0x42, 0x29)}};
-        for (const Band& b : bands) p.fillRect(QRectF(X(0), Y(b.z0), X(3.2) - X(0), Y(b.z1) - Y(b.z0)), b.c);
+        QPainterPath rr; rr.addRoundedRect(tile, side * 0.23, side * 0.23);
+        p.setClipPath(rr);
+        p.fillRect(tile, theme::Ground);
+        struct Band { double y0, y1; QColor c; };
+        const Band bands[] = {{8, 12.5, QColor(0xE3, 0xDA, 0xCC)}, {12.5, 16.5, QColor(0xD9, 0xB9, 0x9B)}, {16.5, 21, QColor(0xB5, 0x57, 0x3A)}, {21, 24, QColor(0x8F, 0x42, 0x29)}};
+        for (const Band& b : bands) p.fillRect(QRectF(tile.left(), Y(b.y0), side, (b.y1 - b.y0) * u), b.c);
+        p.fillRect(QRectF(X(9), Y(8), 6 * u, 11 * u * dig), theme::Ground);   // 파 내려간 자리(크림)가 위에서 아래로 자란다
+        p.setPen(QPen(theme::Hand, std::max(1.0, 0.3 * u), Qt::SolidLine, Qt::FlatCap));   // 지표선(왼쪽에서 오른쪽으로)
+        p.drawLine(QPointF(X(0), Y(8)), QPointF(X(24 * ground), Y(8)));
+        // 빨간 단면선: 지표 → 슬롯 벽 → 바닥 → 벽 → 지표(길이 9 · 11 · 6 · 11 · 9 = 46 격자)를 앞에서부터 cut 만큼
+        const QPointF pts[] = {{0, 8}, {9, 8}, {9, 19}, {15, 19}, {15, 8}, {24, 8}};
+        double left = cut * 46.0;
+        QPainterPath cp; cp.moveTo(X(pts[0].x()), Y(pts[0].y()));
+        for (int i = 1; i < 6 && left > 0; ++i) {
+            const QPointF a = pts[i - 1], b = pts[i];
+            const double len = std::hypot(b.x() - a.x(), b.y() - a.y()), f = std::min(1.0, left / len);
+            cp.lineTo(X(a.x() + (b.x() - a.x()) * f), Y(a.y() + (b.y() - a.y()) * f));
+            left -= len;
+        }
+        if (cut > 0) { p.setPen(QPen(theme::SectionRed, 2.2 * u, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin)); p.setBrush(Qt::NoBrush); p.drawPath(cp); }
         p.restore();
+        const double rw = std::max(1.0, side / 128.0);   // 안쪽 가는 테(앱 아이콘과 같음)
+        p.setPen(QPen(QColor(20, 20, 19, 31), rw)); p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(QRectF(tile.left() + rw / 2, tile.top() + rw / 2, side - rw, side - rw), side * 0.23 - rw / 2, side * 0.23 - rw / 2);
     }
-    // 4) 단면선: 길이를 따라 점을 이어 그림
-    if (reveal > 0) {
-        QPainterPath part;
-        const int n = 160, m = std::max(1, int(n * reveal));
-        part.moveTo(cut.pointAtPercent(0));
-        for (int i = 1; i <= m; ++i) part.lineTo(cut.pointAtPercent(double(i) / n));
-        p.setPen(QPen(QColor(0xFF, 0x00, 0x00), std::max(1.5, 2.4 * k), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        p.setBrush(Qt::NoBrush);
-        p.drawPath(part);
-    }
-    // 5) A · A′ 끝선과 이름: 단면선이 시작되기 전에 선다
-    const double ab = seg(0.28, 0.40);
-    if (ab > 0) {
-        p.setOpacity(ab);
-        p.setPen(QPen(QColor(0xFF, 0x00, 0x00, 110), std::max(1.0, 1.0 * k), Qt::DashLine));
-        p.drawLine(QPointF(X(0), Y(57.6)), QPointF(X(0), Y(55.9)));
-        p.drawLine(QPointF(X(3.2), Y(57.6)), QPointF(X(3.2), Y(55.9)));
-        p.setFont(theme::uiFont(int(std::lround(18 * k)), true));
-        p.setPen(QColor(0xFF, 0x00, 0x00));
-        p.drawText(QRectF(X(0) - 20 * k, Y(57.6) - 28 * k, 40 * k, 22 * k), Qt::AlignCenter, QStringLiteral("A"));
-        p.drawText(QRectF(X(3.2) - 24 * k, Y(57.6) - 28 * k, 48 * k, 22 * k), Qt::AlignCenter, QStringLiteral("A′"));
+    p.setOpacity(1.0);
+
+    // 2) 「rench」: 명조(Batang → Noto Serif KR), 「h」 키가 타일 높이와 같게 · 기준선 = 타일 아래 모서리 · 오른쪽 여백 48 안에 들어오게(글꼴이 넓으면 줄임). 왼쪽에서 24 px 들어옴
+    if (word > 0) {
+        QFont f = theme::uiFont(230);
+        f.setFamilies({QStringLiteral("Batang"), QStringLiteral("Noto Serif KR"), QStringLiteral("Malgun Gothic")});
+        f.setPixelSize(std::max(8, int(std::lround(230 * k))));
+        const double hh = QFontMetricsF(f).tightBoundingRect(QStringLiteral("h")).height();
+        if (hh > 0) f.setPixelSize(std::max(8, int(std::lround(f.pixelSize() * side / hh))));
+        const double availW = (960 - 48 - 286) * k, textW = QFontMetricsF(f).horizontalAdvance(QStringLiteral("rench"));
+        if (textW > availW) f.setPixelSize(std::max(8, int(std::lround(f.pixelSize() * availW / textW))));
+        p.setOpacity(word);
+        p.setFont(f); p.setPen(theme::Ink);
+        p.drawText(QPointF(286 * k - (1 - word) * 24 * k, tile.top() + side), QStringLiteral("rench"));
         p.setOpacity(1.0);
     }
-    // 6) 이름·안내(처음부터 보임)
-    p.setPen(QColor(0x14, 0x14, 0x13));
-    QFont title = theme::uiFont(int(std::lround(36 * k)));
-    title.setFamilies({QStringLiteral("Batang"), QStringLiteral("Noto Serif KR"), QStringLiteral("Malgun Gothic")});
-    p.setFont(title);
-    p.drawText(QRectF(48 * k, 28 * k, 700 * k, 48 * k), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("Trench"));
-    p.setFont(theme::uiFont(int(std::lround(14 * k))));
-    p.setPen(QColor(0x5E, 0x5D, 0x59));
-    p.drawText(QRectF(48 * k, 76 * k, 700 * k, 24 * k), Qt::AlignLeft | Qt::AlignVCenter,
-               QStringLiteral("발굴 평·단면도 · 3MX·OBJ 실사 메시 · %1").arg(QString::fromUtf8(kVersion)));
-    // 7) 아래 기반암 띠 + 상태 글
+    // 3) 부제(마지막 .2 초에 나타남)
+    if (sub > 0) {
+        p.setOpacity(sub);
+        p.setFont(theme::uiFont(int(std::lround(16 * k))));
+        p.setPen(theme::Muted);
+        p.drawText(QRectF(110 * k, 392 * k, 780 * k, 24 * k), Qt::AlignLeft | Qt::AlignVCenter,
+                   QStringLiteral("발굴 평·단면 · 3MX · 3SM · OBJ 실사 메시 · %1").arg(QString::fromUtf8(kVersion)));
+        p.setOpacity(1.0);
+    }
+    // 4) 아래 기반암 띠 + 상태 글(.30 · .85 에서 바뀜) + 진행 막대(맨 위 3 px, 1 초 시계)
     p.fillRect(QRectF(0, im.height() - 72 * k, im.width(), 72 * k), QColor(0x26, 0x26, 0x24));
-    p.setPen(QColor(0xFA, 0xF9, 0xF5));
+    p.setPen(theme::Ground);
     p.setFont(theme::uiFont(int(std::lround(14 * k))));
-    const QString status = t >= 0.80 ? QStringLiteral("준비 완료") : t >= 0.30 ? QStringLiteral("잠시 후 화면이 열립니다") : QStringLiteral("앱을 준비하고 있습니다");
+    const QString status = t >= 0.85 ? QStringLiteral("준비 완료") : t >= 0.30 ? QStringLiteral("잠시 후 화면이 열립니다") : QStringLiteral("앱을 준비하고 있습니다");
     p.drawText(QRectF(48 * k, im.height() - 64 * k, 500 * k, 24 * k), Qt::AlignLeft | Qt::AlignVCenter, status);
-    p.setPen(QColor(0xC2, 0xC0, 0xB6));
+    p.setPen(theme::Edge);
     p.setFont(theme::uiFont(int(std::lround(12 * k))));
-    p.drawText(QRectF(48 * k, im.height() - 38 * k, 700 * k, 22 * k), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("원본 파일은 바꾸지 않습니다"));
-    p.drawText(QRectF(im.width() - 420 * k, im.height() - 38 * k, 372 * k, 22 * k), Qt::AlignRight | Qt::AlignVCenter,
-               QStringLiteral("© 2026 Trench · Qt 6.8"));
-    // 8) 진행 막대(기반암 띠 맨 위 3 px)
-    p.fillRect(QRectF(0, im.height() - 72 * k, im.width() * t, 3 * k), QColor(0xD9, 0x77, 0x57));
+    p.drawText(QRectF(48 * k, im.height() - 38 * k, 700 * k, 22 * k), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("원본 파일은 바꾸지 않습니다 · Esc = 건너뜀"));
+    p.drawText(QRectF(im.width() - 420 * k, im.height() - 38 * k, 372 * k, 22 * k), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("© 2026 Trench · Qt 6.8"));
+    p.fillRect(QRectF(0, im.height() - 72 * k, im.width() * t, 3 * k), theme::Action);
 }
 
 QImage MainWindow::renderOpeningSplash(const QSize& size, double t) {
