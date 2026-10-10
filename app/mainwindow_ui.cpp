@@ -2398,7 +2398,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     // 사용자가 확대한 보기는 창 크기가 바뀌어도 축척이 그대로(zoom-kept — 지킴 시험, 자동 맞춤이 사용자 보기까지 다시 맞추면 0)
     // 1280 좁은 창(spec 20261010-01 §3-A): 실행 크기가 1280 이하면 probe(1600×1000)를 거쳐 실제로 줄어든 창에서 잰다(ⓔ — 1280 실행의 plan-fits · zoom-kept 가 빈 값이 아니게).
     // 같은 블록에서 단면 머리(sec-header) · 정보 줄(strip) · 평면 눈금 글(plan-tick) · 홈 한 줄 글(home) · 세로 과장 뒤 맞춤 상태(vex-fit)를 상태별(run · 1280w · 1280L · 1280p · 1280d · probe · 1280v)로 잰다
-    struct Fit { int secOverlap = 0; bool kept = true, toggles = true, carets = true; QStringList secAt; int stripBad = 0; bool stateKept = true, gapKept = true; int tipMissing = 0; QStringList stripAt; int tickBad = 0; QStringList tickAt; int tickStep = -1; double tickPxPerM = 0; } F;
+    struct Fit { int secOverlap = 0; bool kept = true, toggles = true, carets = true; int caretInk = -1, caretNeed = 0; QStringList secAt; int stripBad = 0; bool stateKept = true, gapKept = true; int tipMissing = 0; QStringList stripAt; int tickBad = 0; QStringList tickAt; int tickStep = -1; double tickPxPerM = 0; } F;
     auto measure = [&](const QString& st, bool ticks) {
         pump(100);
         // 단면 머리: 겹침 · 밖 · 짓눌림 합. 제목 · 축척 칸 · 맞춤 · 확대 · 축소는 늘 보이고, 켜기 · 끄기 넷은 상자(viewToggles)나 「그릴 것」 메뉴(secTogglesMenu, 같은 QAction 넷)로 닿는다
@@ -2419,12 +2419,26 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
                     reach = acts.contains(action("image")) && acts.contains(action("line")) && acts.contains(action("levels")) && acts.contains(action("fade"));
                 }
         if (!reach) F.toggles = false;
-        // 보이는 메뉴 단추(「그릴 것」 · 세로 과장)는 ▾ 가 보여야 한다(스펙 §4 「그릴 것 ▾」 · 「세로 ×1 ▾」 — QSS 가 메뉴 표시를 지우므로 글 ▾ 또는 아이콘에 구운 ▾, rework 2 UI S1)
+        // 보이는 메뉴 단추(「그릴 것」 · 세로 과장)는 ▾ 가 보여야 한다(스펙 §4 「그릴 것 ▾」 · 「세로 ×1 ▾」 — QSS 가 메뉴 표시를 지우므로 글 ▾ 또는 아이콘에 구운 ▾, rework 2 UI S1).
+        // 구운 ▾ 는 픽셀로 잰다(rework 3 ⓑ): 단추 아이콘의 그 배율 장에서, 같은 이름의 맨 아이콘보다 더해진 먹색 픽셀이 오른쪽 아래 사분면에
+        // 리본 메뉴 칩 ▾ 넓이(6 × 4 = 12 논리 px²) × dpr² 이상이어야 한다 — 속성(caretBaked)만 믿던 판정은 「점」 같은 ▾ 도 통과시켰다
         for (QToolButton* mb : {secTogglesMenu_, vexBtn_})
             if (mb && mb->isVisibleTo(secTitleBar_)) {
                 const bool textCaret = mb->toolButtonStyle() != Qt::ToolButtonIconOnly && mb->text().contains(QChar(0x25BE));
-                const bool iconCaret = mb->property("caretBaked").toBool() && !mb->icon().isNull();
-                if (!textCaret && !iconCaret) F.carets = false;
+                if (textCaret) continue;
+                const QString nm = mb == secTogglesMenu_ ? QStringLiteral("layers") : QString::fromLatin1(theme::iconName(theme::Ico::Vex));
+                const qreal d = mb->devicePixelRatioF();
+                const QImage a = mb->icon().pixmap(mb->iconSize(), d).toImage().convertToFormat(QImage::Format_ARGB32);
+                const QImage g = kerf::glyph(nm, mb->iconSize().width(), theme::Hand, d).toImage().convertToFormat(QImage::Format_ARGB32);
+                auto ink = [](QRgb c) { return qAlpha(c) > 200 && std::abs(qRed(c) - theme::Hand.red()) < 40 && std::abs(qGreen(c) - theme::Hand.green()) < 40 && std::abs(qBlue(c) - theme::Hand.blue()) < 40; };
+                int added = 0;
+                if (a.size() == g.size())
+                    for (int y = a.height() / 2; y < a.height(); ++y)
+                        for (int x = a.width() / 2; x < a.width(); ++x) if (ink(a.pixel(x, y)) && !ink(g.pixel(x, y))) ++added;
+                const int need = int(std::lround(12.0 * d * d));
+                F.caretInk = F.caretInk < 0 ? added : std::min(F.caretInk, added);
+                F.caretNeed = need;
+                if (added < need) F.carets = false;
             }
         // 정보 줄: 겹침 · 밖 · 짓눌림 + 잘린 글, 계산 상태 글은 늘 보임, 빈 구간 꼬리는 늘 보임(rework 2 correctness C1), 줄인 글에는 전체 글 툴팁
         int tip = 0;
@@ -2454,7 +2468,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         const int p1 = secHeaderPasses_; updateHeader(); refitB = secHeaderPasses_ - p1;
     }
     // 홈(rework 2 code B1 · UI B1): 실행 크기와 1280 에서 잰다 — 잘린 라벨(빈 글 · 「…」만 · 「…」보다 좁음 포함)과 이어서 작업 칸(폴더 칸 제외)에서 줄인 글 수
-    int homeClipped = 0, homeTip = 0, homeMinW = -1, homeStale = -1, homeCells = 0; QStringList homeNames, homeAt;
+    int homeClipped = 0, homeTip = 0, homeMinW = -1, homeStale = -1, homeCells = 0, homeModeBad = 0; QStringList homeNames, homeAt, homeModes;
     auto measureHome = [&](const QString& st, bool stale) {
         if (!startPage_) return;
         showStart(true); pump(250);
@@ -2484,6 +2498,20 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
                 if (!inFolder && full.isValid() && l->text() != full.toString()) { ++cells; if (nm.size() < 6) nm << full.toString().left(16); }
             }
         }
+        // 칸 배치(rework 3 ⓐ): 칸 폭이 폴더 2 : 나머지 1(옛 배치, 정수 반올림 ±2 px)이면 ratio, 아니면 content. 실행 크기 1920 이상은 ratio(모양 그대로), 1280(합성)은 content(좁을 때만 내용 폭)
+        QString mode = QStringLiteral("none");
+        for (QWidget* cw : startPage_->findChildren<QWidget*>(QStringLiteral("ccCells"))) {
+            if (!cw->isVisibleTo(startPage_)) continue;
+            QList<int> ws;
+            for (QObject* o : cw->children()) if (o->isWidgetType() && static_cast<QWidget*>(o)->isVisibleTo(cw)) ws << static_cast<QWidget*>(o)->width();
+            if (ws.size() == 6) {
+                bool ratio = std::abs(ws[0] - 2 * ws[1]) <= 2;
+                for (int i = 2; i < 6; ++i) ratio = ratio && std::abs(ws[i] - ws[1]) <= 1;
+                mode = ratio ? QStringLiteral("ratio") : QStringLiteral("content");
+            }
+        }
+        if ((st == QLatin1String("run") && keepSize.width() >= 1920 && mode != QLatin1String("ratio")) || (st == QLatin1String("1280w") && mode != QLatin1String("content"))) ++homeModeBad;
+        homeModes << st + QLatin1Char(':') + mode;
         homeClipped += c; homeTip += tip; homeCells += cells; homeMinW = std::max(homeMinW, minimumSizeHint().width());
         for (const QString& s : nm) if (homeNames.size() < 6) homeNames << st + QLatin1Char(':') + s;
         homeAt << QStringLiteral("%1:%2:%3").arg(st).arg(c).arg(cells);
@@ -2547,7 +2575,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     if (size() != keepSize) { resize(keepSize); pump(250); }
     showStatus(keepMsg2); setActiveView(planActive2 ? 0 : 1);
     const bool secOk = F.secOverlap == 0 && F.kept && F.toggles && F.carets && refitA <= 1 && refitB <= 0;
-    L << QStringLiteral("ui-audit sec-header-overlap=%1 kept=%2 toggles-reachable=%3 carets=%4 refit=%5/%6 at=%7%8").arg(F.secOverlap).arg(F.kept ? 1 : 0).arg(F.toggles ? 1 : 0).arg(F.carets ? 1 : 0).arg(refitA).arg(refitB)
+    L << QStringLiteral("ui-audit sec-header-overlap=%1 kept=%2 toggles-reachable=%3 carets=%4 caret-ink=%5/%6 refit=%7/%8 at=%9%10").arg(F.secOverlap).arg(F.kept ? 1 : 0).arg(F.toggles ? 1 : 0).arg(F.carets ? 1 : 0).arg(F.caretInk).arg(F.caretNeed).arg(refitA).arg(refitB)
              .arg(F.secAt.join(QLatin1Char(','))).arg(secOk ? QString() : QStringLiteral("  FAIL"));
     ok &= secOk;
     const bool stripOk = F.stripBad == 0 && F.stateKept && F.gapKept && F.tipMissing == 0;
@@ -2558,10 +2586,10 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         L << QStringLiteral("ui-audit plan-tick-overlap=%1 step=%2 px-per-m=%3 at=%4%5").arg(F.tickBad).arg(F.tickStep).arg(F.tickPxPerM, 0, 'f', 1).arg(F.tickAt.join(QLatin1Char(','))).arg(F.tickBad == 0 ? QString() : QStringLiteral("  FAIL"));
         ok &= F.tickBad == 0;
     }
-    const bool homeOk = homeClipped == 0 && homeCells == 0 && homeTip == 0 && homeMinW <= 1280;
-    L << QStringLiteral("ui-audit home-clipped=%1%2 cells-elided=%3 elide-tip-missing=%4 min-width=%5 at=%6%7").arg(homeClipped)
+    const bool homeOk = homeClipped == 0 && homeCells == 0 && homeModeBad == 0 && homeTip == 0 && homeMinW <= 1280;
+    L << QStringLiteral("ui-audit home-clipped=%1%2 cells-elided=%3 cells-mode=%4 elide-tip-missing=%5 min-width=%6 at=%7%8").arg(homeClipped)
              .arg(homeNames.isEmpty() ? QString() : QStringLiteral(" [%1]").arg(homeNames.join(QLatin1Char(','))))
-             .arg(homeCells).arg(homeTip).arg(homeMinW).arg(homeAt.join(QLatin1Char(','))).arg(homeOk ? QString() : QStringLiteral("  FAIL"));
+             .arg(homeCells).arg(homeModes.join(QLatin1Char(','))).arg(homeTip).arg(homeMinW).arg(homeAt.join(QLatin1Char(','))).arg(homeOk ? QString() : QStringLiteral("  FAIL"));
     ok &= homeOk;
     L << QStringLiteral("ui-audit home-stale-children=%1%2").arg(homeStale).arg(homeStale > 0 ? QStringLiteral("  FAIL") : QString());   // AC14
     ok &= homeStale <= 0;
