@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T8 높이 UI 삭제 끝**(표고 숫자 byte 그대로 · 실제 모델 감사가 처음으로 전부 `RESULT ok`) → 다음 T9(G6) F1 창 · 표 = 실제 키. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T9 F1 창 고침(어두운 모드 바탕 · 표 = 실제 키 · F2 · Del 연결) 끝** → 다음 T10(G7) 입면 위 거리 눈금 + D 키 + 도면 SVG. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -340,6 +340,15 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 합성 감사 1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2 열 가지 + 1920 ×1.25 · ×1.75 + **실제 모델 Production_1.3sm `RESULT ok`**(그동안 남던 `home-clipped` 도 높이 칸이 빠져 폭이 남으면서 사라짐 — 감사 R6b 닫음) · 전체 `asec_tests` · `--sheet-check height-lines=0` · `--icon-sheet` · `--undo-test` · `--ctx-shot` EXIT 0. **내보내기 byte 비교:** 고친 뒤(`t8a-after`)와 심은 지정값 있는 고친 뒤(`t8a-seeded`)가 모든 파일에서 **같음**(저장된 지정값은 이제 아무 영향 없음). 기준선(A)과 비교: real/points.las · .xyz, synth/plan.tif · plan.tfw · points.las · points.xyz · profile.csv · section.dxf · section.json · section.tfw · section_image.png · sheet.dxf · sheet_image.png **byte 같음**. 달라진 것은 높이 글이 빠진 그림뿐 — 조판 SVG 셋 · section.svg · sheet.png · section.tif(GeoTIFF 태그는 줄 오프셋 · 바이트 수 말고 같고, 화소 차이는 머리 글 줄 하나 `(4165, 40)–(5097, 72)` 안).
 - **판정(Ruling):** ① core 높이 해석 · `applyHeightDeclaration` 은 지우지 않음(MDL 재사용 · 시험 · asec-info) — 앱에서만 쓰지 않는다. ② 저장된 높이 지정값은 지우지 않고 읽지 않음(「사용자 설정 값은 지우지 않음」) — 틀리면: 예전에 지정해 둔 사람의 내보내기 파일 높이 이름표가 바뀜(값은 그대로). ③ 수평 좌표계는 배지가 아니라 글 — 캔버스 Work 화판의 상태줄이 글이라서(advisor 지적) — 틀리면 테두리 배지로 되돌림(QSS 만). ④ 높이 안내를 core 에서 `heightWarnings` 로 뗌(앱이 높이를 다루지 않아 알림 띠에 올리면 고칠 길 없는 안내가 되므로). ⑤ `Ico::Height` · `kerf/height.svg` 는 안 쓰이지만 T13(제거 목록)에서 한꺼번에 지움.
 - **남은 문제:** 없음(T8 끝). 다음 T9(G6) F1 창 고침 · 표 = 실제 키.
+
+### 2026-10-11 · Claude Code(Sonnet 5.5) — T9 (G6 · R8): F1 창 고침 — 어두운 바탕에 어두운 글 · 표 = 실제 키
+- **사용자 보고(2026-10-10 캡처):** F1 단축키 창 본문이 어두워 글이 안 보임. 확인 ③ 「프로그램 정보는 F1 창 아래 한 줄」(T6 에서 줄은 이미 넣음).
+- **원인:** 이 PC 는 윈도우 「앱 어두운 모드」(`AppsUseLightTheme = 0`) — Qt 가 시스템 어두운 팔레트를 따라 QSS 가 없는 표 · 창이 어두운 바탕이 되고, 앱 글자색(어두운 색)이 그 위에 올라가 읽히지 않았다.
+- **시험 먼저(RED):** `--ui-audit keys-table-match=%1 rows two-col contrast color-scheme missing=[…] extra=[…]` — 표의 키 집합과 실제 연결된 키 집합(동작 단축키 · `QShortcut`, 아직 안 켜진 H · O 도구 제외)이 같아야 하고 · 두 열 · 표 그림에서 바탕 / 글 대비 ≥ 4.5 · 색 체계 Light. 표에 F2 · Del 을 적자 `extra=[Del,F2]  FAIL`(EXIT 9), 색 체계 `not-light`.
+- **무엇을:** `keyRows()` 한 곳(키 글 · 하는 일 · 실제 키들)에서 F1 창 표를 만들고(23줄, 두 열 4칸) 감사가 같은 표를 읽음 · 표 QSS `#keysTable`(흰 바탕 · 잉크 글 · 둥글기 8) · `main()` 에서 `setColorScheme(Light)`(Qt 6.8 에서 생긴 API — 문서로 확인, CI 6.8.3 · 이 PC 6.10.3 모두 가능) · 단면 목록 메뉴에만 적혀 있던 **F2(이름 · 메모) · Del(지우기)** 를 작업 영역 단축키로 연결 · 「닫기 Esc」(영어 「Close」 대신) · 스크롤바 없음.
+- **확인:** 합성 감사 10조합 + 1920 ×1.25 · ×1.75 + 실제 모델 `RESULT ok` · **실제 Windows 창 플랫폼에서도 `RESULT ok`**(`color-scheme=light` — 시스템은 어두운 모드인데 앱은 밝게, `contrast=18.4`) · 실제 창 캡처 `C:\dev\tmp\ui__keys.png`(두 열 표 · 글 읽힘 · 정보 줄 · 닫기 Esc) 눈 확인 · `~CoalescingWorker*` 통과 · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0.
+- **판정(Ruling):** ① 앱 전체를 밝은 색 체계로 고정(어두운 모드 지원 없음 — 스펙에 어두운 테마 없음, `ui-visual-check` 도 `--themes light` 만) — 틀리면: 어두운 모드를 쓰는 사람도 밝은 앱을 봄. ② F2 · Del 은 「고른 단면」에 걸었고 단면 목록에 초점이 없어도 작업 영역 안이면 먹음(목록이 Tab 초점만 받아 클릭 뒤에는 초점이 안 가므로) — Del 은 확인 창을 거침. ③ Ctrl+Tab(탭 순환) · D(거리 눈금)는 아직 없는 기능이라 표에 안 적음(D 는 T10 에서 걸며 표에 더함).
+- **남은 문제:** 없음(T9 끝). 다음 T10(G7) 입면 위 거리 눈금(세로) + D 키 + 도면 SVG.
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <QDialog>
 #include <QSettings>
+#include <QStyleHints>
 #include <array>
 #include <memory>
 #include <QFile>
@@ -222,6 +223,7 @@ int main(int argc, char** argv) {
     QApplication::setApplicationDisplayName(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
     QFont f = theme::uiFont(13); f.setStyleStrategy(QFont::PreferAntialias);   // 한글 본문 13 px
     QApplication::setFont(f);
+    app.styleHints()->setColorScheme(Qt::ColorScheme::Light);   // 앱은 늘 밝은 색 체계(T9 · Qt 6.8+) — 윈도우 어두운 모드에서 창 · 표 바탕이 어두워 글이 안 보이던 버그
     app.setStyle("Fusion");
     app.setStyleSheet(theme::styleSheet(QSettings().value("ui/highContrast", false).toBool()));
     app.setWindowIcon(kerf::appIcon());   // Trench 앱 아이콘 — 같은 SVG(app/icons/app/)에서 .ico 도 만든다(T2)

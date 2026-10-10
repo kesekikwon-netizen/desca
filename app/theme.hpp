@@ -225,6 +225,8 @@ QPushButton#quiet:hover { background: #F5F4ED; }
 QPushButton#danger { background: #FFFFFF; color: #A33B3B; border-color: #A33B3B; }
 
 QDialog { background: #FAF9F5; }
+QTableWidget#keysTable { background: #FFFFFF; color: #141413; border: 1px solid #DEDCD1; border-radius: 8px; gridline-color: transparent; font-size: 12px; outline: 0; }
+QTableWidget#keysTable::item { padding: 2px 8px; border-bottom: 1px solid #F0EEE6; color: #141413; }
 QWidget#dialogHead { background: #FFFFFF; border-bottom: 1px solid #DEDCD1; }
 QWidget#dialogSide { background: #FFFFFF; border-left: 1px solid #DEDCD1; }
 QScrollArea#sideScroll { border: none; background: #FFFFFF; }

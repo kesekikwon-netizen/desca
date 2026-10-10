@@ -18,6 +18,7 @@
 #include <QDialogButtonBox>
 #include <QElapsedTimer>
 #include <QSet>
+#include <QStyleHints>
 #include <QDir>
 #include <QDesktopServices>
 #include <QUrl>
@@ -1652,36 +1653,69 @@ void MainWindow::applyHighContrast(bool on) {
     updateHeader();
 }
 
+// ---------------------------------------------------------------- F1 창(키 표 = 실제로 연결된 키 — T9 · 감사 keys-table-match)
+// 표의 한 줄 = 보이는 키 글 + 하는 일 + 그 줄이 말하는 실제 단축키들. 표와 코드가 어긋나면 감사가 잡는다(없는 키를 적거나, 있는 키를 빼먹으면 실패)
+struct KeyRow { QString key, what; QStringList seqs; };
+static const QList<KeyRow>& keyRows() {
+    static const QList<KeyRow> rows = {
+        {QStringLiteral("Ctrl+O"), QStringLiteral("모델 열기"), {QStringLiteral("Ctrl+O")}},
+        {QStringLiteral("Ctrl+Shift+O"), QStringLiteral("최근 모델 다시 열기(마지막 단면선·화면 그대로)"), {QStringLiteral("Ctrl+Shift+O")}},
+        {QStringLiteral("S"), QStringLiteral("단면선 긋기 — A 클릭, A′ 클릭"), {QStringLiteral("S")}},
+        {QStringLiteral("Shift (긋는 중)"), QStringLiteral("동서·남북으로 고정"), {}},
+        {QStringLiteral("Esc"), QStringLiteral("그리기 취소"), {QStringLiteral("Esc")}},
+        {QStringLiteral("1 – 5"), QStringLiteral("뒤 깊이 0.5 · 1 · 2 · 3 · 5 m (기본 3 m — 입면도용 배경)"), {QStringLiteral("1"), QStringLiteral("2"), QStringLiteral("3"), QStringLiteral("4"), QStringLiteral("5")}},
+        {QStringLiteral("[  ]"), QStringLiteral("단면선 평행 이동 −0.1 · +0.1 m (보는 쪽 +)"), {QStringLiteral("["), QStringLiteral("]")}},
+        {QStringLiteral("{  }"), QStringLiteral("단면선 평행 이동 −1 · +1 m"), {QStringLiteral("{"), QStringLiteral("}")}},
+        {QStringLiteral("X"), QStringLiteral("세로 과장 ×1 → ×2 → ×5 → ×10 (화면만 · 도면은 1:1)"), {QStringLiteral("X")}},
+        {QStringLiteral("R"), QStringLiteral("방향 반전(A↔A′)"), {QStringLiteral("R")}},
+        {QStringLiteral("N"), QStringLiteral("새 단면"), {QStringLiteral("N")}},
+        {QStringLiteral("I · L · V"), QStringLiteral("입면 영상 · 잘린 선 · 레벨선 켜기 · 끄기"), {QStringLiteral("I"), QStringLiteral("L"), QStringLiteral("V")}},
+        {QStringLiteral("F · T"), QStringLiteral("맞춤 · 위에서 보기"), {QStringLiteral("F"), QStringLiteral("T")}},
+        {QStringLiteral("+  −"), QStringLiteral("확대 · 축소"), {QStringLiteral("+"), QStringLiteral("-")}},
+        {QStringLiteral("Ctrl+1 · Ctrl+2"), QStringLiteral("평면 · 단면 보이기 켜기 · 끄기"), {QStringLiteral("Ctrl+1"), QStringLiteral("Ctrl+2")}},
+        {QStringLiteral("F11"), QStringLiteral("전체화면 · 원래 크기"), {QStringLiteral("F11")}},
+        {QStringLiteral("Ctrl+P"), QStringLiteral("도면 — 평면도 · 단면도 조판"), {QStringLiteral("Ctrl+P")}},
+        {QStringLiteral("Ctrl+D · Ctrl+E"), QStringLiteral("단면 DXF · 단면 영상(PNG · TIFF · GeoTIFF)"), {QStringLiteral("Ctrl+D"), QStringLiteral("Ctrl+E")}},
+        {QStringLiteral("F2"), QStringLiteral("고른 단면 이름 · 메모 바꾸기"), {QStringLiteral("F2")}},
+        {QStringLiteral("Del"), QStringLiteral("고른 단면 지우기(확인 창이 뜸 · 모델 파일은 그대로)"), {QStringLiteral("Del")}},
+        {QStringLiteral("Ctrl+Z · Ctrl+Y"), QStringLiteral("되돌리기 · 다시"), {QStringLiteral("Ctrl+Z"), QStringLiteral("Ctrl+Y"), QStringLiteral("Ctrl+Shift+Z")}},
+        {QStringLiteral("Ctrl+Q"), QStringLiteral("끝내기"), {QStringLiteral("Ctrl+Q")}},
+        {QStringLiteral("F1"), QStringLiteral("이 표"), {QStringLiteral("F1")}},
+    };
+    return rows;
+}
+
 QDialog* MainWindow::keysDialog() {
     auto* d = new QDialog(this); d->setWindowTitle(QStringLiteral("단축키"));
-    auto* v = new QVBoxLayout(d);
-    auto* t = new QTableWidget(0, 2); t->setHorizontalHeaderLabels({QStringLiteral("키"), QStringLiteral("하는 일")});
-    t->verticalHeader()->setVisible(false); t->setEditTriggers(QAbstractItemView::NoEditTriggers); t->setShowGrid(false);
-    t->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    const char* rows[][2] = {
-        {"Ctrl+O", "모델 열기"}, {"Ctrl+Shift+O", "최근 모델 다시 열기(마지막 단면선·화면 그대로)"}, {"S", "단면선 그리기 — A 클릭, A′ 클릭"},
-        {"Shift (그리는 중)", "동서·남북으로 고정"}, {"Esc", "그리기 취소"},
-        {"1 2 3 4 5", "뒤 깊이 0.5 / 1 / 2 / 3 / 5 m (기본 3 m — 입면도용 배경)"}, {"[  ]", "평행 이동 −0.1 / +0.1 m (보는 쪽 +)"}, {"{  }", "평행 이동 −1 / +1 m"},
-        {"X", "세로 과장 ×1 → ×2 → ×5 → ×10 (화면만 · 도면은 1:1)"},
-        {"R", "방향 반전(A↔A′)"}, {"N", "새 단면 추가"}, {"I · L · V", "입면 영상 · 단면선 · 레벨선 켜기/끄기"},
-        {"Ctrl+Z / Ctrl+Y", "되돌리기 / 다시(단면선·두께·표시)"}, {"F11", "전체화면 / 원래 크기"}, {"Ctrl+Q", "끝내기"}, {"Ctrl+P", "도면 — 평면도 조판 또는 단면도 조판"},
-        {"Ctrl+D · Ctrl+E", "단면 DXF · 단면 영상(GeoTIFF 포함)"}, {"F · T · + · −", "맞춤 · 위에서 · 확대 · 축소"}, {"Ctrl+1 · Ctrl+2", "평면 · 단면 보기 켜기/끄기"},
-        {"F1", "이 표"}};
-    for (auto& r : rows) {
-        int i = t->rowCount(); t->insertRow(i);
-        auto* k = new QTableWidgetItem(QString::fromUtf8(r[0])); k->setFont(theme::monoFont(12));
-        t->setItem(i, 0, k); t->setItem(i, 1, new QTableWidgetItem(QString::fromUtf8(r[1])));
+    auto* v = new QVBoxLayout(d); v->setContentsMargins(20, 16, 20, 14); v->setSpacing(10);
+    const QList<KeyRow>& rows = keyRows();
+    const int n = int(rows.size()), half = (n + 1) / 2;
+    auto* t = new QTableWidget(half, 4); t->setObjectName("keysTable");   // 두 열(키 · 하는 일 | 키 · 하는 일)
+    t->setHorizontalHeaderLabels({QStringLiteral("키"), QStringLiteral("하는 일"), QStringLiteral("키"), QStringLiteral("하는 일")});
+    t->verticalHeader()->setVisible(false); t->setEditTriggers(QAbstractItemView::NoEditTriggers); t->setSelectionMode(QAbstractItemView::NoSelection); t->setShowGrid(false);
+    t->setFocusPolicy(Qt::NoFocus); t->setWordWrap(true);
+    t->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+    t->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    t->horizontalHeader()->setFixedHeight(28);
+    t->verticalHeader()->setDefaultSectionSize(30);
+    for (int i = 0; i < n; ++i) {
+        const int r = i % half, c = (i / half) * 2;
+        auto* k = new QTableWidgetItem(rows[i].key); k->setFont(theme::monoFont(12));
+        t->setItem(r, c, k); t->setItem(r, c + 1, new QTableWidgetItem(rows[i].what));
     }
-    t->resizeColumnToContents(0);
+    t->setColumnWidth(0, 140); t->setColumnWidth(1, 350); t->setColumnWidth(2, 140); t->setColumnWidth(3, 350);
+    t->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); t->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    t->setFixedHeight(28 + 30 * half + 8);
     v->addWidget(t);
     // 프로그램 정보는 여기 한 줄(T6 · 더보기 삭제)
     auto* about = new QPushButton(QStringLiteral("Trench %1 · 프로그램 정보").arg(QString::fromUtf8(kVersion))); about->setObjectName("aboutLink"); about->setFlat(true); about->setCursor(Qt::PointingHandCursor);
     QObject::connect(about, &QPushButton::clicked, this, [this] { dlgAbout(); });
     v->addWidget(about, 0, Qt::AlignLeft);
     auto* bb = new QDialogButtonBox(QDialogButtonBox::Close);
+    bb->button(QDialogButtonBox::Close)->setText(QStringLiteral("닫기  Esc"));
     QObject::connect(bb, &QDialogButtonBox::rejected, d, &QDialog::reject);
     v->addWidget(bb);
-    d->resize(560, 620);
+    d->setFixedWidth(20 + 140 + 350 + 140 + 350 + 20 + 8);
     return d;
 }
 
@@ -1822,6 +1856,12 @@ MainWindow::MainWindow() {
                 const double v = section_->verticalExaggeration();
                 setVex(v < 2 ? 2 : v < 5 ? 5 : v < 10 ? 10 : 1);
             });
+        }
+        {   // F2 · Del: 고른 단면 이름 바꾸기 · 지우기 — 단면 목록 오른쪽 클릭 메뉴에 이미 적혀 있던 키(T9: 적혀만 있고 안 걸려 있던 것을 건다)
+            auto* rn = new QShortcut(QKeySequence(Qt::Key_F2), workArea_); rn->setContext(Qt::WidgetWithChildrenShortcut);
+            QObject::connect(rn, &QShortcut::activated, this, [this] { if (current_ >= 0) renameSection(current_); });
+            auto* dl = new QShortcut(QKeySequence(Qt::Key_Delete), workArea_); dl->setContext(Qt::WidgetWithChildrenShortcut);
+            QObject::connect(dl, &QShortcut::activated, this, [this] { if (current_ >= 0) deleteSection(current_); });
         }
         const std::pair<const char*, double> shifts[] = {{"]", 0.1}, {"[", -0.1}, {"}", 1.0}, {"{", -1.0}};
         for (auto& [k, d] : shifts) {
@@ -2273,6 +2313,42 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     const bool tidyOk = pointsChips == 1 && xyzLasChips == 0 && keysInView == 1 && quitKey && aboutLink == 1;
     L << QStringLiteral("ui-audit ribbon-tidy points-chips=%1 xyz-las-chips=%2 keys-in-view=%3 quit-ctrl-q=%4 about-in-keys=%5%6").arg(pointsChips).arg(xyzLasChips).arg(keysInView).arg(quitKey ? 1 : 0).arg(aboutLink).arg(tidyOk ? QString() : QStringLiteral("  FAIL"));
     ok &= tidyOk;
+
+    // 4g) F1 창(T9): 표의 키 = 실제로 연결된 키(없는 키를 적거나 있는 키를 빼면 실패) · 두 열 · 글이 읽힘(대비 4.5:1) · 앱은 늘 밝은 색 체계
+    {
+        auto norm = [](const QKeySequence& k) { return k.toString(QKeySequence::PortableText); };
+        QSet<QString> actual, table;
+        for (const auto& kv : act_) {
+            if (kv.first == QLatin1String("hatch") || kv.first == QLatin1String("outline")) continue;   // 아직 안 켜진 도구(H · O 는 R16 · R17 뒤 표에 들어온다)
+            for (const QKeySequence& k : kv.second->shortcuts()) if (!k.isEmpty()) actual.insert(norm(k));
+        }
+        for (auto* sc : findChildren<QShortcut*>()) if (!sc->key().isEmpty()) actual.insert(norm(sc->key()));
+        for (const KeyRow& r : keyRows()) for (const QString& q : r.seqs) table.insert(norm(QKeySequence(q)));
+        QStringList missing, extra;
+        for (const QString& k : actual) if (!table.contains(k)) missing << k;
+        for (const QString& k : table) if (!actual.contains(k)) extra << k;
+        missing.sort(); extra.sort();
+        std::unique_ptr<QDialog> kd(keysDialog());
+        kd->show(); pump(100);
+        auto* kt = kd->findChild<QTableWidget*>(QStringLiteral("keysTable"));
+        double contrast = 0; bool twoCol = kt && kt->columnCount() == 4;
+        if (kt) {
+            const QImage img = kt->viewport()->grab().toImage().convertToFormat(QImage::Format_RGB32);
+            QHash<QRgb, int> hist; for (int y = 0; y < img.height(); y += 2) for (int x = 0; x < img.width(); x += 2) ++hist[img.pixel(x, y)];
+            QRgb bg = 0; int bn = -1; for (auto it = hist.begin(); it != hist.end(); ++it) if (it.value() > bn) { bn = it.value(); bg = it.key(); }
+            auto lum = [](QRgb c) { auto f = [](int v) { double u = v / 255.0; return u <= 0.03928 ? u / 12.92 : std::pow((u + 0.055) / 1.055, 2.4); }; return 0.2126 * f(qRed(c)) + 0.7152 * f(qGreen(c)) + 0.0722 * f(qBlue(c)); };
+            QRgb fg = bg; double best = 0; for (auto it = hist.begin(); it != hist.end(); ++it) { const double dd = std::fabs(lum(it.key()) - lum(bg)); if (dd > best) { best = dd; fg = it.key(); } }
+            const double l1 = std::max(lum(bg), lum(fg)), l2 = std::min(lum(bg), lum(fg)); contrast = (l1 + 0.05) / (l2 + 0.05);
+            if (!dir.isEmpty()) kd->grab().save(QDir(dir).filePath(QStringLiteral("keys.png")));
+        }
+        // offscreen 플랫폼은 색 체계를 알려 주지 않는다(Unknown) — 실제 Windows 에서는 시스템이 어두운 모드여도 Light 여야 한다(이 PC: 앱 어두운 모드 켜짐)
+        const Qt::ColorScheme cs = QGuiApplication::styleHints()->colorScheme();
+        const bool light = cs == Qt::ColorScheme::Light || (cs == Qt::ColorScheme::Unknown && QGuiApplication::platformName() == QLatin1String("offscreen"));
+        const bool keysOk = missing.isEmpty() && extra.isEmpty() && twoCol && contrast >= 4.5 && light;
+        L << QStringLiteral("ui-audit keys-table-match=%1 rows=%2 two-col=%3 contrast=%4 color-scheme=%5 missing=[%6] extra=[%7]%8").arg(missing.isEmpty() && extra.isEmpty() ? 1 : 0).arg(keyRows().size()).arg(twoCol ? 1 : 0)
+                 .arg(contrast, 0, 'f', 1).arg(light ? QStringLiteral("light") : QStringLiteral("not-light(%1)").arg(int(QGuiApplication::styleHints()->colorScheme()))).arg(missing.join(QLatin1Char(','))).arg(extra.join(QLatin1Char(','))).arg(keysOk ? QString() : QStringLiteral("  FAIL"));
+        ok &= keysOk;
+    }
 
     // 4e) 오른쪽 판 삭제 · 고른 단면의 수치는 단면 목록 아래에 읽기 전용으로만(T7 · G4 · 사용자 결정 2026-10-10 「선택한 단면의 이 표시들도 단면 목록 밑에 확인용도로만」)
     const int inspectorCount = int(findChildren<QWidget*>(QStringLiteral("inspector")).size());
