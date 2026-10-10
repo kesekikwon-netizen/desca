@@ -22,7 +22,7 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T5 좌표 입력 · 단면 찾기 · 영어 병기 삭제 끝**(1280 리본 타일 20 → 24) → 다음 T6(G3) 리본 정리(평활 · 정보 · 끝내기 · 더보기 삭제 · 점군 하나로). 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시). 실제 모델 감사에 `home-clipped` 한 가지가 남음(R6b) |
+| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **T6 리본 정리(묶음 6 · 더보기 삭제 · 평활 → 입면 아래 줄 · 점군 하나로) 끝**(1280 리본 타일 24 → 32 글자 숨김) → 다음 T7(G4) 오른쪽 판 삭제 → 목록 아래 읽기 전용 수치. 계획 `docs/superpowers/plans/2026-10-11-trench-final.md`. 검토는 전부 끝난 뒤 한 번(사용자 지시). 실제 모델 감사에 `home-clipped` 한 가지가 남음(R6b) |
 | 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
 | 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
 | 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
@@ -313,6 +313,15 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **같이 고친 것(칩):** 그리는 중 A′ 단계 안내 칩의 「Enter」 키 캡과 「숫자 = 길이」 문장은 지운 좌표 입력을 가리키고 실제로는 아무 일도 안 해(길이를 치는 처리 없음) 함께 지움 — 감사 `guide-step2 keys=Esc`(고치기 전 `keys=Enter+Esc … FAIL`), 스펙 §5 문장 정정. v6 의 「길이 숫자 입력 칸」(`DESIGN_SPEC_v6.md` §…)은 별도 계획 기능이라 건드리지 않음.
 - **확인:** 합성 감사 1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2 열 가지 모두 `RESULT ok`(칩 고친 뒤 1920 ×1 · 1280 ×1 · 3840 ×2 재확인) · 실제 모델 Production_1.3sm 1920: `removed … 0` · `guide-step2=1 keys=Esc` · `icons-missing=0`, `RESULT fail` 은 기존 `home-clipped` 하나뿐(backlog R6b) · `~CoalescingWorker*` 51360 통과 · `--sheet-check` · `--icon-sheet` · `--undo-test` · `--ctx-shot` EXIT 0 · 실제 창 캡처 `C:\dev\tmp\elev-bug\t5\`(work · draw · start, 리본 오른쪽 끝 비어 있음 · 칩 「Shift = 축 맞춤 [Esc]」).
 - **판정(Ruling):** ① 1280 리본 타일 20 → 24 는 사용자 요청(삭제)의 필연적 결과 — 창 폭에 맞는 가장 큰 크기를 고르는 규칙은 그대로, 틀리면: 1280 타일이 기대보다 큼(읽기 쉬워짐). ② 정밀 좌표로 단면선을 만드는 길이 이제 없다(평면에서 클릭만) — 사용자 결정 그대로, 필요해지면 새 요청. ③ 동작 이름표 영어(`en`)는 툴팁 괄호에만 남김(영어 병기 토글이 아니라 툴팁 안의 표기).
+
+### 2026-10-11 · Claude Code(Sonnet 5.5) — T6 (G3 · R4 나머지): 리본 정리 — 묶음 6 · 더보기 삭제 · 평활 → 입면 아래 줄 · 점군 하나로
+- **사용자 결정(2026-10-10 확인 ③):** 평활은 입면 아래 줄(선 굵기 옆 켜기 · 끄기), 정보는 F1 창 아래 한 줄, 끝내기는 Ctrl+Q · 창 닫기만, 더보기 삭제. 캔버스 G3: 기타 → 보기 합침 · 점군 하나로.
+- **시험 먼저(RED):** `--ui-audit` 줄 `ribbon … groups=6 more=0`(실제 묶음 수 · 「더보기」「기타」 칩 · 동작 `more`) · `elev-row2 … smooth=1 menu-chip=…` · `ribbon-tidy points-chips=1 xyz-las-chips=0 keys-in-view=1 quit-ctrl-q=1 about-in-keys=1`. 고치기 전 `groups=7 more=2 … FAIL` · `smooth=0 menu-chip=0  FAIL` · `points-chips=0 xyz-las-chips=2 keys-in-view=0 … about-in-keys=0  FAIL`(EXIT 9).
+- **무엇을:** 묶음 「기타」 삭제(단축키 칩은 「보기」 맨 끝) · 동작 `more` · 더보기 메뉴 삭제(정보 · 끝내기 항목도) · 입면 아래 줄에 「평활」 켜기 · 끄기 칩(같은 동작 `smooth`) · 줄 이름표를 사용자 말대로 「불투명도」 · 「선 굵기」로 줄임 · 새 칩 **「입면 ▾」**(`Ico::Sliders` = Lucide `sliders-horizontal`, 새 SVG)는 글자 숨김 크기에서만 보이고 같은 셋(불투명도 · 선 굵기 · 평활)을 메뉴로 연다 — `Ribbon::lookWidths` 가 `narrowOnly` 칩을 보이는 크기에서만 센다 · 「점군 ▾」 칩 하나(메뉴: 점군 XYZ · 점군 LAS, 동작 `points`) · F1 창(`keysDialog()` 로 분리 — 자동화 · 감사도 씀) 맨 아래 「Trench 1.2.1 · 프로그램 정보」 줄 + 표에 「Ctrl+Q 끝내기」 행.
+- **같이 바뀐 것(결과):** 리본 폭 예산 need50 1644 → **1521** · need32 1410 → **1296** · need20 1008 → 973. 1280 에서 창 폭에 들어가는 가장 큰 크기 24 → **32(글자 숨김)**. 글자 보이는 32 는 1296 이라 1280 에 16 px 모자람. 감사 `narrow rule-at-1280` 은 상수 대신 규칙(창 폭에 들어가는 가장 큰 크기) + 바닥 24(`kNarrowFloor`)로 판정하고 값은 출력에 적는다. 스펙 §2.1 · §3.1 · §12 · §3.3 정정.
+- **확인:** 합성 감사 1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2 열 가지 모두 `RESULT ok` + 1920 ×1.25 · ×1.75 ok · 실제 모델 Production_1.3sm 1920 은 기존 `home-clipped` 하나뿐(R6b) · `~CoalescingWorker*` 51360 통과 · `--sheet-check` · `--icon-sheet`(새 SVG 포함) · `--undo-test` · `--ctx-shot` EXIT 0 · 캡처 `C:\dev\tmp\elev-bug\t6\`(ribbon 1920: 묶음 여섯 · 입면 아래 줄 「불투명도 ▬ 선 굵기 1.5 2 3 평활」 · 점군 ▾) · 감사 narrow 캡처에서 「입면 ▾」 칩(아이콘 + ▾) 확인.
+- **판정(Ruling):** ① 줄 이름표를 「영상 불투명도」 · 「단면선 굵기」에서 「불투명도」 · 「선 굵기」로 줄임(사용자 말 「선굵기」) — 아래 줄이 위 줄(320)보다 넓어지면 줄을 보이고 숨길 때 리본 폭 계산이 달라져 크기가 오락가락(첫 구현에서 336 → 1296/1312 갈림 확인) — 틀리면: 이름표가 짧아 처음엔 덜 설명적(툴팁에 전체 이름). ② 「입면 ▾」 칩은 캔버스 「입면 아래 줄 → 입면 ▾ 안」 그대로 — 더보기 삭제로 좁은 창에서 불투명도 · 굵기 · 평활에 닿는 유일한 길. ③ 끝내기는 Ctrl+Q 와 창 닫기뿐(사용자 결정) — 틀리면: 마우스만 쓰는 사람이 닫기 단추로만 끝냄.
+- **남은 문제:** 없음(T6 끝). 다음 T7(G4) 오른쪽 판 삭제 → 목록 아래 읽기 전용 수치.
 
 ## 5. 다음 할 일 (위에서부터)
 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` 순서대로, 장부 `.superpowers/sdd/2026-10-09-design-v5/progress.md` 에 과제마다 complete · Ruling. 규칙은 `docs/DEV_RULES.md`.

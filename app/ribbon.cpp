@@ -232,19 +232,24 @@ QList<int> Ribbon::lookWidths() const {
     QList<int> widths(all.size(), kRowPadLeft + kRowPadRight + (corner_ ? corner_->sizeHint().width() + row_->spacing() : 0));
     for (const QString& id : order_) {
         const Group& g = groups_.value(id);
-        QList<int> inner(all.size(), 0);
-        int count = 0;
+        QList<int> inner(all.size(), 0), count(all.size(), 0);
         for (int i = 0; i < g.row->count(); ++i) {
             QWidget* w = g.row->itemAt(i)->widget();
-            if (!w || (w->isHidden() && w->testAttribute(Qt::WA_WState_ExplicitShowHide))) continue;
-            ++count;
+            if (!w) continue;
             const Chip* chip = nullptr;
             for (const Chip& c : chips_) if (c.button == w) { chip = &c; break; }
-            for (int k = 0; k < all.size(); ++k) inner[k] += chip ? chipWidth(all.at(k), chip->button) : w->sizeHint().width();
+            // 「narrowOnly」 칩(입면 ▾ — 글자 숨김 크기에서만 보임)은 보이는 크기마다 따로 센다. 나머지는 숨겨져 있으면 뺀다
+            const bool narrowOnly = chip && chip->button->property("narrowOnly").toBool();
+            if (!narrowOnly && w->isHidden() && w->testAttribute(Qt::WA_WState_ExplicitShowHide)) continue;
+            for (int k = 0; k < all.size(); ++k) {
+                if (narrowOnly && all.at(k).labels) continue;
+                ++count[k];
+                inner[k] += chip ? chipWidth(all.at(k), chip->button) : w->sizeHint().width();
+            }
         }
         const int captionW = g.caption->sizeHint().width();
         for (int k = 0; k < all.size(); ++k)
-            widths[k] += std::max(captionW, inner.at(k) + std::max(0, count - 1) * g.row->spacing()) + 2 * kGroupPadX + 1 + row_->spacing();
+            widths[k] += std::max(captionW, inner.at(k) + std::max(0, count.at(k) - 1) * g.row->spacing()) + 2 * kGroupPadX + 1 + row_->spacing();
     }
     return widths;
 }

@@ -358,12 +358,36 @@ QWidget* MainWindow::buildRibbon() {
         opacity_ = new QSlider(Qt::Horizontal); opacity_->setObjectName("opacityRow"); opacity_->setRange(10, 100); opacity_->setValue(100);
         opacity_->setMinimumWidth(56); opacity_->setFixedHeight(22); opacity_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
         opacity_->setToolTip(QStringLiteral("입면 영상 불투명도 10–100 % (화면만 — 도면 · 내보내기는 100 %)"));
-        h->addWidget(lab(QStringLiteral("영상 불투명도"), "hint")); h->addWidget(opacity_, 1); h->addSpacing(2);
-        h->addWidget(lab(QStringLiteral("단면선 굵기"), "hint")); h->addWidget(lineWidthChips(true)); }
+        h->addWidget(lab(QStringLiteral("불투명도"), "hint")); h->addWidget(opacity_, 1); h->addSpacing(2);
+        h->addWidget(lab(QStringLiteral("선 굵기"), "hint")); h->addWidget(lineWidthChips(true));
+        h->addSpacing(2);
+        // 평활(T6 · 사용자 결정 「평활은 입면 아래 줄, 선 굵기 옆 켜기 · 끄기」): 같은 동작 「smooth」 — 줄에서 눌러도 입면 ▾ 안에서 눌러도 하나
+        auto* sm = new QToolButton; sm->setObjectName("chip"); sm->setProperty("smoothChip", true); sm->setCheckable(true); sm->setFocusPolicy(Qt::NoFocus);
+        sm->setText(QStringLiteral("평활")); sm->setFixedSize(40, 22); sm->setProperty("tight", true); sm->setChecked(action("smooth")->isChecked());
+        sm->setToolTip(QStringLiteral("평활 — 잘린 선을 매끈하게 다듬습니다(켜면 단면을 다시 계산 · 내보내기도 같음)"));
+        QObject::connect(sm, &QToolButton::clicked, action("smooth"), &QAction::toggle);
+        QObject::connect(action("smooth"), &QAction::toggled, sm, [sm](bool on) { QSignalBlocker bk(sm); sm->setChecked(on); });
+        QObject::connect(action("smooth"), &QAction::changed, sm, [this, sm] { sm->setEnabled(action("smooth")->isEnabled()); });
+        h->addWidget(sm); }
     auto* elevBlock = new QWidget; elevBlock->setObjectName("elevBlock");
     elevBlock->setProperty("ribbonCenterHeight", depthBox_->sizeHint().height());   // 위 줄만 타일 가운데(Ribbon::addWidget)
     { auto* v = new QVBoxLayout(elevBlock); v->setContentsMargins(0, 0, 0, 0); v->setSpacing(3); v->addWidget(depthBox_); v->addWidget(elevRow2_); }
     ribbon_->addWidget(QStringLiteral("elev"), elevBlock);
+    // 입면 ▾ 칩(T6 · 더보기 삭제): 리본이 낮아(글자 숨김 크기) 아래 줄이 숨을 때만 보이고, 누르면 아래 줄의 같은 셋(영상 불투명도 · 단면선 굵기 · 평활)이 열린다 — 같은 값 · 같은 동작
+    QToolButton* elevMenuChip = nullptr;
+    { auto* mn = new QMenu(this);
+        opacityMenu_ = new QSlider(Qt::Horizontal); opacityMenu_->setObjectName("opacityMenu"); opacityMenu_->setRange(10, 100); opacityMenu_->setValue(opacity_->value()); opacityMenu_->setFixedWidth(110);
+        QObject::connect(opacityMenu_, &QSlider::valueChanged, opacity_, [this](int v) { opacity_->setValue(v); });
+        QObject::connect(opacity_, &QSlider::valueChanged, opacityMenu_, [this](int v) { QSignalBlocker bk(opacityMenu_); opacityMenu_->setValue(v); });
+        auto* opw = rowOf({lab(QStringLiteral("불투명도"), "hint"), opacityMenu_}); opw->setContentsMargins(12, 4, 12, 4);
+        auto* wa = new QWidgetAction(mn); wa->setDefaultWidget(opw); mn->addAction(wa); opacityMenuAct_ = wa;
+        lineWidthMenu_ = lineWidthChips(false); lineWidthMenu_->setObjectName("lineWidthMenu");
+        auto* lwBox = rowOf({lab(QStringLiteral("선 굵기"), "hint"), lineWidthMenu_}); lwBox->setContentsMargins(12, 4, 12, 4);
+        auto* wa2 = new QWidgetAction(mn); wa2->setDefaultWidget(lwBox); mn->addAction(wa2); lineWidthMenuAct_ = wa2;
+        mn->addAction(action("smooth"));
+        action("elevmenu")->setMenu(mn); }
+    elevMenuChip = add("elev", "elevmenu", K::Normal, "sliders-horizontal", QStringLiteral("입면"));
+    elevMenuChip->setProperty("narrowOnly", true); elevMenuChip->hide();
     // 레벨선 간격 글(옛 가짜 입력칸)은 리본에서 뺐다 — 갱신 코드가 쓰므로 위젯만 숨겨 둔다(범례는 정보 줄)
     lvLine_ = lab(QStringLiteral("0.10 m"), "mono"); lvLabel_ = lab(QStringLiteral("0.50 m"), "mono");
     for (auto* l : {lvLine_, lvLabel_}) { l->setParent(ribbon_); l->hide(); }
@@ -373,42 +397,25 @@ QWidget* MainWindow::buildRibbon() {
     add("view", "view1", K::Shown, "map", QStringLiteral("평면"));
     add("view", "view2", K::Shown, "profile", QStringLiteral("단면"));
     add("view", "contrast", K::Shown, "contrast", QStringLiteral("고대비"));
+    add("view", "keys", K::Normal, "keyboard", QStringLiteral("단축키"));   // 옛 「기타」 묶음은 이 칩 하나뿐이라 보기에 합침(T6)
     // ---- 자료: 숫자 · 좌표 자료만(그림은 「도면」)
     ribbon_->addGroup(QStringLiteral("data"), QStringLiteral("자료"));
     add("data", "csv", K::Normal, "csv", QStringLiteral("CSV"));
     add("data", "plan", K::Normal, "geotiff", QStringLiteral("GeoTIFF"));
-    add("data", "xyz", K::Normal, "points-xyz", QStringLiteral("XYZ"));
-    add("data", "las", K::Normal, "cloud-las", QStringLiteral("LAS"));
+    { auto* pm = new QMenu(this); pm->addAction(action("xyz")); pm->addAction(action("las")); action("points")->setMenu(pm); }   // 점군은 칩 하나, XYZ · LAS 는 그 메뉴 안(T6)
+    add("data", "points", K::Normal, "points-xyz", QStringLiteral("점군"));
     { auto* mn = new QMenu(this); mn->addAction(action("secjson")); mn->addAction(action("secimport")); action("seclist")->setMenu(mn); }
     add("data", "seclist", K::Normal, "sections-list", QStringLiteral("목록 파일"));
     // ---- 내보내기: 도면(흙색 주 단추 — 단면 탭에서 한 화면의 유일한 흙색)
     ribbon_->addGroup(QStringLiteral("out"), QStringLiteral("내보내기"));
     sheetChip_ = add("out", "sheet", K::Primary, "sheet", QStringLiteral("도면"));
-    // ---- 기타: 단축키 · 더보기 ▾(정보 · 영상 불투명도 · 단면선 굵기 · 매끈하게 · 끝내기)
-    ribbon_->addGroup(QStringLiteral("etc"), QStringLiteral("기타"));
-    add("etc", "keys", K::Normal, "keyboard", QStringLiteral("단축키"));
-    { auto* mn = new QMenu(this);
-        // 영상 불투명도 · 단면선 굵기는 입면 아래 줄이 정본 — 여기 두 칸은 리본이 낮아 아래 줄이 숨을 때만 보인다(같은 값, 아래 setLookHook)
-        opacityMenu_ = new QSlider(Qt::Horizontal); opacityMenu_->setObjectName("opacityMenu"); opacityMenu_->setRange(10, 100); opacityMenu_->setValue(opacity_->value()); opacityMenu_->setFixedWidth(110);
-        QObject::connect(opacityMenu_, &QSlider::valueChanged, opacity_, [this](int v) { opacity_->setValue(v); });
-        QObject::connect(opacity_, &QSlider::valueChanged, opacityMenu_, [this](int v) { QSignalBlocker bk(opacityMenu_); opacityMenu_->setValue(v); });
-        auto* opw = rowOf({lab(QStringLiteral("영상 불투명도"), "hint"), opacityMenu_}); opw->setContentsMargins(12, 4, 12, 4);
-        auto* wa = new QWidgetAction(mn); wa->setDefaultWidget(opw); mn->addAction(wa); opacityMenuAct_ = wa;
-        lineWidthMenu_ = lineWidthChips(false); lineWidthMenu_->setObjectName("lineWidthMenu");
-        auto* lwBox = rowOf({lab(QStringLiteral("단면선 굵기"), "hint"), lineWidthMenu_}); lwBox->setContentsMargins(12, 4, 12, 4);
-        auto* wa2 = new QWidgetAction(mn); wa2->setDefaultWidget(lwBox); mn->addAction(wa2); lineWidthMenuAct_ = wa2;
-        mn->addSeparator();
-        mn->addAction(action("smooth"));
-        mn->addSeparator();
-        mn->addAction(action("about")); mn->addAction(action("quit"));
-        action("more")->setMenu(mn); }
-    add("etc", "more", K::Normal, "ellipsis", QStringLiteral("더보기"));
     // 입면 아래 줄은 칩 높이 안에 두 줄이 들어갈 때만(글자 보이는 크기 — 1920 · 2560 …). 안 들어가면(글자 숨김 크기 — 1280 …) 숨기고 더보기 안의 같은 칸을 보인다
-    ribbon_->setLookHook([this, elevBlock](const RibbonLook& L, int chipH) {
+    ribbon_->setLookHook([this, elevBlock, elevMenuChip](const RibbonLook& L, int chipH) {
         const int topH = depthBox_->sizeHint().height();
         const bool two = std::max(0, Ribbon::tileCenterY(L) - topH / 2) + topH + elevBlock->layout()->spacing() + elevRow2_->sizeHint().height() <= chipH;
         elevRow2_->setVisible(two);
         opacityMenuAct_->setVisible(!two); lineWidthMenuAct_->setVisible(!two);
+        elevMenuChip->setVisible(!two);
     });
     return ribbon_;
 }
@@ -1702,9 +1709,9 @@ void MainWindow::applyHighContrast(bool on) {
     updateHeader();
 }
 
-void MainWindow::dlgKeys() {
-    QDialog d(this); d.setWindowTitle(QStringLiteral("단축키"));
-    auto* v = new QVBoxLayout(&d);
+QDialog* MainWindow::keysDialog() {
+    auto* d = new QDialog(this); d->setWindowTitle(QStringLiteral("단축키"));
+    auto* v = new QVBoxLayout(d);
     auto* t = new QTableWidget(0, 2); t->setHorizontalHeaderLabels({QStringLiteral("키"), QStringLiteral("하는 일")});
     t->verticalHeader()->setVisible(false); t->setEditTriggers(QAbstractItemView::NoEditTriggers); t->setShowGrid(false);
     t->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
@@ -1714,7 +1721,7 @@ void MainWindow::dlgKeys() {
         {"1 2 3 4 5", "뒤 깊이 0.5 / 1 / 2 / 3 / 5 m (기본 3 m — 입면도용 배경)"}, {"[  ]", "평행 이동 −0.1 / +0.1 m (보는 쪽 +)"}, {"{  }", "평행 이동 −1 / +1 m"},
         {"X", "세로 과장 ×1 → ×2 → ×5 → ×10 (화면만 · 도면은 1:1)"},
         {"R", "방향 반전(A↔A′)"}, {"N", "새 단면 추가"}, {"I · L · V", "입면 영상 · 단면선 · 레벨선 켜기/끄기"},
-        {"Ctrl+Z / Ctrl+Y", "되돌리기 / 다시(단면선·두께·표시·높이 기준)"}, {"F11", "전체화면 / 원래 크기"}, {"Ctrl+P", "도면 — 평면도 조판 또는 단면도 조판"},
+        {"Ctrl+Z / Ctrl+Y", "되돌리기 / 다시(단면선·두께·표시·높이 기준)"}, {"F11", "전체화면 / 원래 크기"}, {"Ctrl+Q", "끝내기"}, {"Ctrl+P", "도면 — 평면도 조판 또는 단면도 조판"},
         {"Ctrl+D · Ctrl+E", "단면 DXF · 단면 영상(GeoTIFF 포함)"}, {"F · T · + · −", "맞춤 · 위에서 · 확대 · 축소"}, {"Ctrl+1 · Ctrl+2", "평면 · 단면 보기 켜기/끄기"},
         {"F1", "이 표"}};
     for (auto& r : rows) {
@@ -1724,11 +1731,21 @@ void MainWindow::dlgKeys() {
     }
     t->resizeColumnToContents(0);
     v->addWidget(t);
+    // 프로그램 정보는 여기 한 줄(T6 · 더보기 삭제)
+    auto* about = new QPushButton(QStringLiteral("Trench %1 · 프로그램 정보").arg(QString::fromUtf8(kVersion))); about->setObjectName("aboutLink"); about->setFlat(true); about->setCursor(Qt::PointingHandCursor);
+    QObject::connect(about, &QPushButton::clicked, this, [this] { dlgAbout(); });
+    v->addWidget(about, 0, Qt::AlignLeft);
     auto* bb = new QDialogButtonBox(QDialogButtonBox::Close);
-    QObject::connect(bb, &QDialogButtonBox::rejected, &d, &QDialog::reject);
+    QObject::connect(bb, &QDialogButtonBox::rejected, d, &QDialog::reject);
     v->addWidget(bb);
-    d.resize(560, 620);
-    d.exec();
+    d->resize(560, 620);
+    return d;
+}
+
+void MainWindow::dlgKeys() {
+    QDialog* d = keysDialog();
+    d->exec();
+    d->deleteLater();
 }
 
 // ---------------------------------------------------------------- 생성자
@@ -1779,7 +1796,8 @@ MainWindow::MainWindow() {
     makeAction("secjson", QStringLiteral("단면 목록 내보내기"), "Export Sections", I::Csv);
     makeAction("secimport", QStringLiteral("단면 목록 가져오기"), "Import Sections", I::Open);
     makeAction("seclist", QStringLiteral("단면 목록"), "Section List", I::Csv);                 // v5 리본 「자료 › 목록 ▾」(내보내기 · 가져오기)
-    makeAction("more", QStringLiteral("더보기"), "More", I::Info);                              // v5 리본 「기타 › 더보기 ▾」
+    makeAction("elevmenu", QStringLiteral("입면"), "Elevation", I::Sliders);                   // 리본이 낮을 때만 보이는 「입면 ▾」(불투명도 · 굵기 · 평활)
+    makeAction("points", QStringLiteral("점군"), "Points", I::Xyz);                            // 리본 「자료 › 점군 ▾」(XYZ · LAS)
     makeAction("hatch", QStringLiteral("잘린 돌 칠하기"), "Hatch Cut Stone", I::Band, "H", true)->setEnabled(false);   // A1 UI(F단계)에서 켠다
     makeAction("outline", QStringLiteral("윤곽 따기"), "Trace Outline", I::Draw, "O", true)->setEnabled(false);          // A3 UI(G단계)에서 켠다
     makeAction("contrast", QStringLiteral("고대비"), "High Contrast", I::Band, QString(), true)->setChecked(highContrast_);
@@ -2109,23 +2127,26 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     L << QStringLiteral("ui-audit tabs=0 doctabs=%1%2").arg(names.join(QLatin1Char(','))).arg(tabsOk ? QString() : QStringLiteral("  FAIL"));
     ok &= tabsOk;
 
-    // 2) 리본(v5 C1): 높이 118 · 묶음 7 · 1920 에서 타일 50 글자 보임 · 흙색 칩 하나(「도면」)
+    // 2) 리본(v5 C1 · T6): 높이 118 · 묶음 6(모델 · 단면 · 입면 · 보기 · 자료 · 내보내기 — 기타 · 더보기 없음) · 1920 에서 타일 50 글자 보임 · 흙색 칩 하나(「도면」)
     const RibbonLook lk = ribbon_->look();
-    int groups = 0;
-    for (const char* g : {"model", "sec", "elev", "view", "data", "out", "etc"}) if (ribbon_->group(QString::fromLatin1(g))) ++groups;
+    int groups = int(ribbon_->findChildren<QFrame*>(QStringLiteral("ribbonGroup")).size());
+    int groupsNamed = 0;
+    for (const char* g : {"model", "sec", "elev", "view", "data", "out"}) if (ribbon_->group(QString::fromLatin1(g))) ++groupsNamed;
+    int moreCount = int(act_.count(QStringLiteral("more")));
+    for (auto* b : ribbon_->chips()) if (b->text() == QStringLiteral("더보기") || b->text() == QStringLiteral("기타")) ++moreCount;
     int clay = 0;
     for (auto* b : ribbon_->chips()) if (b->property("primary").toBool() && b->isVisibleTo(this)) ++clay;
     // 판정은 규칙으로(검토 I6): 창 폭에 들어가는 가장 큰 크기를 골랐는가 · 높이가 그 크기의 sizeHint 인가. 1920 이상이면 타일 50 · 글자 · 118(스펙 §12)
     const QList<int> lw = ribbon_->lookWidths();
     const bool ribRule = ribbon_->lookIndex() == Ribbon::chooseLook(lw, ribbon_->width()) && ribbon_->height() == ribbon_->sizeHint().height();
-    const bool ribOk = ribRule && groups == 7 && clay == 1 && (ribbon_->width() < 1920 || (lk.tile == 50 && lk.labels && ribbon_->height() == 118));
-    L << QStringLiteral("ui-audit ribbon height=%1 groups=%2 look=%3 labels=%4 chips-clay=%5 width=%6 need50=%7 need32=%8 need20=%9%10")
+    const bool ribOk = ribRule && groups == 6 && groupsNamed == 6 && moreCount == 0 && clay == 1 && (ribbon_->width() < 1920 || (lk.tile == 50 && lk.labels && ribbon_->height() == 118));
+    L << QStringLiteral("ui-audit ribbon height=%1 groups=%2 more=%11 look=%3 labels=%4 chips-clay=%5 width=%6 need50=%7 need32=%8 need20=%9%10")
              .arg(ribbon_->height()).arg(groups).arg(lk.tile).arg(lk.labels ? 1 : 0).arg(clay).arg(ribbon_->width()).arg(lw.value(0)).arg(lw.value(9)).arg(lw.value(lw.size() - 1))
-             .arg(ribOk ? QString() : QStringLiteral("  FAIL"));
+             .arg(ribOk ? QString() : QStringLiteral("  FAIL")).arg(moreCount);
     L << QStringLiteral("ui-audit ribbon-widths %1").arg(ribbon_->widthReport());
     {   // 2c) 단면 문맥: 묶음 이름 흐림 0 · 입면 칸(칩 아닌 위젯)은 타일 세로 가운데(검토 UI 2 · 14)
         int dim = 0;
-        for (const char* g : {"model", "sec", "elev", "view", "data", "out", "etc"})
+        for (const char* g : {"model", "sec", "elev", "view", "data", "out"})
             if (QFrame* f = ribbon_->group(QString::fromLatin1(g))) if (auto* cap = f->findChild<QLabel*>(QStringLiteral("ribbonGroupCaption"))) if (cap->property("dim").toBool()) ++dim;
         int elevDy = -1;
         if (depthBox_ && !ribbon_->chips().isEmpty()) {
@@ -2138,26 +2159,36 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         L << QStringLiteral("ui-audit ribbon-context dim-captions=%1 elev-center-dy=%2%3").arg(dim).arg(elevDy).arg(okc ? QString() : QStringLiteral("  FAIL"));
         ok &= okc;
     }
-    {   // 2d) 입면 아래 줄(사용자 지시 2026-10-10 「더보기 안의 영상 불투명도 · 단면선 굵기를 입면 밑으로」): 리본에 글자가 보이는 크기면 입면 묶음 아래 줄에 보이고
-        //     더보기에는 없음, 글자 숨김 크기(리본이 낮아 두 줄이 안 들어감)면 아래 줄은 숨고 더보기 안에 둘. 아래 줄은 위 줄보다 넓지 않음(1920 타일 50 을 지킴).
-        //     두 자리의 값은 하나: 아래 줄에서 바꾸면 그리기 설정(secStyle)과 더보기 쪽이 같이 바뀐다
+    {   // 2d) 입면 아래 줄(사용자 지시 2026-10-10 「더보기 안의 영상 불투명도 · 단면선 굵기를 입면 밑으로」 · 평활도 같은 줄, T6): 리본에 글자가 보이는 크기면 입면 묶음 아래 줄에
+        //     불투명도 · 굵기 · 평활이 보이고 「입면 ▾」 칩은 숨음, 글자 숨김 크기(리본이 낮아 두 줄이 안 들어감)면 아래 줄은 숨고 「입면 ▾」 칩 안에 셋. 아래 줄은 위 줄보다 넓지 않음(1920 타일 50 을 지킴).
+        //     두 자리의 값은 하나: 아래 줄에서 바꾸면 그리기 설정(secStyle)과 칩 안쪽이 같이 바뀐다
         auto* row2 = ribbon_->findChild<QWidget*>(QStringLiteral("elevRow2"));
         auto* opRow = ribbon_->findChild<QSlider*>(QStringLiteral("opacityRow"));
-        QSlider* opMenu = nullptr; QWidget* lwMenu = nullptr; int more = 0;
-        if (QMenu* mm = action("more")->menu())
+        QSlider* opMenu = nullptr; QWidget* lwMenu = nullptr; int more = 0; bool smoothInMenu = false;
+        const auto emIt = act_.find(QStringLiteral("elevmenu"));
+        QToolButton* elevMenuChip = nullptr;
+        for (auto* c : ribbon_->chips()) if (emIt != act_.end() && c->text() == QStringLiteral("입면")) elevMenuChip = c;
+        if (QMenu* mm = emIt != act_.end() ? emIt->second->menu() : nullptr)
             for (QAction* a : mm->actions())
-                if (a->inherits("QWidgetAction"))
+            {
+                if (a->inherits("QWidgetAction")) {
                     if (QWidget* dw = static_cast<QWidgetAction*>(a)->defaultWidget()) {
                         if (auto* s = dw->findChild<QSlider*>(QStringLiteral("opacityMenu"))) { opMenu = s; if (a->isVisible()) ++more; }
                         if (auto* w = dw->findChild<QWidget*>(QStringLiteral("lineWidthMenu"))) { lwMenu = w; if (a->isVisible()) ++more; }
                     }
+                } else if (a == action("smooth")) smoothInMenu = true;
+            }
         const bool wide = lk.labels;
         const bool shown = row2 && row2->isVisibleTo(ribbon_);
-        const bool placeOk = wide ? (shown && more == 0) : (!shown && more == 2);
+        QToolButton* smoothRow = nullptr;
+        if (row2) for (auto* b : row2->findChildren<QToolButton*>()) if (b->property("smoothChip").toBool()) smoothRow = b;
+        const bool chipShown = elevMenuChip && elevMenuChip->isVisibleTo(ribbon_);
+        const bool smoothOk = wide ? (smoothRow != nullptr && !chipShown) : (smoothInMenu && chipShown);   // 평활은 어느 크기에서나 한 번에 닿는다
+        const bool placeOk = smoothOk && (wide ? (shown && more == 0) : (!shown && more == 2));
         // 폭: 입면 칸 전체(elevBlock)의 sizeHint 가 위 줄과 같아야(리본 폭 계산이 그대로) · 아래 줄은 슬라이더 최소 폭까지 넣어도 위 줄 안
         auto* blk = ribbon_->findChild<QWidget*>(QStringLiteral("elevBlock"));
         const int depthW = depthBox_ ? depthBox_->sizeHint().width() : 0, blkW = blk ? blk->sizeHint().width() : -1, rowMin = row2 ? row2->minimumSizeHint().width() : 0;
-        const bool widthOk = blkW == depthW && rowMin <= depthW;
+        const bool widthOk = blkW == depthW && rowMin <= depthW;   // 아래 줄 · 위 줄 폭이 같아야 아래 줄을 숨기고 보여도 리본 폭 계산(need50 · need32)이 그대로 — 크기가 오락가락하지 않음
         bool inside = true;
         if (shown) {   // 리본 안 · 짓눌림 없음(아래 줄 · 라벨 · 슬라이더 최소 폭)
             const QRect r(row2->mapTo(ribbon_, QPoint(0, 0)), row2->size());
@@ -2189,8 +2220,8 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             sync = opOk && lwOk;
         }
         const bool okr = row2 && placeOk && widthOk && inside && sync;
-        L << QStringLiteral("ui-audit elev-row2 shown=%1 more=%2 wide=%3 width=%4/%5 row-min=%6 inside=%7 sync=%8%9").arg(int(shown)).arg(more).arg(int(wide)).arg(blkW).arg(depthW)
-                 .arg(rowMin).arg(int(inside)).arg(int(sync)).arg(okr ? QString() : QStringLiteral("  FAIL"));
+        L << QStringLiteral("ui-audit elev-row2 shown=%1 more=%2 wide=%3 width=%4/%5 row-min=%6 inside=%7 sync=%8 smooth=%10 menu-chip=%11%9").arg(int(shown)).arg(more).arg(int(wide)).arg(blkW).arg(depthW)
+                 .arg(rowMin).arg(int(inside)).arg(int(sync)).arg(okr ? QString() : QStringLiteral("  FAIL")).arg(int(smoothOk)).arg(int(chipShown));
         ok &= okr;
     }
     ok &= ribOk;
@@ -2258,7 +2289,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     {
         const int keepCtx = ribbonCtx_;
         setRibbonContext(0); updateEnabled();
-        for (const char* k : {"draw", "addsec", "flip", "move", "sheet", "csv", "plan", "xyz", "las"}) if (action(k)->isEnabled()) ++ctxBad;
+        for (const char* k : {"draw", "addsec", "flip", "move", "sheet", "csv", "plan", "points", "xyz", "las"}) if (action(k)->isEnabled()) ++ctxBad;
         if (src_ && !action("close")->isEnabled()) ++ctxBad;
         setRibbonContext(keepCtx); updateEnabled();
     }
@@ -2290,6 +2321,20 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     const bool removedOk = removedCorner == 0 && removedCoord == 0 && removedFind == 0 && removedLang == 0;
     L << QStringLiteral("ui-audit removed ribbon-corner=%1 coord-entry=%2 find-box=%3 bilingual=%4%5").arg(removedCorner).arg(removedCoord).arg(removedFind).arg(removedLang).arg(removedOk ? QString() : QStringLiteral("  FAIL"));
     ok &= removedOk;
+
+    // 4d) 리본 정리(T6 · G3): 점군은 칩 하나(XYZ · LAS 는 그 메뉴 안) · 단축키는 「보기」 묶음 · 끝내기는 Ctrl+Q · 프로그램 정보는 F1 창 맨 아래 한 줄(더보기 삭제)
+    int pointsChips = 0, xyzLasChips = 0, keysInView = 0;
+    for (auto* b : ribbon_->chips()) {
+        if (b->text() == QStringLiteral("점군")) ++pointsChips;
+        if (b->text() == QStringLiteral("XYZ") || b->text() == QStringLiteral("LAS")) ++xyzLasChips;
+        if (b->text() == QStringLiteral("단축키") && ribbon_->group(QStringLiteral("view")) && b->parentWidget() == ribbon_->group(QStringLiteral("view"))) ++keysInView;
+    }
+    const bool quitKey = act_.count(QStringLiteral("quit")) && action("quit")->shortcut() == QKeySequence(QStringLiteral("Ctrl+Q"));
+    int aboutLink = 0;
+    { std::unique_ptr<QDialog> kd(keysDialog()); for (auto* b : kd->findChildren<QAbstractButton*>(QStringLiteral("aboutLink"))) ++aboutLink; }
+    const bool tidyOk = pointsChips == 1 && xyzLasChips == 0 && keysInView == 1 && quitKey && aboutLink == 1;
+    L << QStringLiteral("ui-audit ribbon-tidy points-chips=%1 xyz-las-chips=%2 keys-in-view=%3 quit-ctrl-q=%4 about-in-keys=%5%6").arg(pointsChips).arg(xyzLasChips).arg(keysInView).arg(quitKey ? 1 : 0).arg(aboutLink).arg(tidyOk ? QString() : QStringLiteral("  FAIL"));
+    ok &= tidyOk;
 
     // 5) 그리는 동안 상태줄 「다음:」 문장이 없는가
     int hint = -1, band = -1, guide2 = -1, compassOk = -1, noteOk = -1; QString guide2Why;
@@ -2499,7 +2544,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             if (st == QLatin1String("1280w")) { F.tickStep = plan_->tickLabelStepM(); F.tickPxPerM = plan_->metersPerPixel() > 0 ? 1.0 / plan_->metersPerPixel() : 0; }
         }
     };
-    constexpr int kNarrowTile = 24;   // DESIGN_SPEC §2.1 · §3.3 · §12 — 창 폭에 들어가는 가장 큰 크기(1280 에서 need32 = 1410 · need24 ≤ 1280). 2026-10-09 사용자 결정 「스펙을 실제로 고친다」에 따라 실측값을 적는다: 20 → 24 (T5 에서 오른쪽 끝 좌표 입력 · 단면 찾기를 지워 270 px 가 비었다)
+    constexpr int kNarrowFloor = 24;   // 1280 에서도 타일 24 이상(2026-10-09 「스펙을 실제로 고친다」 이후 실측: 20 → T5 24 → T6 32). 정확한 값은 규칙(창 폭에 들어가는 가장 큰 크기)이 정하고 출력에 적는다
     const RibbonLook nk = Ribbon::looks().at(Ribbon::chooseLook(lw, 1280));   // lookWidths 에 리본 좌우 여백이 이미 들어 있다
     const QSize keepSize = size();
     const QString keepMsg2 = msg_ ? msg_->text() : QString(); const bool planActive2 = planTitle_ && planTitle_->property("active").toBool();
@@ -2639,7 +2684,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     ok &= homeStale <= 0;
     L << QStringLiteral("ui-audit vex-fit=%1 mode=keep ppm=%2/%3%4").arg(vexFit).arg(ppmA, 0, 'g', 6).arg(ppmB, 0, 'g', 6).arg(vexFit == 0 ? QStringLiteral("  FAIL") : QString());
     ok &= vexFit != 0;
-    const bool narrowOk = nk.tile == kNarrowTile && !nk.labels && narrowW <= 1280 && ak.tile == kNarrowTile && !ak.labels && planFits != 0 && secFits != 0 && zoomKept != 0 && resized;
+    const bool narrowOk = nk.tile >= kNarrowFloor && narrowW <= 1280 && ak.tile == nk.tile && ak.labels == nk.labels && planFits != 0 && secFits != 0 && zoomKept != 0 && resized;
     L << QStringLiteral("ui-audit narrow rule-at-1280 look=%1 labels=%2 window-min-width=%3 actual-width=%4 actual-look=%5 actual-labels=%6 plan-fits=%7 section-fits=%8 zoom-kept=%9 probe=%10x%11 resized=%12%13")
              .arg(nk.tile).arg(nk.labels ? 1 : 0).arg(narrowMinW).arg(narrowW).arg(ak.tile).arg(ak.labels ? 1 : 0).arg(planFits).arg(secFits).arg(zoomKept).arg(probe.width()).arg(probe.height()).arg(resized ? 1 : 0).arg(narrowOk ? QString() : QStringLiteral("  FAIL"));
     ok &= narrowOk;

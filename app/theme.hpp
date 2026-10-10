@@ -102,6 +102,8 @@ QToolButton#ribbonChip:checked, QToolButton#ribbonChip:checked:hover { backgroun
 QToolButton#ribbonChip[primary="true"] { font-weight: 700; }
 QToolButton#ribbonChip:disabled { color: #696862; }
 QToolButton#ribbonChip:checked:disabled, QToolButton#ribbonChip[primary="true"]:disabled { font-weight: 400; color: #696862; }
+QPushButton#aboutLink { border: 0; background: transparent; color: #5E5D59; font-size: 12px; padding: 4px 0; text-align: left; }
+QPushButton#aboutLink:hover { color: #141413; }
 QToolButton#ribbonChip[kbdFocus="true"]:focus { border: 1px solid #141413; }
 QToolButton#ribbonChip::menu-indicator { image: none; width: 0px; height: 0px; }
 
@@ -334,7 +336,7 @@ QToolButton:checked, QToolButton#chip:checked { border-color: #141413; }
 
 // ---- 아이콘: 먹색 선(데이터 색 아이콘만 빨강·회색 획 유지)
 enum class Ico { Open, Draw, Flip, Plan, Fit, Orbit, Image, Line, Levels, Dxf, Png, Smooth, Tif, Geo, Xyz, Las, Csv, ZoomIn, ZoomOut, Close, Info, Clear, View1, View2, Band,
-                 Recent, Sheet, Undo, Redo, Measure, Height, Move, Add, Max, Picture, Keys, Vex };
+                 Recent, Sheet, Undo, Redo, Measure, Height, Move, Add, Max, Picture, Keys, Vex, Sliders };
 
 /// Ico → SVG 이름(app/icons/, 디자인 v5 §11). 새 Ico 를 더하면 여기와 icons.cmake 목록에 같이 더한다
 inline const char* iconName(Ico k) {
@@ -352,10 +354,11 @@ inline const char* iconName(Ico k) {
     case Ico::Measure: return "crosshair";  case Ico::Height: return "height";     case Ico::Move: return "move";
     case Ico::Add: return "plus";           case Ico::Max: return "maximize";      case Ico::Picture: return "image";
     case Ico::Keys: return "keyboard";      case Ico::Vex: return "vex";
+    case Ico::Sliders: return "sliders-horizontal";
     }
     return "x";
 }
-inline constexpr int kIcoCount = int(Ico::Vex) + 1;
+inline constexpr int kIcoCount = int(Ico::Sliders) + 1;
 
 /// 리본 칩 타일 색(디자인 v5 §3.2 · Strata tokens.json ribbon) — 토큰에서만
 inline kerf::ChipColors chipColors() {

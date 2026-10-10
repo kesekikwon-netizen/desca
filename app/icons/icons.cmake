@@ -5,7 +5,7 @@ set(KERF_ICON_FILES
   lucide/folder.svg lucide/x.svg lucide/plus.svg lucide/check.svg lucide/clipboard-list.svg lucide/file-text.svg lucide/image.svg
   lucide/ellipsis.svg lucide/house.svg lucide/undo-2.svg lucide/redo-2.svg lucide/maximize.svg lucide/search.svg lucide/move.svg
   lucide/printer.svg lucide/download.svg lucide/pencil.svg lucide/triangle-alert.svg lucide/layers.svg lucide/map.svg lucide/save.svg
-  lucide/box.svg lucide/pen-line.svg lucide/square-dashed.svg
+  lucide/box.svg lucide/pen-line.svg lucide/square-dashed.svg lucide/sliders-horizontal.svg
   kerf/clock.svg kerf/flip.svg kerf/list.svg kerf/contrast.svg kerf/keyboard.svg kerf/info.svg kerf/zoom-in.svg kerf/zoom-out.svg
   kerf/chevron-down.svg kerf/star.svg kerf/section-line.svg kerf/hatch.svg kerf/outline.svg kerf/profile.svg kerf/points-xyz.svg
   kerf/cloud-las.svg kerf/geotiff.svg kerf/csv.svg kerf/sections-list.svg kerf/vex.svg kerf/top-view.svg kerf/height.svg

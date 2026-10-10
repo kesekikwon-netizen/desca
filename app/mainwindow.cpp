@@ -248,13 +248,14 @@ void MainWindow::updateEnabled() {
     for (const char* k : {"draw", "addsec"}) action(k)->setEnabled(sc && !busy && secCtx);
     for (const char* k : {"flip", "clear", "move"}) action(k)->setEnabled(sc && plan_->hasLine() && secCtx);
     for (const char* k : {"dxf", "secimg", "csv", "info"}) action(k)->setEnabled(sec && !busy && !home && !drawing);
-    for (const char* k : {"plan", "xyz", "las", "sheet", "plansheet", "sectionsheet"}) action(k)->setEnabled(sc && !busy && !home && !drawing);
+    for (const char* k : {"plan", "points", "xyz", "las", "sheet", "plansheet", "sectionsheet"}) action(k)->setEnabled(sc && !busy && !home && !drawing);
     for (const char* k : {"secjson", "secimport", "image", "line", "levels", "fade", "smooth", "listpanel"}) action(k)->setEnabled(sc && !busy && !home);
     for (const char* k : {"seclist", "view1", "view2", "contrast"}) action(k)->setEnabled(!home);
     for (QWidget* wd : {static_cast<QWidget*>(front_), static_cast<QWidget*>(back_)}) wd->setEnabled(sc && secCtx);
     for (auto* c : depthChip_) if (c) c->setEnabled(sc && secCtx);
     if (depthBox_) depthBox_->setEnabled(sc && secCtx);
-    for (QWidget* wd : {elevRow2_, static_cast<QWidget*>(opacityMenu_), lineWidthMenu_}) if (wd) wd->setEnabled(sc && secCtx);   // 입면 아래 줄 · 더보기의 같은 칸도 입면 칸과 같이
+    for (QWidget* wd : {elevRow2_, static_cast<QWidget*>(opacityMenu_), lineWidthMenu_}) if (wd) wd->setEnabled(sc && secCtx);   // 입면 아래 줄 · 입면 ▾ 안의 같은 칸도 입면 칸과 같이
+    action("elevmenu")->setEnabled(sc && secCtx);
     action("open")->setEnabled(!busy); action("recent")->setEnabled(!busy && !recentFiles().isEmpty());
 }
 

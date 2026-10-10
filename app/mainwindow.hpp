@@ -337,6 +337,7 @@ private:
     void setActiveView(int v);     // 0 평면 1 단면
     void shiftLine(double d);      // 평행 이동(m, + = 보는 쪽)
     void dlgKeys();
+    QDialog* keysDialog();                            // F1 창(자동화 · 감사에서도 씀)
     void setBackDepth(double v);
     void updateDepthChips();
     void applyHighContrast(bool on);
