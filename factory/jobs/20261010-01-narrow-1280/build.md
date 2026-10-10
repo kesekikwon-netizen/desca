@@ -182,4 +182,43 @@ ui-audit RESULT ok
   - 커밋: **`c9214e2`** 「문서: DESIGN_SPEC §12 감사 키 · §4 세로 과장 규칙(AC13 rework)」.
   - `git diff a2e2228..HEAD --stat` → `docs/design/DESIGN_SPEC.md | 3 +++ · 1 file changed, 3 insertions(+)` — **문서만 바뀌었다**. `app/` · `core/` · `tests/` 는 그대로다. 빌드 · verify 는 팩토리가 따로 돈다.
   - 확인: `git grep -F` 로 키 9개(`sec-header-overlap=0` · `strip-clipped=0` · `plan-tick-overlap=0` · `chip-dpr-bad=0` · `vex-fit=1` · `home-stale-children=0` · `home-clipped=0` · `resized=1` · `look=20`)를 찾았다. 모두 §12(제목 145행) 안의 153행에서 나온다. 새 `+` 줄에 `C:[\\/]` · `HKEY_` 는 없다. worktree 는 깨끗하다.
-- 2회:
+- 2회(2026-10-10, rework 2/2 — 검토 code fail · UI fail · correctness pass · security pass, `review.md` 종합 08:20). `superpowers:receiving-code-review` 를 부르고 지적마다 코드로 확인한 뒤 고쳤다. 반론한 지적은 없다(일곱 개 모두 코드에서 사실로 확인).
+  - 지적별(확인 → 고침):
+    1. **[code B1] 「<모델> 기준」이 모든 폭에서 사라짐** — 확인: `hd->addStretch()` 뒤에 `elideLab`(가로 Ignored) 라벨이 와서 폭 0. 고침(`a973c2a`): 늘림 칸을 빼고 라벨에 stretch 1 + 오른쪽 정렬. **판정:** 리뷰 추천안(「elideLab 에서 빼기」) 대신 리뷰가 낸 대안 ②를 골랐다. 빼면 긴 모델 이름(「Synthetic_Excavation_Area3_TrenchA_LongName 기준」)이 홈 오른쪽 열 최소 폭을 밀어 창 최소 폭 1280 을 넘을 수 있다(offscreen 글 폭은 약 2배). 잘못이면: 1920 에서도 아주 긴 이름은 가운데 줄임표가 된다(툴팁 전체).
+    2. **[UI B1] 1280 홈 카드 칸 이름 · 값 줄임 · 칸 다섯이 같은 폭** — 확인: `:1398` 칸 이름에도 `elideLab`, `:1402` stretch 2 · 1. 고침(`a973c2a`): 칸 이름은 줄이지 않는다. `ccCells` 를 가로 Ignored 로 하고, 새 `fitHomeCells`(Resize) 가 칸 1–5 에 내용 폭을 준다. 폴더 칸만 남는 폭을 받아 가운데 줄임표. 폴더가 「C:…」도 못 담으면 칸 안 여백을 12 → 8 → 4 로 줄인다(값은 그대로). 그래도 모자라면 좌표계 · 높이 값만 앞쪽부터 줄인다. offscreen 1280 실측: 칸 폭 419 = 폴더 57 + 74 · 125 · 99 · 34 · 30(여백 4), 값은 모두 그대로. 실제 화면 1280 은 여백 12 로 다 들어간다(캡처).
+    3. **[code S1] 감사가 사라진 라벨을 못 셈** — 확인: `clippedLabels` 는 `width < sizeHint` 만 봤다. 고침(`50abbd3` RED): 전체 글이 있는데 보이는 글이 비었거나 「…」만 남았거나 폭이 「…」 한 자보다 좁으면 잘림으로 센다(+ 이름 목록 `[…]`). home 은 실행 크기와 1280 두 번 재고, `cells-elided`(폴더 칸 뺀 칸 줄임 수)를 더했다.
+    4. **[correctness C1] 정보 줄 4단계가 빈 구간부터 자름** — 확인: 끝 줄임표를 비례로 걸었다. 고침(`4d5f979`): 잘린 선 짧은 글을 앞부분(「잘린 선 n줄」)과 빈 구간 꼬리(`stripGapTail`)로 나눈다. ① 앞부분(없앨 수 있음) → ② 상태 바닥 40 px → ③ 상태 「… 첫 글자」 순서로 줄이고, 꼬리는 마지막 수단으로만 줄인다. 감사 `gap-kept`.
+    5. **[correctness C4] 「EPSG:5186」 끝 줄임표** — 확인: `:1399` ElideRight. 고침(`a973c2a`): 좌표계 · 높이 값은 `ElideLeft`(번호 끝자리 지킴)이고 줄이는 것은 맨 마지막 단계(위 2). 합성 · 긴 이름 1280 에서는 줄지 않는다.
+    6. **[code S2 · correctness C3] 머리 맞춤 두 번 · 방위 글 전에 맞춤** — 확인: `updateVexUi` · `setSecTitleText` 가 각각 맞추고, `secFacing_` 는 그 뒤에 바뀜. 고침(`70b46b4`): `updateHeader` 가 `headerBatch_` + `qScopeGuard` 로 끝에서 한 번 맞춘다(출처: context7 `/websites/doc_qt_io_qt-6_8` 「qScopeGuard」). `fitSectionHeader` 는 입력 열쇠(폭 · 제목 · 방위 · 세로 글 · 상태)가 같으면 바로 돌아간다. `applyHighContrast` 는 열쇠를 지운다. 감사 `refit=a/b`.
+    7. **[UI S1] 좁은 머리 메뉴 단추에 ▾ 없음** — 확인: `theme.hpp:127` 이 메뉴 표시를 지우고, ③단계 세로 단추는 IconOnly. 처음에는 글 「▾」(TextBesideIcon)를 붙였다. 그러자 1280 offscreen 머리가 넘쳐 `sec-header-overlap=18 FAIL` 이었다(×1 · ×2 · ×1.75). 고침(`00c9a43`): 아이콘 오른쪽 아래에 ▾ 를 굽는 `kerf::iconWithCaret` 를 만들었다(폭 그대로, 바탕색 테). 「그릴 것」은 늘, 세로 단추는 ③단계 뒤로 이 아이콘을 쓴다. 감사 `carets` 는 「글 ▾ 또는 구운 ▾(`caretBaked`)」로 본다. **판정:** 글 ▾ 대신 아이콘 굽기를 골랐다(리뷰가 낸 두 안 중 하나). 잘못이면: ▾ 가 6 × 3.6 px 로 작다(캡처로 봄). 같은 커밋에서 제목 줄임표 바닥을 24 px → 「첫 글자 + …」 폭으로 바꿨다(「…」만 남으면 새 잘린 라벨 판정에 걸림). `secTogglesMenu_` 에 accessibleName(code note 1)도 달았다.
+  - 범위 밖으로 둔 것(조정자 지시): correctness C2(10 m 간격 겹침) · note 전부 · 사용자의 새 요청.
+  - RED(`50abbd3`, 1280x800 · 1920x1040 ×1, `C:\dev\tmp\n1280\ui-r2t1-*`) — 두 실행 모두 RESULT fail(exit 9):
+```
+1280: ui-audit sec-header-overlap=0 kept=1 toggles-reachable=1 carets=0 refit=2/2 at=…  FAIL
+1280: ui-audit strip-clipped=0 state-kept=1 gap-kept=0 elide-tip-missing=0 at=…  FAIL
+1280: ui-audit home-clipped=2 [run:Synthetic 기준,run:마지막 열림,run:1분 전,run:수평 좌표계,run:EPSG:5186,run:KVD1964] cells-elided=10 elide-tip-missing=0 min-width=1280 at=run:1:5,1280w:1:5  FAIL
+1920: ui-audit home-clipped=2 [run:Synthetic 기준,1280w:Synthetic 기준,1280w:마지막 열림,…] cells-elided=5 … at=run:1:0,1280w:1:5  FAIL
+```
+  - GREEN(각 Task 뒤 1280 · 1920, 마지막 `00c9a43` · `C:\dev\tmp\n1280\ui-r2t5b-*` 는 RESULT ok · exit 0):
+```
+ui-audit sec-header-overlap=0 kept=1 toggles-reachable=1 carets=1 refit=1/0 at=run:5:0,1280w:5:0,1280L:5:0,1280p:5:0,1280d:5:0,probe:3:0,1280v:5:0
+ui-audit strip-clipped=0 state-kept=1 gap-kept=1 elide-tip-missing=0 at=…,1280p:4:0,1280d:4:0,…
+ui-audit home-clipped=0 cells-elided=0 elide-tip-missing=0 min-width=1280 at=run:0:0,1280w:0:0
+```
+    긴 이름 1280(`ui-r2t2blong-*`)은 `home-clipped=0 cells-elided=0 … min-width=1280` 이다. 1280 ×2 도 `sec-header … carets=1 refit=1/0 · RESULT ok` 이다.
+  - 커밋: `50abbd3`(RED) · `a973c2a`(홈) · `4d5f979`(정보 줄) · `70b46b4`(머리 한 번) · `00c9a43`(▾ · 문서). DESIGN_SPEC §4 · §7 · §12 에 rework 2 규칙 · 키를 적었다.
+  - **수정 회차 2 검증**(HEAD `00c9a43`, worktree 깨끗):
+    - V8 `factory.cmd verify 20261010-01-narrow-1280 -UiAudit on -UiSizes 1280x800,1920x1040,3440x1440,3840x2160 -UiScales 1,2` → **RESULT PASS**(verify.md 09:00). 빌드 새 경고 0, 빠른 시험 51325 통과, asec-section `polylines=1 vertices=54`, ui-audit 8 줄 모두 `RESULT ok`(66–69 s).
+    - V2(V8 이 끝난 **뒤**에) `… -UiSizes 1280x800 -UiScales 1.25,1.75` → **RESULT PASS**(verify.md 09:03): ×1.25 · ×1.75 `RESULT ok`.
+    - 회귀: `--icon-sheet n=62 missing=0 RESULT ok`, `--sheet-check RESULT ok` · `level-pt … ok=1`, `--ctx-shot ok … guide=1`(모두 EXIT=0). `git diff --stat 308daac -- core tests tools CMakeLists.txt app/CMakeLists.txt .github` 는 비어 있다. DESIGN_SPEC §12 에서 새 키(`carets=1` · `refit=` · `gap-kept=1` · `cells-elided=0`)가 `git grep` 으로 155행에 보인다.
+    - 캡처(실제 화면 150 %) `C:\dev\tmp\n1280-rework2\`:
+      - `home-1280.png`: 칸 이름 「마지막 열림 · 수평 좌표계 · 높이 · 단면 · 도면」 전부 보임. 값 「1분 전 · EPSG:5186 · KVD1964 · 1개 · —」 전부 보임. 폴더 칸만 「C: › …synth」 가운데 줄임표. 「작업 순서」 오른쪽에 「Synthetic 기준」이 보인다.
+      - `home-1920.png`: 폴더 「C: › dev › kerf-synth」를 포함해 전부 보이고 「Synthetic 기준」도 있다(옛 `v5-d1-home.png` 와 같은 자리).
+      - `home-1280-long.png` · `home-1920-long.png`: 카드 이름은 「Synthet···ongName」, 「Synthetic_Excava…nchA_LongName 기준」은 가운데 줄임표. 칸은 위와 같다.
+      - `home-tab0-1280.png` · `home-tab0-1920.png`: 모델을 연 뒤 홈. 옛 위젯 덩어리가 없다(AC14 그대로).
+      - `work-1280.png` · `draw-1280.png`: 머리 「A–A′ …」 · 「그릴 것」(▾ 구운 아이콘) · 세로(▾ 구운 아이콘) · 「1:218」 · 맞춤 · 확대 · 축소가 겹치지 않는다. 정보 줄 「✓ 최종(잎) … 잘린 선 1줄 · 54점 · 빈 구간 없음」 · 「단면선을 긋는 중 — …」 전부 보인다.
+    - 남은 위험:
+      - ▾ 가 16 px 아이콘 안 6 × 3.6 px 라 작다(검토자 눈 확인 몫).
+      - 감사 `carets` 는 구운 ▾ 를 속성 `caretBaked` 로 믿는다. 픽셀 검사는 아니다. 그래서 UI S1 의 실제 근거는 캡처 `work-1280.png` · `draw-1280.png` 다.
+      - 125 · 175 % 진짜 모니터는 못 봤다(offscreen V2 로 갈음).
+    - 범위 메모: `secTogglesMenu_->setAccessibleName("그릴 것")`(code note 1 — 조정자가 범위 밖으로 둔 note)를 같은 줄을 고치며 한 줄 넣었다(`00c9a43`). 되돌리는 커밋은 만들지 않았다.
