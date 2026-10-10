@@ -3,7 +3,7 @@ id: 20261010-01-narrow-1280
 title: 1280 좁은 창: 단면 머리 · 정보 줄 · 평면 눈금 · 리본 기대값 20 + B5 검토 should 7건
 status: review            # queued | spec | build | verify | review | rework | needs-human | approved | merged | closed | rejected
 rework_count: 2           # 최대 2. 넘으면 needs-human
-ai_review: pending        # pending | pass | fail  (검토자 셋·UI 검토 결과 종합)
+ai_review: pass           # pending | pass | fail  (검토자 셋·UI 검토 결과 종합)
 user_approval: pending    # pending | approved | rejected  (사용자가 /factory approve 로 말한 뒤에만 approved)
 base_branch: feature/design-v2
 base_sha: 308daac82e8e46189600488c209d43020e046cc2
@@ -11,10 +11,10 @@ branch: factory/20261010-01-narrow-1280
 worktree: C:\dev\kerf-wt\20261010-01-narrow-1280
 build_dir: C:\dev\kerf-wt\20261010-01-narrow-1280-build
 head_sha: 00c9a43844c46e13ea445379e75576e8ceebc498
-last_verify: PASS (2026-10-10 09:03)
+last_verify: PASS (2026-10-10 09:24)
 human_review_required: 화면 · 감사(`app/mainwindow_ui.cpp` --ui-audit 판정 추가 · 리본 1280 기대값 32 → 20 · DESIGN_SPEC 기대값 변경, profile §8). CI · 좌표 · 파일 형식 해당 없음
 created: 2026-10-10 00:03
-updated: 2026-10-10 09:03
+updated: 2026-10-10 09:55
 ---
 # 20261010-01-narrow-1280 — 1280 좁은 창: 단면 머리 · 정보 줄 · 평면 눈금 · 리본 기대값 20 + B5 검토 should 7건
 
@@ -34,6 +34,8 @@ updated: 2026-10-10 09:03
 | 2026-10-10 07:40 | review | builder → factory | rework 커밋 `c9214e2`(DESIGN_SPEC +3줄만). 확인: `git diff a2e2228..HEAD -- app core tests tools CMakeLists.txt app/CMakeLists.txt .github` 비어 있음(코드 불변) · AC13 키 9개 모두 §4 · §5 · §7 · §12 에 grep 됨 · `factory verify -UiAudit off` RESULT PASS(build 새 경고 0 · tests 51325 · asec-section 54). 감사 8조합은 코드가 같은 a2e2228 결과(07:30 PASS) 그대로. AC13 통과 → 검토 진행 중(넷) |
 | 2026-10-10 08:20 | rework(2/2, 마지막) | factory | 검토: code fail(B1 홈 「… 기준」 글 사라짐) · UI fail(B1 1280 카드 칸 이름 줄임) · correctness pass(should 4) · security pass. 충돌(UI N6 ↔ code B1)은 캡처 증거로 code 쪽. builder 에게 blocking 2 + 같은 뿌리 should 5(감사 보강 · 정보 줄 빈 구간 지킴 · EPSG 값 줄임 · 머리 맞추기 한 번 · 메뉴 ▾) — review.md 종합 그대로. 다시 blocking 이면 needs-human |
 | 2026-10-10 09:05 | verify → review(2차) | builder → factory | rework 2 커밋 5(`50abbd3` RED 감사 보강 → `a973c2a` 홈 · `4d5f979` 정보 줄 빈 구간 꼬리 · `70b46b4` 머리 맞춤 한 번 · `00c9a43` 메뉴 ▾ 구운 아이콘 + DESIGN_SPEC §4 · §7 · §12). 지적 7건 모두 고침(반론 0, code B1 은 검토자 대안 ② 채택 — 판정 build.md). builder 자체 V8 PASS(09:00) · 1280 ×1.25/×1.75 PASS(09:03) · icon-sheet · sheet-check · ctx-shot EXIT 0 · core/tests/CMake/CI diff 없음. 범위 밖 한 줄 `setAccessibleName("그릴 것")`(code note 1). test-runner 독립 검증 + 검토자 넷 재검토 동시 시작(검토는 코드만 읽고 검증은 빌드 폴더만 써서 서로 안 겹침) |
+| 2026-10-10 09:31 | verify(2차, rework 2, HEAD 00c9a43) | test-runner | **PASS · 실패 0 · 미실행 5**. V8 RESULT PASS(8조합 `RESULT ok`, exit 0) · V2 RESULT PASS(×1.25 · ×1.75 `RESULT ok`, exit 0, V8 뒤에 순서대로) · 회귀 `--icon-sheet` · `--sheet-check` · `--ctx-shot` 모두 EXIT 0 · 긴 이름 1280 감사 ok · core/tests/CMake/CI diff 비어 있음 · 새 키(`carets=1` · `refit=1/0` · `gap-kept=1` · `cells-elided=0` · `home-clipped=0` · `sec-header-overlap=0` · `home-stale-children=0`) 10조합 모두 출력. AC1–AC10 · AC12–AC14 통과, 미실행 = AC11 루브릭(kerf-ui-reviewer) · 판별력 임시 변경 증명 4건(코드 수정 금지라 build.md 인용) · 전체 시험 · 실제 125/175 % · 3440/3840 실제 화면 · 목록에서 지우기 클릭 등 실제 화면 확인. 메모: ▾ 는 감사가 속성(`caretBaked`)만 믿고 캡처 확대로는 매우 작게(약 6×3.6 px) 보임 → 검토자 판단. verify.md 「검증 2차(rework 2, HEAD 00c9a43)」 |
+| 2026-10-10 09:55 | review → 사용자 결정 대기 | factory | 재검토 넷 모두 pass(code should 3 · correctness should 2 · security note 3 · UI should 2, 충돌 없음) + test-runner 2차 PASS → `ai_review: pass`, 승인 보고서 approval.md. **자동 승인하지 않음**: ⓐ 1920 이상 홈 카드 칸 배치 바뀜(명세 §1 「1920 이상 모양 그대로」와 어긋남 — 앱 모양 결정이라 R1.5 예외) ⓑ ▾ 가 거의 안 보임(UI S1 미해결). 고치려면 수정 3회차 = 한도 초과라 사용자 허가 필요(SKILL §2) → AskUserQuestion |
 
 ## 참조
 - 명세 `spec.md` · 구현 요약 `build.md` · 검증 `verify.md` · 검토 `review.md` · 승인 `approval.md`
