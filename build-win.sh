@@ -11,7 +11,7 @@ ninja -C build-win
 D=build-win/deploy/SectionViewer
 rm -rf build-win/deploy && mkdir -p "$D/platforms" "$D/imageformats" "$D/styles" "$D/licenses" "$D/tools"
 x86_64-w64-mingw32-strip -o "$D/SectionViewer.exe" build-win/app/SectionViewer.exe
-for m in Core Gui Widgets OpenGL OpenGLWidgets; do cp "$QT/bin/Qt6$m.dll" "$D/"; done
+for m in Core Gui Widgets OpenGL OpenGLWidgets PrintSupport; do cp "$QT/bin/Qt6$m.dll" "$D/"; done
 cp "$QT/bin/libstdc++-6.dll" "$QT/bin/libgcc_s_seh-1.dll" "$QT/bin/libwinpthread-1.dll" "$QT/bin/opengl32sw.dll" "$D/"
 cp "$QT/plugins/platforms/qwindows.dll" "$D/platforms/"
 cp "$QT/plugins/imageformats/qico.dll" "$D/imageformats/"

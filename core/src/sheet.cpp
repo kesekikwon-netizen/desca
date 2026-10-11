@@ -289,6 +289,16 @@ double resolveBackDepth(bool hasStored, double stored, bool userSet) {
     return stored;
 }
 
+PrintPaperCheck checkPrintPaper(const SheetLayout& L, double pw, double ph, double ml, double mt, double mr, double mb, double tol) {
+    PrintPaperCheck c;
+    c.sizeOk = std::fabs(pw - L.paperW) <= tol && std::fabs(ph - L.paperH) <= tol;
+    const double fl = L.frameX, ft = L.frameY, fr = L.paperW - L.frameX - L.frameW, fb = L.paperH - L.frameY - L.frameH;
+    c.frameMarginMm = std::min(std::min(fl, ft), std::min(fr, fb));
+    c.maxPrinterMarginMm = std::max(std::max(ml, mt), std::max(mr, mb));
+    c.marginOk = ml <= fl + 1e-9 && mt <= ft + 1e-9 && mr <= fr + 1e-9 && mb <= fb + 1e-9;
+    return c;
+}
+
 std::string sectionsToJson(const std::vector<SavedSection>& v, const std::string& model, const std::string& srsLabel, int current) {
     nlohmann::json j;
     j["format"] = "ExcavSection.sections";

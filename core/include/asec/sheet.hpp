@@ -47,6 +47,12 @@ SheetLayout layoutSheet(const SheetSpec& s, double lenM, double heightM);
 /// 한 장에 꼭 들어가는 가장 큰 축척의 분모(정수로 올림)
 double fitDenominator(const SheetSpec& s, double lenM, double heightM);
 
+/// 인쇄(2026-10-12): 프린터가 지금 고른 용지(mm, 그 방향 그대로) · 못 찍는 가장자리(mm)를 도면 용지와 비교.
+/// sizeOk = 가로 · 세로가 각각 tol 안(방향까지 같음). marginOk = 네 가장자리 모두 테두리 바깥 여백 이하(아니면 테두리가 잘림)
+struct PrintPaperCheck { bool sizeOk = false, marginOk = false; double frameMarginMm = 0, maxPrinterMarginMm = 0; };
+PrintPaperCheck checkPrintPaper(const SheetLayout& L, double printerWmm, double printerHmm,
+                                double marginLeftMm, double marginTopMm, double marginRightMm, double marginBottomMm, double tolMm = 1.0);
+
 struct SheetAdvice {
     bool overflow = false;
     double fitLenM = 0;          // 지금 축척으로 한 장에 들어가는 길이

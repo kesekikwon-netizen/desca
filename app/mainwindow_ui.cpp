@@ -432,6 +432,9 @@ void MainWindow::setRibbonContext(int ctx) {
     const bool home = ctx == 0, sheet = ctx == 2;
     for (const char* g : {"sec", "elev", "view", "data", "out"}) ribbon_->setGroupDim(QString::fromLatin1(g), home);
     if (sheetChip_) ribbon_->setChipOn(sheetChip_, sheet);
+    // Ctrl+P: 단면 · 홈 = 도면 열기, 도면 탭 = 인쇄(한 키에 둘을 걸면 Qt 가 「모호한 단축키」로 둘 다 막으므로 문맥마다 바꿔 단다)
+    action("sheet")->setShortcut(sheet ? QKeySequence() : QKeySequence(QStringLiteral("Ctrl+P")));
+    action("print")->setShortcut(sheet ? QKeySequence(QStringLiteral("Ctrl+P")) : QKeySequence());
     applyProjectHeader();
     updateEnabled();   // 켜고 끄기는 updateEnabled 한 곳(검토 I1)
 }
@@ -1718,7 +1721,7 @@ static const QList<KeyRow>& keyRows() {
         {QStringLiteral("+  −"), QStringLiteral("확대 · 축소"), {QStringLiteral("+"), QStringLiteral("-")}},
         {QStringLiteral("Ctrl+1 · Ctrl+2"), QStringLiteral("평면 · 단면 보이기 켜기 · 끄기"), {QStringLiteral("Ctrl+1"), QStringLiteral("Ctrl+2")}},
         {QStringLiteral("F11"), QStringLiteral("전체화면 · 원래 크기"), {QStringLiteral("F11")}},
-        {QStringLiteral("Ctrl+P"), QStringLiteral("도면 — 평면도 · 단면도 조판"), {QStringLiteral("Ctrl+P")}},
+        {QStringLiteral("Ctrl+P"), QStringLiteral("도면 — 평면도 · 단면도 조판 · 도면 탭에서는 인쇄"), {QStringLiteral("Ctrl+P")}},
         {QStringLiteral("Ctrl+D · Ctrl+E"), QStringLiteral("단면 DXF · 단면 영상(PNG · TIFF · GeoTIFF)"), {QStringLiteral("Ctrl+D"), QStringLiteral("Ctrl+E")}},
         {QStringLiteral("F2"), QStringLiteral("고른 단면 이름 · 메모 바꾸기"), {QStringLiteral("F2")}},
         {QStringLiteral("Del"), QStringLiteral("고른 단면 지우기(확인 창이 뜸 · 모델 파일은 그대로)"), {QStringLiteral("Del")}},
@@ -1807,6 +1810,8 @@ MainWindow::MainWindow() {
     makeAction("full", QStringLiteral("전체화면"), "Full Screen", I::Max, "F11");
     makeAction("listpanel", QStringLiteral("단면 목록"), "Section List", I::Csv, QString(), true)->setChecked(QSettings().value("ui/sectionList", true).toBool());
     makeAction("sheet", QStringLiteral("도면"), "Sheet", I::Sheet, "Ctrl+P");
+    makeAction("print", QStringLiteral("인쇄"), "Print", I::Sheet);   // 도면 탭에서만 Ctrl+P(setRibbonContext 가 「도면」과 바꿔 단다 — 2026-10-12)
+    action("print")->setShortcutContext(Qt::ApplicationShortcut);
     makeAction("plansheet", QStringLiteral("평면도"), "Plan Sheet", I::Plan);
     makeAction("sectionsheet", QStringLiteral("단면도"), "Section Sheet", I::Sheet);
     makeAction("dxf", QStringLiteral("단면 DXF"), "Section DXF", I::Dxf, "Ctrl+D");
@@ -2012,6 +2017,7 @@ MainWindow::MainWindow() {
         dlgPlanSheet();
     });
     QObject::connect(action("sheet"), &QAction::triggered, this, [this] { dlgChooseSheet(); });
+    QObject::connect(action("print"), &QAction::triggered, this, [this] { printCurrentSheet(); });
     QObject::connect(action("plansheet"), &QAction::triggered, this, [this] { dlgPlanSheet(); });
     QObject::connect(action("sectionsheet"), &QAction::triggered, this, [this] { dlgSheet(); });
     QObject::connect(action("dxf"), &QAction::triggered, this, [this] { dlgSectionDxf(); });

@@ -70,7 +70,9 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
 - 도면(Ctrl+P, `app/sheetexport.cpp`, 코어 `asec/sheet.hpp`): A4/A3 가로/세로, 1:10/20/40/100/맞춤, 실제 비율 미리보기, 넘침 경고와 추천
   (같은 용지에 들어가는 표준 축척 · A3 · 방향 · N장 나눠 붙이기), 표제란(도면명·축척·용지·보는 방향·날짜·수평 EPSG·높이 기준), 축척 막대,
   기준선 EL, 넣을 것(단면선·영상·레벨선·표제란), PDF(QPdfWriter, 여러 쪽)/DXF(모델 공간 1:N)/PNG/TIFF(나누면 _1, _2 …).
-  인쇄 단추는 없음(QtPrintSupport 미사용 — PDF 로 인쇄).
+  인쇄(2026-10-12): 도면 탭 「인쇄…」 · 도면 탭에서 Ctrl+P → 인쇄 미리보기(프린터 · 쪽 설정). 도면 용지 · 방향 그대로 100 %(줄이지 않음),
+  PDF 와 같은 그리기 · 같은 출력 영상(QtPrintSupport). 프린터 용지가 다르거나 못 찍는 가장자리가 테두리 밖 여백보다 넓으면 창 제목에 경고.
+  점검: `--open-sheet section|plan --print-to "Microsoft Print to PDF" --print-out f`(대화상자 없이) · `--print-preview-shot f.png`.
 - 시작 화면: 이어서 하기 카드, 최근 모델 표(좌표계·높이·단면 수·마지막으로 연 때, 원본 없으면 ●), 끌어 놓기, 세 걸음·자주 쓰는 키.
 - 단면 목록(P1-1, 왼쪽 232 px): A–A′, B–B′ … 이름·메모·썸네일(메모리에만), 누르면 그 단면, 두 번 = 이름, N = 새 단면.
   QSettings `model/<경로 해시>/`(모델 폴더가 읽기 전용이어도 됨), 파일 › 단면 목록 내보내기/가져오기 = `.sections.json`.

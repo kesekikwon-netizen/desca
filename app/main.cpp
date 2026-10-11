@@ -318,6 +318,9 @@ int main(int argc, char** argv) {
         else if (s == "--sheet-pick") sheetPick = nx().toInt();
         else if (s == "--sheet-back") sheetBack = nx().toDouble();
         else if (s == "--sheet-stress") sheetStress = true;
+        else if (s == "--print-to") MainWindow::printTest.printer = nx();          // --open-sheet 와 함께: 대화상자 없이 이 프린터로(점검)
+        else if (s == "--print-out") MainWindow::printTest.outFile = nx();         // 그 프린터 출력을 파일로(드라이버 출력 — Microsoft Print to PDF 면 PDF)
+        else if (s == "--print-preview-shot") MainWindow::printTest.previewShot = nx();   // 인쇄 미리보기 창 캡처 뒤 닫기
         else if (s == "--split") split = true;
         else if (s == "--extra-line" && i + 4 < a.size()) { extraLines.push_back({a[i + 1].toDouble(), a[i + 2].toDouble(), a[i + 3].toDouble(), a[i + 4].toDouble()}); i += 4; }
         else if (s.startsWith("--export-")) exports.append({s.mid(9), nx()});
@@ -814,6 +817,14 @@ int main(int argc, char** argv) {
                     .arg(open).arg(opac).arg(depth).arg(hidden).arg(shown).arg(pickOpen).arg(pickDepth).arg(c6.peak).arg(c6.active).arg(ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
             if (!ok) rc = 12;
         }
+    }
+    if (!openSheet.isEmpty() && (!MainWindow::printTest.printer.isEmpty() || !MainWindow::printTest.previewShot.isEmpty())) {   // 인쇄 점검(종료 코드 13)
+        processFor(500);
+        w.printCurrentSheet();
+        QElapsedTimer t; t.start();
+        while (!MainWindow::printTest.done && t.elapsed() < 300000) processFor(100);
+        log(MainWindow::printTest.done ? MainWindow::printTest.log : QStringLiteral("print: not done (timeout)"));
+        if (!MainWindow::printTest.done) rc = 13;
     }
     if (!openSheet.isEmpty() && sheetEdit) {
         for (QPushButton* b : w.findChildren<QPushButton*>()) if (b->isVisible() && b->text() == QStringLiteral("조판편집")) { b->click(); break; }

@@ -126,6 +126,20 @@ public:
     /// 용지 한 장 그리기(미리보기·내보내기 공용). pxPerMm = 장치 픽셀/mm, page = 나눠 붙이기 쪽 번호(0..)
     static void paintSheet(QPainter& p, const SectionDoc& doc, const SheetParams& sp, double pxPerMm, int page, const QImage& img, const SectionImgGeo& geo,
                            double viewZoom = 1, double viewPanX = 0, double viewPanY = 0, SheetPaintProbe* probe = nullptr, const PlanStrip* plan = nullptr);
+    /// 단면도 출력에 쓰는 영상(PDF · 인쇄 공용): 출력 dpi 입면 영상 + 위치도 띠
+    struct SheetAssets { QImage img; SectionImgGeo geo; PlanStrip strip; bool hasStrip = false; double usedRes = 0; };
+    static bool prepareSheetAssets(const SectionDoc& doc, asec::MeshSource& src, const SheetParams& p, SheetAssets& out, QString* msg,
+                                   const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
+    /// 평면도 출력에 쓰는 정사영상(PDF · 인쇄 공용). spOut = 축척 · 범위를 정리한 설정
+    static bool preparePlanAssets(asec::MeshSource& src, const PlanSheetParams& p, PlanSheetParams& spOut, QImage& img, double& x0, double& y1, double& res,
+                                  QString* msg, const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
+    /// 인쇄(2026-10-12): 도면 탭의 「인쇄…」 · Ctrl+P. 출력 영상을 작업 스레드로 만든 뒤 인쇄 미리보기(프린터 · 쪽 설정 포함)
+    void printSectionSheet(const SectionDoc& doc, const SheetParams& sp);
+    void printPlanSheet(const PlanSheetParams& sp);
+    void printCurrentSheet();                          // 열린 도면 탭의 「인쇄…」 단추를 누름(Ctrl+P · 명령줄)
+    /// 명령줄 점검용: printer 가 있으면 대화상자 없이 그 프린터로(outFile 이면 파일로) 찍고, previewShot 이면 미리보기 창을 캡처해 닫는다
+    struct PrintTest { QString printer, outFile, previewShot; bool done = false; QString log; };
+    static PrintTest printTest;
     static bool exportPlanSheet(asec::MeshSource& src, const PlanSheetParams& p, const QString& path, QString* msg,
                                 const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
     static void paintPlanSheet(QPainter& p, const PlanSheetParams& sp, double pxPerMm, int page, const QImage& img,

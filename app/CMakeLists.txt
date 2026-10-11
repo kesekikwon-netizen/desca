@@ -10,19 +10,19 @@ if(ASEC_QT_WIN_DIR)
   enable_language(RC)
   add_executable(SectionViewer WIN32 ${APP_SRC} ${CMAKE_SOURCE_DIR}/packaging/app.rc)
   target_include_directories(SectionViewer PRIVATE ${CMAKE_BINARY_DIR}/generated ${Q}/include ${Q}/include/QtCore ${Q}/include/QtGui ${Q}/include/QtWidgets
-                             ${Q}/include/QtOpenGL ${Q}/include/QtOpenGLWidgets ${Q}/mkspecs/win32-g++)
+                             ${Q}/include/QtOpenGL ${Q}/include/QtOpenGLWidgets ${Q}/include/QtPrintSupport ${Q}/mkspecs/win32-g++)
   target_link_libraries(SectionViewer PRIVATE archsection asec_stb
-    ${Q}/lib/libQt6OpenGLWidgets.a ${Q}/lib/libQt6OpenGL.a ${Q}/lib/libQt6Widgets.a ${Q}/lib/libQt6Gui.a ${Q}/lib/libQt6Core.a
+    ${Q}/lib/libQt6PrintSupport.a ${Q}/lib/libQt6OpenGLWidgets.a ${Q}/lib/libQt6OpenGL.a ${Q}/lib/libQt6Widgets.a ${Q}/lib/libQt6Gui.a ${Q}/lib/libQt6Core.a
     opengl32 shell32 ole32 uuid)
   target_compile_definitions(SectionViewer PRIVATE UNICODE _UNICODE _USE_MATH_DEFINES QT_NO_DEBUG QT_CORE_LIB QT_GUI_LIB QT_WIDGETS_LIB
-                             QT_OPENGL_LIB QT_OPENGLWIDGETS_LIB)
+                             QT_OPENGL_LIB QT_OPENGLWIDGETS_LIB QT_PRINTSUPPORT_LIB)
   target_compile_options(SectionViewer PRIVATE -finput-charset=UTF-8 -fexec-charset=UTF-8 -O2)
   target_link_options(SectionViewer PRIVATE -mwindows -static)
   set_source_files_properties(${CMAKE_SOURCE_DIR}/packaging/app.rc PROPERTIES COMPILE_FLAGS "-c 65001")
 else()
-  find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets OpenGL Svg)
+  find_package(Qt6 REQUIRED COMPONENTS Widgets OpenGLWidgets OpenGL Svg PrintSupport)
   add_executable(SectionViewer ${APP_SRC})   # .3sm(ScalableMesh) 읽기는 코어(core/src/sm3.cpp, SQLite 아말감) — Qt Sql 불필요
-  target_link_libraries(SectionViewer PRIVATE archsection asec_stb Qt6::Widgets Qt6::OpenGLWidgets Qt6::OpenGL Qt6::Svg)
+  target_link_libraries(SectionViewer PRIVATE archsection asec_stb Qt6::Widgets Qt6::OpenGLWidgets Qt6::OpenGL Qt6::Svg Qt6::PrintSupport)
   target_include_directories(SectionViewer PRIVATE ${CMAKE_BINARY_DIR}/generated)
   target_compile_definitions(SectionViewer PRIVATE _USE_MATH_DEFINES)
   set_target_properties(SectionViewer PROPERTIES WIN32_EXECUTABLE ON)

@@ -252,3 +252,27 @@ TEST_CASE("sheet: plan strip pixel→paper transform puts A at (s0,t0), A′ to 
     CHECK(Xs(10, 10) == Approx(350)); CHECK(Ys(10, 10) == Approx(50));     // B = (5,15) = 픽셀 (10, 10)
     CHECK(Xs(6, 30) == Approx(100)); CHECK(Ys(6, 30) == Approx(0));        // (3,5) = A + n·2 → 위
 }
+
+// 인쇄(사용자 요청 2026-10-12): 프린터 용지가 도면 용지와 같은가 · 프린터가 못 찍는 가장자리가 테두리 바깥 여백 안에 드는가
+TEST_CASE("sheet: print paper check (size, orientation, printer margins)", "[sheet][print]") {
+    SheetSpec s; s.paper = Paper::A3; s.landscape = true; s.denom = 20;
+    const SheetLayout L = layoutSheet(s, 8.0, 2.0);
+    REQUIRE(L.paperW == Approx(420)); REQUIRE(L.paperH == Approx(297));
+    const double fm = std::min({L.frameX, L.frameY, L.paperW - L.frameX - L.frameW, L.paperH - L.frameY - L.frameH});
+    REQUIRE(fm > 1.0);
+
+    PrintPaperCheck c = checkPrintPaper(L, 420, 297, 4.2, 4.2, 4.2, 4.2);
+    CHECK(c.sizeOk); CHECK(c.marginOk);
+    CHECK(c.frameMarginMm == Approx(fm));
+    CHECK(c.maxPrinterMarginMm == Approx(4.2));
+
+    CHECK(checkPrintPaper(L, 420.6, 296.5, 0, 0, 0, 0).sizeOk);        // 1 mm 안은 같은 용지(드라이버 반올림)
+    CHECK_FALSE(checkPrintPaper(L, 297, 420, 0, 0, 0, 0).sizeOk);      // 방향이 다름
+    CHECK_FALSE(checkPrintPaper(L, 297, 210, 0, 0, 0, 0).sizeOk);      // A4
+    CHECK_FALSE(checkPrintPaper(L, 422, 297, 0, 0, 0, 0).sizeOk);
+
+    CHECK(checkPrintPaper(L, 420, 297, fm - 0.1, 0, 0, 0).marginOk);
+    PrintPaperCheck cut = checkPrintPaper(L, 420, 297, 0, 0, 0, fm + 0.5);   // 아래쪽만 넓어도 테두리가 잘린다
+    CHECK_FALSE(cut.marginOk);
+    CHECK(cut.maxPrinterMarginMm == Approx(fm + 0.5));
+}

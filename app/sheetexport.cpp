@@ -1,5 +1,5 @@
 ﻿// 도면(용지) 내보내기: 축척·용지 미리보기, 넘침 경고·추천, 표제란(높이 기준 포함), PDF/DXF/PNG/TIFF 한 창(Ctrl+P).
-// QtPrintSupport 없이 QPdfWriter(QtGui)로 PDF. 인쇄는 PDF 를 열어서.
+// PDF 는 QPdfWriter(QtGui), 인쇄는 QtPrintSupport(QPrinter · QPrintPreviewDialog — 2026-10-12 사용자 요청)
 #include "mainwindow.hpp"
 
 #include <QAbstractSpinBox>
@@ -25,6 +25,9 @@
 #include <QPageSize>
 #include <QPainter>
 #include <QPdfWriter>
+#include <QPrinter>
+#include <QPrinterInfo>
+#include <QPrintPreviewDialog>
 #include <QSvgGenerator>
 #include <QPushButton>
 #include <QSettings>
@@ -638,9 +641,9 @@ bool writePlanSheetDxf(const PlanSheetParams& sp, const QImage& img, double imgX
 }
 }  // namespace
 
-bool MainWindow::exportPlanSheet(MeshSource& src, const PlanSheetParams& p, const QString& path, QString* msg,
-                                 const std::atomic<bool>* cancel, const std::function<void(double)>& progress) {
-    PlanSheetParams sp = p;
+bool MainWindow::preparePlanAssets(MeshSource& src, const PlanSheetParams& p, PlanSheetParams& sp, QImage& img, double& x0, double& y1, double& res,
+                                   QString* msg, const std::atomic<bool>* cancel, const std::function<void(double)>& progress) {
+    sp = p;
     sp.spec.denom = snapScaleDenom10(sp.spec.denom);
     Box3 area = sp.wholeModel ? src.bounds : sp.area;
     if (src.bounds.valid()) {
@@ -655,13 +658,20 @@ bool MainWindow::exportPlanSheet(MeshSource& src, const PlanSheetParams& p, cons
     Box3 render;
     render.mn.x = cover.worldX0; render.mx.x = cover.worldX1; render.mn.y = cover.worldYBot; render.mx.y = cover.worldYTop;
     render.mn.z = src.bounds.mn.z; render.mx.z = src.bounds.mx.z;
-    double res = groundResolution(sp.spec.denom, imgDpi);
+    res = groundResolution(sp.spec.denom, imgDpi);
     double pix = (render.mx.x - render.mn.x) / res * (render.mx.y - render.mn.y) / res;
     if (pix > 40e6) res *= std::sqrt(pix / 40e6);
-    QImage img; double x0 = 0, y1 = 0;
+    x0 = 0; y1 = 0;
     if (progress) progress(0.05);
     if (!renderPlanOrtho(src, render, res, img, x0, y1, msg, cancel)) return false;
     if (cancel && cancel->load()) { if (msg) *msg = QStringLiteral("취소됨"); return false; }
+    return true;
+}
+
+bool MainWindow::exportPlanSheet(MeshSource& src, const PlanSheetParams& p, const QString& path, QString* msg,
+                                 const std::atomic<bool>* cancel, const std::function<void(double)>& progress) {
+    PlanSheetParams sp; QImage img; double x0 = 0, y1 = 0, res = 0;
+    if (!preparePlanAssets(src, p, sp, img, x0, y1, res, msg, cancel, progress)) return false;
     if (sp.format == 1) return writePlanSheetDxf(sp, img, x0, y1, res, src.srs.origin, path, msg);
     if (sp.format == 4) {
         const PlanWindow Wsvg = planWindow(sp, 0);
@@ -787,19 +797,12 @@ bool MainWindow::exportSectionSvg(const SectionDoc& doc0, MeshSource& src, const
     return true;
 }
 
-bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const SheetParams& p, const QString& path, QString* msg,
-                             const std::atomic<bool>* cancel, const std::function<void(double)>& progress) {
+bool MainWindow::prepareSheetAssets(const SectionDoc& doc0, MeshSource& src, const SheetParams& p, SheetAssets& assets, QString* msg,
+                                    const std::atomic<bool>* cancel, const std::function<void(double)>& progress) {
     const SheetGeom G = sheetGeom(doc0, p);
-    const int pages = p.split ? G.L.cols * G.L.rows : 1;
-    if (p.format == 1) {   // DXF: 모델 공간 1:N(용지 배치 없음)
-        DxfParams dp; dp.world3d = false; dp.denom = p.spec.denom; dp.image = p.withImage; dp.imageDpi = std::min(p.dpi, 200.0);
-        dp.levelMinorPt = p.levelMinorPt; dp.levelMajorPt = p.levelMajorPt;
-        SectionDoc doc = doc0; doc.st.showLevels = p.withLevels; doc.st.showTicks = p.withTicks;
-        return exportSectionDxf(doc, src, dp, path, msg, cancel);
-    }
     // 입면 영상: 출력 해상도로 다시 계산(같은 단면선 → 같은 윤곽은 스냅숏 것을 유지)
-    QImage img; SectionImgGeo geo{doc0.imgS0, doc0.imgZ1, doc0.imgRes};
-    double usedRes = 0;
+    QImage& img = assets.img; SectionImgGeo& geo = assets.geo; geo = SectionImgGeo{doc0.imgS0, doc0.imgZ1, doc0.imgRes};
+    double& usedRes = assets.usedRes; usedRes = 0; assets.hasStrip = false;
     if (p.withImage) {
         const double imgDpi = p.dpi;
         SectionRequest rq;
@@ -815,12 +818,28 @@ bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const Shee
         usedRes = out.image.res;
     }
     if (cancel && cancel->load()) { if (msg) *msg = QStringLiteral("취소됨"); return false; }
-    PlanStrip strip; const PlanStrip* stripPtr = nullptr;
     if (G.strip) {
         if (progress) progress(0.2);
-        if (renderPlanStrip(src, doc0.r.line, G.halfM, groundResolution(p.spec.denom, p.dpi), 40e6, strip, cancel)) stripPtr = &strip;
+        if (renderPlanStrip(src, doc0.r.line, G.halfM, groundResolution(p.spec.denom, p.dpi), 40e6, assets.strip, cancel)) assets.hasStrip = true;
         if (cancel && cancel->load()) { if (msg) *msg = QStringLiteral("취소됨"); return false; }
     }
+    return true;
+}
+
+bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const SheetParams& p, const QString& path, QString* msg,
+                             const std::atomic<bool>* cancel, const std::function<void(double)>& progress) {
+    const SheetGeom G = sheetGeom(doc0, p);
+    const int pages = p.split ? G.L.cols * G.L.rows : 1;
+    if (p.format == 1) {   // DXF: 모델 공간 1:N(용지 배치 없음)
+        DxfParams dp; dp.world3d = false; dp.denom = p.spec.denom; dp.image = p.withImage; dp.imageDpi = std::min(p.dpi, 200.0);
+        dp.levelMinorPt = p.levelMinorPt; dp.levelMajorPt = p.levelMajorPt;
+        SectionDoc doc = doc0; doc.st.showLevels = p.withLevels; doc.st.showTicks = p.withTicks;
+        return exportSectionDxf(doc, src, dp, path, msg, cancel);
+    }
+    SheetAssets A;
+    if (!prepareSheetAssets(doc0, src, p, A, msg, cancel, progress)) return false;
+    const QImage& img = A.img; const SectionImgGeo& geo = A.geo; const double usedRes = A.usedRes;
+    const PlanStrip& strip = A.strip; const PlanStrip* stripPtr = A.hasStrip ? &A.strip : nullptr;
     QStringList files;
     if (p.format == 0) {
         QPdfWriter w(path);
@@ -1106,7 +1125,7 @@ public:
 private:
     QVBoxLayout* lay_ = nullptr;
 };
-QWidget* sideBottom(QPushButton* def, QPushButton* primary, QPushButton* secondary, QLabel** done) {   // 맨 아래 Line 위: 「n장 저장됨 · 폴더 열기」(저장 뒤) / 조용한 「☆ 기본으로」 | 보조 | 흙색 주 단추
+QWidget* sideBottom(QPushButton* def, QPushButton* primary, QPushButton* secondary, QLabel** done, QPushButton* extra = nullptr) {   // 맨 아래 Line 위: 「n장 저장됨 · 폴더 열기」(저장 뒤) / 조용한 「☆ 기본으로」 | 보조 | 흙색 주 단추
     auto* w = new QWidget; w->setObjectName(QStringLiteral("sideBottom")); w->setAttribute(Qt::WA_StyledBackground);
     auto* v = new QVBoxLayout(w); v->setContentsMargins(12, 8, 12, 10); v->setSpacing(6);
     auto* d = new QLabel; d->setObjectName(QStringLiteral("sheetDone")); d->setTextFormat(Qt::RichText); d->setOpenExternalLinks(false); d->hide();
@@ -1114,7 +1133,14 @@ QWidget* sideBottom(QPushButton* def, QPushButton* primary, QPushButton* seconda
     v->addWidget(d);
     if (done) *done = d;
     auto* h = new QHBoxLayout; h->setContentsMargins(0, 0, 0, 0); h->setSpacing(6);
-    h->addWidget(def); h->addStretch(); if (secondary) h->addWidget(secondary); h->addWidget(primary);
+    if (extra) {   // 인쇄(2026-10-12): 한 줄에 넷은 320 px 판에서 「☆ 기본으로」가 눌려 잘리므로 윗줄 = 기본으로 · 인쇄, 아랫줄 = 보조 · 주 단추
+        auto* h0 = new QHBoxLayout; h0->setContentsMargins(0, 0, 0, 0); h0->setSpacing(6);
+        h0->addWidget(def); h0->addStretch(); h0->addWidget(extra);
+        v->addLayout(h0);
+        h->addStretch(); if (secondary) h->addWidget(secondary); h->addWidget(primary);
+    } else {
+        h->addWidget(def); h->addStretch(); if (secondary) h->addWidget(secondary); h->addWidget(primary);
+    }
     v->addLayout(h);
     return w;
 }
@@ -1302,7 +1328,10 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     auto* bDefault = new QPushButton(QStringLiteral("☆ 기본으로")); bDefault->setObjectName("quiet"); bDefault->setFocusPolicy(Qt::NoFocus); bDefault->setToolTip(QStringLiteral("이 설정(용지 · 축척 · 항목 · 형식 · 선 굵기)을 다음 도면의 기본으로"));
     auto* bSave = new QPushButton; bSave->setObjectName("primary"); bSave->setDefault(true);
     auto* bPdf = new QPushButton(QStringLiteral("PDF")); bPdf->setFocusPolicy(Qt::NoFocus); bPdf->setToolTip(QStringLiteral("같은 도면을 PDF 로"));
-    { QLabel* done = nullptr; sv->addWidget(sideBottom(bDefault, bSave, bPdf, &done)); sheetDoneLabel_ = done; }
+    auto* bPrint = new QPushButton(QStringLiteral("인쇄…")); bPrint->setObjectName("sheetPrint"); bPrint->setFocusPolicy(Qt::NoFocus);
+    bPrint->setToolTip(QStringLiteral("인쇄(Ctrl+P) — 미리보기 창에서 프린터 · 쪽 설정. 도면 용지 그대로 100 %(줄이지 않음) — 축척이 종이에서도 맞음"));
+    { QLabel* done = nullptr; sv->addWidget(sideBottom(bDefault, bSave, bPdf, &done, bPrint)); sheetDoneLabel_ = done; }
+    QObject::connect(bPrint, &QPushButton::clicked, d, [this, docP, st] { printSectionSheet(*docP, *st); });
     outer->addWidget(side);
 
     // ---- 갱신
@@ -1873,7 +1902,10 @@ QDialog* MainWindow::buildPlanSheetDialog(PlanSheetParams& io, const QImage& pre
     auto* bDefault = new QPushButton(QStringLiteral("☆ 기본으로")); bDefault->setObjectName("quiet"); bDefault->setFocusPolicy(Qt::NoFocus); bDefault->setToolTip(QStringLiteral("이 설정(용지 · 축척 · 항목 · 형식 · 선 굵기)을 다음 도면의 기본으로"));
     auto* bSave = new QPushButton; bSave->setObjectName("primary"); bSave->setDefault(true);
     auto* bPdf = new QPushButton(QStringLiteral("PDF")); bPdf->setFocusPolicy(Qt::NoFocus);
-    { QLabel* done = nullptr; sv->addWidget(sideBottom(bDefault, bSave, bPdf, &done)); sheetDoneLabel_ = done; }
+    auto* bPrint = new QPushButton(QStringLiteral("인쇄…")); bPrint->setObjectName("sheetPrint"); bPrint->setFocusPolicy(Qt::NoFocus);
+    bPrint->setToolTip(QStringLiteral("인쇄(Ctrl+P) — 미리보기 창에서 프린터 · 쪽 설정. 도면 용지 그대로 100 %(줄이지 않음) — 축척이 종이에서도 맞음"));
+    { QLabel* done = nullptr; sv->addWidget(sideBottom(bDefault, bSave, bPdf, &done, bPrint)); sheetDoneLabel_ = done; }
+    QObject::connect(bPrint, &QPushButton::clicked, d, [this, st] { printPlanSheet(*st); });
     outer->addWidget(side);
 
     auto reloadImage = [=] {
@@ -2220,4 +2252,139 @@ bool MainWindow::runSheetCheck(const QString& outDir, QString* log) {
     if (out.open(QIODevice::WriteOnly | QIODevice::Text)) out.write((lines.join('\n') + '\n').toUtf8());
     if (log) *log = lines.join('\n');
     return ok;
+}
+
+// ---------------------------------------------------------------- 인쇄(사용자 요청 2026-10-12)
+// PDF 저장과 같은 그리기(paintSheet / paintPlanSheet) · 같은 출력 영상(prepare*Assets)을 QPrinter 에. 용지 = 도면 용지 · 방향, 여백 0,
+// 전체 쪽(fullPage) 100 % — 줄여 맞추지 않는다(1:20 이면 종이에서도 1:20). 프린터 용지가 다르거나 못 찍는 가장자리가 테두리 밖 여백보다
+// 넓으면 미리보기 창 제목에 경고.
+MainWindow::PrintTest MainWindow::printTest;
+
+namespace {
+QString paperText(const SheetSpec& s) { return QStringLiteral("%1 %2").arg(QString::fromLatin1(paperName(s.paper)), s.landscape ? QStringLiteral("가로") : QStringLiteral("세로")); }
+
+// 프린터를 도면 용지에 맞춘다(여백 0 · 전체 쪽). 지원하지 않는 용지면 false(드라이버가 다른 용지를 고름)
+bool setupPrinter(QPrinter& pr, const SheetSpec& spec) {
+    pr.setFullPage(true);
+    const QPageLayout lay(QPageSize(spec.paper == Paper::A3 ? QPageSize::A3 : QPageSize::A4),
+                          spec.landscape ? QPageLayout::Landscape : QPageLayout::Portrait, QMarginsF(0, 0, 0, 0), QPageLayout::Millimeter);
+    return pr.setPageLayout(lay);
+}
+
+// 지금 프린터 설정을 도면과 비교한 경고 글(없으면 빈 글)
+QString printWarning(QPrinter& pr, const SheetLayout& L, const SheetSpec& spec, PrintPaperCheck* outCheck = nullptr) {
+    QPageLayout lay = pr.pageLayout(); lay.setUnits(QPageLayout::Millimeter);
+    const QRectF full = lay.fullRect();
+    const QMarginsF mm = lay.minimumMargins();
+    const PrintPaperCheck c = checkPrintPaper(L, full.width(), full.height(), mm.left(), mm.top(), mm.right(), mm.bottom());
+    if (outCheck) *outCheck = c;
+    QStringList w;
+    if (!c.sizeOk) w << QStringLiteral("프린터 용지 %1 × %2 mm 가 도면 용지(%3, %4 × %5 mm)와 다릅니다 — 축척이 맞지 않거나 잘립니다")
+                          .arg(full.width(), 0, 'f', 0).arg(full.height(), 0, 'f', 0).arg(paperText(spec)).arg(L.paperW, 0, 'f', 0).arg(L.paperH, 0, 'f', 0);
+    if (!c.marginOk) w << QStringLiteral("프린터가 가장자리 %1 mm 를 못 찍어 테두리(여백 %2 mm)가 잘립니다").arg(c.maxPrinterMarginMm, 0, 'f', 1).arg(c.frameMarginMm, 0, 'f', 1);
+    return w.join(QStringLiteral(" · "));
+}
+
+using PagePainter = std::function<void(QPainter&, double /*pxPerMm*/, int /*page*/)>;
+
+// 쪽마다 그리기. pxPerMm = 프린터 해상도 / 25.4(전체 쪽이라 원점 = 종이 모서리)
+bool paintPages(QPrinter* pr, int pages, const PagePainter& paintPage) {
+    QPainter pt;
+    if (!pt.begin(pr)) return false;
+    const double pxPerMm = pr->resolution() / 25.4;
+    for (int i = 0; i < pages; ++i) {
+        if (i > 0) pr->newPage();
+        paintPage(pt, pxPerMm, i);
+    }
+    pt.end();
+    return true;
+}
+}  // namespace
+
+// 인쇄 미리보기(프린터 고르기 · 쪽 설정은 창 안 단추). 명령줄 점검(printTest)이면 창 없이 찍거나 창을 캡처하고 닫는다
+static void runPrintPreview(QWidget* parent, const SheetLayout& L, const SheetSpec& spec, const QString& docName, int pages, const PagePainter& paintPage) {
+    const QString scaleText = QStringLiteral("1:%1").arg(spec.denom, 0, 'f', 0);
+    MainWindow::PrintTest& T = MainWindow::printTest;
+    if (!T.printer.isEmpty()) {   // 점검: 대화상자 없이 그 프린터로
+        QPrinter pr(QPrinterInfo::printerInfo(T.printer), QPrinter::HighResolution);
+        pr.setDocName(docName);
+        const bool laid = setupPrinter(pr, spec);
+        if (!T.outFile.isEmpty()) { pr.setOutputFileName(T.outFile); pr.setOutputFormat(QPrinter::NativeFormat); }   // 드라이버 출력을 파일로(.pdf 이름이면 Qt 가 PDF 로 바꾸므로 다른 확장자)
+        PrintPaperCheck c; const QString warn = printWarning(pr, L, spec, &c);
+        QPageLayout lay = pr.pageLayout(); lay.setUnits(QPageLayout::Millimeter);
+        const bool ok = paintPages(&pr, pages, paintPage);
+        T.log = QStringLiteral("print: printer=\"%1\" ok=%2 layout-set=%3 paper=%4x%5mm dpi=%6 pages=%7 size-ok=%8 margin-ok=%9 printer-margin=%10mm frame-margin=%11mm warn=\"%12\" scale=%13 frame=%14x%15mm@%16,%17")
+                    .arg(pr.printerName()).arg(ok ? 1 : 0).arg(laid ? 1 : 0).arg(lay.fullRect().width(), 0, 'f', 1).arg(lay.fullRect().height(), 0, 'f', 1)
+                    .arg(pr.resolution()).arg(pages).arg(c.sizeOk ? 1 : 0).arg(c.marginOk ? 1 : 0).arg(c.maxPrinterMarginMm, 0, 'f', 2).arg(c.frameMarginMm, 0, 'f', 2).arg(warn).arg(scaleText).arg(L.frameW, 0, 'f', 2).arg(L.frameH, 0, 'f', 2).arg(L.frameX, 0, 'f', 2).arg(L.frameY, 0, 'f', 2);
+        T.done = true;
+        return;
+    }
+    QPrinter printer(QPrinter::HighResolution);
+    printer.setDocName(docName);
+    setupPrinter(printer, spec);
+    QPrintPreviewDialog dlg(&printer, parent);
+    const QString base = QStringLiteral("인쇄 — %1 · %2 · 100 %(줄이지 않음)").arg(docName, paperText(spec));
+    dlg.setWindowTitle(base);
+    QObject::connect(&dlg, &QPrintPreviewDialog::paintRequested, &dlg, [&](QPrinter* pr) {
+        const QString warn = printWarning(*pr, L, spec);
+        dlg.setWindowTitle(warn.isEmpty() ? base : base + QStringLiteral("  ⚠ ") + warn);
+        paintPages(pr, pages, paintPage);
+    });
+    if (!T.previewShot.isEmpty()) {   // 점검: 미리보기가 그려진 뒤 캡처하고 닫는다
+        QTimer::singleShot(4000, &dlg, [&dlg, &T] {
+            const bool ok = dlg.grab().save(T.previewShot);
+            T.log = QStringLiteral("print-preview: shot=%1 title=\"%2\"").arg(ok ? QStringLiteral("ok") : QStringLiteral("FAILED"), dlg.windowTitle());
+            T.done = true;
+            dlg.reject();
+        });
+    }
+    dlg.resize(parent ? parent->size() * 0.8 : QSize(1200, 900));
+    dlg.exec();
+}
+
+void MainWindow::printSectionSheet(const SectionDoc& doc, const SheetParams& sp0) {
+    if (!src_) return;
+    auto sp = std::make_shared<SheetParams>(sp0);
+    auto A = std::make_shared<SheetAssets>();
+    auto src = src_;
+    runTask(QStringLiteral("인쇄 준비 중(출력 해상도 입면 영상)"),
+        [this, doc, sp, A, src](QString* m) {
+            return prepareSheetAssets(doc, *src, *sp, *A, m, &cancelTask_, [this](double x) { QMetaObject::invokeMethod(this, [this, x] { setProgress(x); }, Qt::QueuedConnection); });
+        },
+        [this, doc, sp, A](bool ok, const QString& m) {
+            if (!ok) { report(false, QStringLiteral("인쇄 준비 실패: ") + m); return; }
+            const SheetGeom G = sheetGeom(doc, *sp);
+            const int pages = sp->split ? G.L.cols * G.L.rows : 1;
+            runPrintPreview(this, G.L, sp->spec, sp->title, pages, [doc, sp, A](QPainter& pt, double pxPerMm, int i) {
+                paintSheet(pt, doc, *sp, pxPerMm, i, A->img, A->geo, 1, 0, 0, nullptr, A->hasStrip ? &A->strip : nullptr);
+            });
+            showStatus(QStringLiteral("인쇄 창을 닫았습니다"));
+        });
+}
+
+void MainWindow::printPlanSheet(const PlanSheetParams& p) {
+    if (!src_) return;
+    struct PlanAssets { PlanSheetParams sp; QImage img; double x0 = 0, y1 = 0, res = 0; };
+    auto A = std::make_shared<PlanAssets>();
+    auto src = src_;
+    const PlanSheetParams p0 = p;
+    runTask(QStringLiteral("인쇄 준비 중(출력 해상도 정사영상)"),
+        [this, p0, A, src](QString* m) {
+            return preparePlanAssets(*src, p0, A->sp, A->img, A->x0, A->y1, A->res, m, &cancelTask_, [this](double x) { QMetaObject::invokeMethod(this, [this, x] { setProgress(x); }, Qt::QueuedConnection); });
+        },
+        [this, A, src](bool ok, const QString& m) {
+            if (!ok) { report(false, QStringLiteral("인쇄 준비 실패: ") + m); return; }
+            const PlanWindow W0 = planWindow(A->sp, 0);
+            const int pages = A->sp.split ? W0.L.cols * W0.L.rows : 1;
+            const Vec3 origin = src->srs.origin;
+            runPrintPreview(this, W0.L, A->sp.spec, A->sp.title, pages, [A, origin](QPainter& pt, double pxPerMm, int i) {
+                paintPlanSheet(pt, A->sp, pxPerMm, i, A->img, A->x0, A->y1, A->res, origin);
+            });
+            showStatus(QStringLiteral("인쇄 창을 닫았습니다"));
+        });
+}
+
+void MainWindow::printCurrentSheet() {
+    if (!sheetHost_) { showStatus(QStringLiteral("도면 탭에서 인쇄하세요")); return; }
+    if (auto* b = sheetHost_->findChild<QPushButton*>(QStringLiteral("sheetPrint"))) b->click();
 }
