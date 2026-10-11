@@ -1,7 +1,4 @@
 #include "mainwindow.hpp"
-#ifdef KERF_HAS_3SM
-#include "sm3convert.hpp"
-#endif
 
 #include <QApplication>
 #include <QButtonGroup>
@@ -148,20 +145,20 @@ bool MainWindow::loadScene(const QString& path, OpenedScene& out, QString* err, 
         out.src = s;
         out.kind = "OBJ";
     } else {
-        if (ext == ".3sm") {   // ScalableMesh: 처음 한 번 3MX 캐시로 바꾼 뒤 3MX 와 똑같이 연다(원본은 읽기만)
-#ifdef KERF_HAS_3SM
-            QString tmx, ce;
-            if (!convert3smTo3mx(path, tmx, &ce, progress)) { if (err) *err = ce; return false; }
-            p = toFs(tmx);
-#else
-            if (err) *err = QStringLiteral("이 빌드는 .3sm 을 열 수 없습니다");
-            return false;
-#endif
-        }
+        // 3SM(ScalableMesh, SQLite): 노드 색인만 읽고 바로 연다(변환·캐시 없음). 노드는 가상 타일로 3MX 와 같은 경로로 스트리밍된다(asec/sm3.hpp).
         // 3MX: 루트 타일 머리만 읽고 바로 연다. 화면은 평면 보기의 LOD 스트리밍이 거친 것부터 채운다.
-        auto s = std::make_shared<TmxSource>();
-        s->cache->textureDecoder = decodeTextureFull;
-        if (!s->open(p, &e)) { if (err) *err = qs(e); return false; }
+        const bool sm = ext == ".3sm" || isSqliteFile(p);
+        std::shared_ptr<TmxSource> s;
+        if (sm) {
+            auto ss = std::make_shared<SmSource>();
+            ss->cache->textureDecoder = decodeTextureFull;
+            if (!ss->openSm(p, &e)) { if (err) *err = qs(e); return false; }
+            s = ss;
+        } else {
+            s = std::make_shared<TmxSource>();
+            s->cache->textureDecoder = decodeTextureFull;
+            if (!s->open(p, &e)) { if (err) *err = qs(e); return false; }
+        }
         out.streamRoots = s->scene.roots();   // 병합 3MX: 레이어 전부
         out.layers = s->scene.layers.size();
         out.warnings = s->scene.warnings;
@@ -176,7 +173,7 @@ bool MainWindow::loadScene(const QString& path, OpenedScene& out, QString* err, 
         out.bounds = s->bounds.valid() ? s->bounds : bb;
         if (!s->bounds.valid()) s->bounds = out.bounds;
         out.src = s;
-        out.kind = ext == ".3sm" ? "3SM" : "3MX";
+        out.kind = sm ? "3SM" : "3MX";
     }
     if (!out.bounds.valid()) { if (err) *err = QStringLiteral("메시가 비어 있습니다"); return false; }
     out.center = out.bounds.center();

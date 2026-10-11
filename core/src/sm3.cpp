@@ -333,6 +333,7 @@ bool SmFile::readNodeTile(int64_t id, TmxTile& out, std::string* err) {
             m->computeBBox();
             if (!N.bb.valid()) N.bb = m->bbox;
             N.meshes.push_back(m);
+            N.resourceIds.push_back("geometry0");   // LodStreamer 는 resourceIds 로 "그릴 기하가 있는 노드" 를 판단한다(decoded=true 라 다시 찾지는 않음)
         }
     }
     out.nodes.push_back(std::move(N));

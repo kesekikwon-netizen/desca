@@ -5,6 +5,7 @@
 #include "asec/engine.hpp"
 #include "asec/lod.hpp"
 #include "asec/sm3.hpp"
+#include "asec/stream.hpp"
 #include "common.hpp"
 #include "sm3_synth.hpp"
 #include "synth.hpp"
@@ -144,11 +145,14 @@ TEST_CASE("3SM 노드 → 가상 타일: 좌표(실좌표−원점)·1 기반 �
     CHECK(t3.nodes[0].meshes.size() == 1);
     CHECK(sm->geometryReads() == 2);
 
+    CHECK_FALSE(N.resourceIds.empty());   // 평면 스트리머(LodStreamer)는 resourceIds 가 비면 "그릴 것 없음" 으로 본다
+
     // 뿌리 2: 메시 없음, 자식만, 상자는 Extent
     TmxTile t2;
     REQUIRE(sm->readNodeTile(2, t2, &err));
     REQUIRE(t2.nodes.size() == 1);
     CHECK(t2.nodes[0].meshes.empty());
+    CHECK(t2.nodes[0].resourceIds.empty());
     CHECK(t2.nodes[0].children == std::vector<fs::path>{sm->virtualTilePath(3)});
     CHECK(t2.nodes[0].bb.valid());
     CHECK(sameBox(t2.nodes[0].bb, sm->boundsLocal()));
@@ -311,6 +315,42 @@ TEST_CASE("3SM SmSource 단면 == 같은 형상 StaticSource 단면, LOD 깊이�
     CHECK(src.file->geometryReads() <= 12);
 }
 
+TEST_CASE("3SM 평면 스트리밍(LodStreamer): 가상 뿌리에서 내려가 잎까지 그린다") {
+    auto dir = tmpDir("sm3stream");
+    fs::path file = writeGround(dir);
+    std::string err;
+    SmSource src;
+    REQUIRE(src.openSm(file, &err));
+    LodStreamer::Config cfg; cfg.threads = 0;
+    std::atomic<int> prepared{0};
+    LodStreamer s(cfg, [&prepared](const TmxNode& n, size_t* bytes) -> LodStreamer::Payload {
+        size_t b = 0;
+        for (auto& m : n.meshes) b += m->pos.size() * 4 + m->idx.size() * 4;
+        *bytes = b; ++prepared;
+        return std::make_shared<int>(1);
+    });
+    s.setRoots(src.scene.roots());
+    LodStreamer::View v;
+    v.visible = [](const Box3&) { return true; };
+    const double ppm = 200;   // 8 m 모델이 1600 px → 잎(5 cm)까지 세분해야 하는 배율
+    v.screenDiameter = [ppm](const Box3& b) { return b.diag() * ppm; };
+    LodStreamer::Frame f;
+    for (int i = 0; i < 200; ++i) {
+        f = s.update(v);
+        for (auto k : f.upload) s.take(k);
+        if (f.idle()) break;
+        s.processOne();
+    }
+    CHECK(f.idle());
+    CHECK(s.stats().tileFailures == 0);
+    CHECK(s.stats().tilesLoaded == 4);
+    CHECK(prepared == 3);   // 메시 있는 노드 3·4·5
+    f = s.update(v);
+    CHECK(f.draw.size() == 2);   // 잎 4·5 만 그린다
+    CHECK(f.maxDepthDrawn == 2);
+    for (auto k : f.draw) CHECK(s.nodeDepth(k) == 2);
+}
+
 TEST_CASE("3SM 읽기 전용: 열고 자른 뒤 파일 바이트 동일, 부속 파일 없음, 읽기 전용 속성 파일도 열린다") {
     auto dir = tmpDir("sm3readonly");
     fs::path file = writeGround(dir);
@@ -346,7 +386,8 @@ TEST_CASE("3SM 읽기 전용: 열고 자른 뒤 파일 바이트 동일, 부속 
 TEST_CASE("실제 3SM(선택): 열기·노드 수·범위·좌표계·단면", "[real]") {
     const char* env = std::getenv("ASEC_REAL_3SM");
     if (!env || !*env) SKIP("ASEC_REAL_3SM 미설정");
-    fs::path file = fs::u8path(env);
+    fs::path file(env);   // 환경 변수는 OS 문자 집합(Windows: ACP) — u8path 가 아님
+    if (!fs::exists(file)) SKIP("ASEC_REAL_3SM 파일 없음");
     std::string err;
     SmSource src;
     src.cache->textureDecoder = decodeTexStb;
