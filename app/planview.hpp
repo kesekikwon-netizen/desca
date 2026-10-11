@@ -153,7 +153,7 @@ private:
     std::atomic<bool> repaintQueued_{false};
     FrameInfo lastFrame_;
     QByteArray glRenderer_;
-    double lodBias_ = 1.0;  // >1 이면 더 세밀하게(설정 view/lodBias)
+    double lodBias_ = 2.0;  // >1 이면 더 세밀하게(설정 view/lodBias, 기본 2.0 — 2026-10-11)
     void paintStreaming(const QMatrix4x4& mvp);
     // 나눠 올리기: 준비된 노드를 peek 으로 빌려 버퍼·텍스처(밉맵 단계·행 띠)를 프레임마다 예산만큼 올리고, 다 올리면 take 로 상주 확정
     struct Staging {

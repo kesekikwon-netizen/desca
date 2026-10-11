@@ -215,7 +215,7 @@ void PlanView::setStreamingScene(const std::vector<fs::path>& roots, const Vec3&
     center_ = center; bounds_ = bounds; srs_ = srs;
     hidx_ = HeightIndex();
     if (!heightMeshes.empty()) hidx_.build(heightMeshes, std::max(0.05, std::max(bounds.mx.x - bounds.mn.x, bounds.mx.y - bounds.mn.y) / 512.0));
-    lodBias_ = std::clamp(QSettings().value("view/lodBias", 1.0).toDouble(), 0.25, 4.0);
+    lodBias_ = std::clamp(QSettings().value("view/lodBias", 2.0).toDouble(), 0.25, 4.0);   // 기본 2.0(사용자 결정 2026-10-11 「평면 더 선명하게」 — 화면 1 px 당 텍셀 2개, GPU 예산 안에서 LRU)
     LodStreamer::Config cfg;
     cfg.gpuBudgetBytes = gpuBudgetBytes();
     cfg.cpuBudgetBytes = std::min<size_t>(cfg.gpuBudgetBytes / 2, size_t(512) << 20);
