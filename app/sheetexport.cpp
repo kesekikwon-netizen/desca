@@ -1146,41 +1146,48 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     d->setWindowTitle(QStringLiteral("단면도"));
     d->setObjectName("sheetDialog");
     auto st = std::make_shared<SheetParams>(io);
-    const SectionDoc doc = section_->doc();
-    // 미리보기 영상은 화면 것(doc.img)으로 바로 열고, 더 촘촘한 입면 영상(1.5 mm/px)과 위치도 영상은 작업 스레드가 만들어 뒤에 바꿔 넣는다
+    auto docP = std::make_shared<SectionDoc>(section_->doc());   // 도면 탭에서 입면을 바꾸면 sheetRefresh_ 가 새 단면으로 바꿔 넣는다(2026-10-11)
+    // 미리보기 영상은 화면 것((*docP).img)으로 바로 열고, 더 촘촘한 입면 영상(1.5 mm/px)과 위치도 영상은 작업 스레드가 만들어 뒤에 바꿔 넣는다
     // (전환이 느리다는 요청 2026-10-11 — 큰 모델에서 UI 스레드가 수 초 멈추던 곳)
-    auto screenImgP = std::make_shared<QImage>(doc.img);
-    auto screenGeoP = std::make_shared<SectionImgGeo>(SectionImgGeo{doc.imgS0, doc.imgZ1, doc.imgRes});
+    auto screenImgP = std::make_shared<QImage>((*docP).img);
+    auto screenGeoP = std::make_shared<SectionImgGeo>(SectionImgGeo{(*docP).imgS0, (*docP).imgZ1, (*docP).imgRes});
     auto screenPlan = std::make_shared<PlanStrip>();
     auto previewCancel = std::make_shared<std::atomic<bool>>(false);
     QObject::connect(d, &QObject::destroyed, [previewCancel] { previewCancel->store(true); });
     auto* outer = new QHBoxLayout(d); outer->setContentsMargins(0, 0, 0, 0); outer->setSpacing(0);
     // ---- 책상(Desk): 종이 가운데, 떠 있는 안내 · 도구 줄은 아래에서
     auto* pv = new SheetPreview; pv->setMinimumSize(470, 330);
-    if (src_) {
-        const bool needImg = doc.imgRes > 0.0016;   // 화면 영상이 1.5 mm/px 보다 거칠면 다시 계산
-        const SheetGeom G0 = sheetGeom(doc, *st);
-        const double h0 = planStripHalfWidth(doc.r.line.front, doc.r.line.back);
+    // 고해상 입면·위치도 영상을 작업 스레드로(열 때 한 번, 그리고 도면 탭에서 입면을 바꿔 단면이 다시 계산될 때마다)
+    auto previewGen = std::make_shared<std::atomic<int>>(0);   // 늦게 끝난 옛 미리보기 스레드 결과는 버린다
+    auto startPreview = std::make_shared<std::function<void()>>();
+    *startPreview = [=, this] {
+        if (!src_) return;
+        const int myGen = ++*previewGen;
+        const SectionDoc docSnap = *docP;
+        const bool needImg = docSnap.imgRes > 0.0016;   // 화면 영상이 1.5 mm/px 보다 거칠면 다시 계산
+        const SheetGeom G0 = sheetGeom(docSnap, *st);
+        const double h0 = planStripHalfWidth(docSnap.r.line.front, docSnap.r.line.back);
         const double planRes = groundResolution(std::max(10.0, G0.spec.denom), 150);
         const bool needPlan = G0.lenM > 0;
-        std::thread([src = src_, doc, needImg, needPlan, h0, planRes, screenImgP, screenGeoP, screenPlan, previewCancel, pvp = QPointer<SheetPreview>(pv)] {
+        std::thread([src = src_, docSnap, needImg, needPlan, h0, planRes, screenImgP, screenGeoP, screenPlan, previewCancel, previewGen, myGen, pvp = QPointer<SheetPreview>(pv)] {
             if (needPlan && !previewCancel->load()) {   // 위치도부터(가볍다) → 바로 보이게
                 PlanStrip ps;
-                if (renderPlanStrip(*src, doc.r.line, h0, planRes, 6e6, ps, previewCancel.get()) && !previewCancel->load())
-                    QMetaObject::invokeMethod(qApp, [screenPlan, ps, pvp] { *screenPlan = ps; if (pvp) pvp->update(); }, Qt::QueuedConnection);
+                if (renderPlanStrip(*src, docSnap.r.line, h0, planRes, 6e6, ps, previewCancel.get()) && !previewCancel->load())
+                    QMetaObject::invokeMethod(qApp, [screenPlan, ps, pvp, previewGen, myGen] { if (previewGen->load() != myGen) return; *screenPlan = ps; if (pvp) pvp->update(); }, Qt::QueuedConnection);
             }
             if (needImg && !previewCancel->load()) {
-                SectionRequest rq; rq.line = doc.r.line; rq.depthFade = doc.st.depthFade ? kDepthFadeStrength : 0.0;
+                SectionRequest rq; rq.line = docSnap.r.line; rq.depthFade = docSnap.st.depthFade ? kDepthFadeStrength : 0.0;
                 rq.imageRes = 0.0015; rq.maxImagePixels = size_t(60) << 20;
                 SectionOutput out; std::string e;
                 if (computeSection(*src, rq, out, &e, previewCancel.get()) && !previewCancel->load()) {
                     QImage im = toQImageS(out.image.img);
                     const SectionImgGeo g{out.image.s0, out.image.z1, out.image.res};
-                    QMetaObject::invokeMethod(qApp, [screenImgP, screenGeoP, im, g, pvp] { *screenImgP = im; *screenGeoP = g; if (pvp) pvp->update(); }, Qt::QueuedConnection);
+                    QMetaObject::invokeMethod(qApp, [screenImgP, screenGeoP, im, g, pvp, previewGen, myGen] { if (previewGen->load() != myGen) return; *screenImgP = im; *screenGeoP = g; if (pvp) pvp->update(); }, Qt::QueuedConnection);
                 }
             }
         }).detach();
-    }
+    };
+    (*startPreview)();
     bindImageDrag(pv, &st->imgDxMm, &st->imgDyMm);
     outer->addWidget(pv, 1);
     // ---- 오른쪽 판 320: 머리 · 도면 항목 · 도면 정보 · 선 글자 · 형식 · 도면 점검 | 바닥
@@ -1195,7 +1202,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     auto* subLab = lbl(QString(), "hint"); subLab->setWordWrap(true); v->addWidget(subLab);
     // 도면 항목(단면도의 층): 입면 영상 · 단면선 · 레벨선 · 표제란(자 포함) · 위치도(단면 위 평면 띠). 진북 · 범례는 평면도에만
     v->addWidget(sideCaption(QStringLiteral("도면 항목")));
-    auto* tImg = sheetTile(QStringLiteral("image-layer"), QStringLiteral("입면 영상"), QStringLiteral("입면 영상 (뒤 %1 m) — 레벨선 위, 단면선 아래").arg(doc.r.line.back, 0, 'g', 3));
+    auto* tImg = sheetTile(QStringLiteral("image-layer"), QStringLiteral("입면 영상"), QStringLiteral("입면 영상 (뒤 %1 m) — 레벨선 위, 단면선 아래").arg((*docP).r.line.back, 0, 'g', 3));
     auto* tLine = sheetTile(QStringLiteral("pen-line"), QStringLiteral("단면선"), QStringLiteral("잘린 선 — 맨 위 · 빨강 0.35 mm"));
     auto* tLev = sheetTile(QStringLiteral("levels"), QStringLiteral("레벨선"), QStringLiteral("레벨선과 표고 숫자 — 맨 뒤"));
     auto* tTitle = sheetTile(QStringLiteral("title-block"), QStringLiteral("표제란"), QStringLiteral("표제란 · 축척 막대(끄면 그림 칸 안에 작은 축척 막대)"));
@@ -1272,7 +1279,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         st->spec.denom = snapScaleDenom10(st->spec.denom);
         if (scale->value() != int(std::lround(st->spec.denom))) { QSignalBlocker bl(scale); scale->setValue(int(std::lround(st->spec.denom))); }
         syncPaperChips(pc, st->spec);
-        SheetGeom G = sheetGeom(doc, *st);
+        SheetGeom G = sheetGeom((*docP), *st);
         SheetAdvice a = adviseSheet(G.fitSpec(), G.lenM, G.contentM());
         if (auto* b = fmtG->button(st->format)) { QSignalBlocker bl(b); b->setChecked(true); }
         if (auto* b = hatchG->button(st->hatchKind)) { QSignalBlocker bl(b); b->setChecked(true); }
@@ -1299,7 +1306,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
             else { c.link = st->split ? QStringLiteral("한 장으로") : QStringLiteral("나눠서 %1장").arg(a.splitSheets); c.fn = [=] { st->split = !st->split; (*refresh)(); }; }
             items.push_back(c);
         } else items.push_back({true, QStringLiteral("%1 한 장에 들어갑니다 — 단면 %2 × %3 m").arg(paperLabel(st->spec)).arg(G.lenM, 0, 'f', 2).arg(G.heightM, 0, 'f', 2), QString(), nullptr});
-        { const std::vector<SGap> gaps = profileGaps(doc.r.profile, SectionFrame(doc.r.line).L);
+        { const std::vector<SGap> gaps = profileGaps((*docP).r.profile, SectionFrame((*docP).r.line).L);
           double gl = 0; for (const SGap& gp : gaps) gl += gp.s1 - gp.s0;
           if (gaps.empty()) items.push_back({true, QStringLiteral("빈 구간 없음 · 잘린 돌은 H 도구에서(F 단계)"), QString(), nullptr});
           else items.push_back({false, QStringLiteral("빈 구간 %1곳 %2 m — 단면 화면에서 확인하세요").arg(gaps.size()).arg(gl, 0, 'f', 2), QString(), nullptr}); }
@@ -1325,9 +1332,18 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         }
         pv->update();
     };
+    // 도면 탭에서 입면(뒤·앞 깊이, 불투명도, 선 굵기, 평활)을 바꾸면 단면이 다시 계산되고, 끝나면 여기로 새 단면이 들어온다(사용자 요청 2026-10-11)
+    sheetRefresh_ = [=, this] {
+        if (!section_ || !section_->hasResult()) return;
+        *docP = section_->doc();
+        *screenImgP = docP->img; *screenGeoP = SectionImgGeo{docP->imgS0, docP->imgZ1, docP->imgRes};
+        (*startPreview)();
+        (*refresh)();
+    };
+    QObject::connect(d, &QObject::destroyed, this, [this] { sheetRefresh_ = nullptr; });
     pv->paintFn = [=](QPainter& p, const QRect& rc) {
         p.fillRect(rc, theme::Desk);
-        SheetGeom G = sheetGeom(doc, *st);
+        SheetGeom G = sheetGeom((*docP), *st);
         double sc = std::min((rc.width() - 48.0) / G.L.paperW, (rc.height() - 110.0) / G.L.paperH);   // 위 안내 칩 · 아래 도구 줄 자리
         if (sc <= 0.05) return;
         sc *= pv->pageZoom;
@@ -1339,8 +1355,8 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         pv->fitPxPerMm = sc;
         pv->zoomCenter = o + QPointF((G.L.plotX + G.L.plotW / 2) * sc, (G.L.plotY + G.L.plotH / 2) * sc);
         pv->geom = SheetPaintProbe();
-        pv->letterA = doc.st.nameA;
-        paintSheet(p, doc, *st, sc, 0, *screenImgP, *screenGeoP, pv->zoom, 0, 0, &pv->geom, screenPlan.get());
+        pv->letterA = (*docP).st.nameA;
+        paintSheet(p, (*docP), *st, sc, 0, *screenImgP, *screenGeoP, pv->zoom, 0, 0, &pv->geom, screenPlan.get());
         pv->geomValid = true;
         pv->paintHover(p);
         p.restore();
@@ -1356,7 +1372,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     QObject::connect(pc.size, &QButtonGroup::idClicked, d, [=](int id) { st->spec.paper = id == 1 ? Paper::A3 : Paper::A4; (*refresh)(); });
     QObject::connect(pc.orient, &QButtonGroup::idClicked, d, [=](int id) { st->spec.landscape = id == 0; (*refresh)(); });
     QObject::connect(scale, &QSpinBox::valueChanged, d, [=](int) { st->spec.denom = snapScaleDenom10(scale->value()); (*refresh)(); });
-    QObject::connect(fitLink, &QPushButton::clicked, d, [=] { SheetGeom G = sheetGeom(doc, *st); if (G.lenM > 0 && G.heightM > 0) scale->setValue(int(std::lround(fitDenomStep10(G.fitSpecMax(), G.lenM, G.heightM)))); });
+    QObject::connect(fitLink, &QPushButton::clicked, d, [=] { SheetGeom G = sheetGeom((*docP), *st); if (G.lenM > 0 && G.heightM > 0) scale->setValue(int(std::lround(fitDenomStep10(G.fitSpecMax(), G.lenM, G.heightM)))); });
     QObject::connect(tImg, &QToolButton::toggled, d, [=](bool on) { st->withImage = on; pv->update(); });
     QObject::connect(tLine, &QToolButton::toggled, d, [=](bool on) { st->withLine = on; pv->update(); });
     QObject::connect(tLev, &QToolButton::toggled, d, [=](bool on) { st->withLevels = on; pv->update(); });
@@ -1686,9 +1702,9 @@ void MainWindow::dlgSheet() {
     sheetIsPlan_ = false;
     bool acc = false;
     QDialog* d = buildSheetDialog(*params, acc);
-    SectionDoc doc = section_->doc();
     auto src = src_;
-    showSheetTab(d, [this, params, doc, src] {
+    showSheetTab(d, [this, params, src] {
+        const SectionDoc doc = section_->doc();   // 저장 시점의 단면(도면 탭에서 입면을 바꿨으면 그 결과)
         SheetParams sp = *params;
         if (checkedSheetCount() > 1) {   // v5 E4: 고른 도면 전부를 한 폴더에(이름 sheetFileName · 겹치면 _2)
             const QString dir = QFileDialog::getExistingDirectory(this, QStringLiteral("고른 도면 %1장을 저장할 폴더").arg(checkedSheetCount()), QSettings().value("sheet/batchDir").toString());

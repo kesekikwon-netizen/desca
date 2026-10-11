@@ -253,6 +253,7 @@ void MainWindow::updateEnabled() {
     if (!section_ || !plan_ || !front_ || !back_) return;
     const bool sc = bool(src_), sec = section_->hasResult(), busy = taskBusy_;
     const bool home = ribbonCtx_ == 0, secCtx = ribbonCtx_ == 1, drawing = plan_->drawMode();
+    const bool elevCtx = secCtx || ribbonCtx_ == 2;   // 입면 묶음은 도면 탭에서도 쓴다(조판이 따라옴 — 2026-10-11)
     for (const char* k : {"fit", "top", "zoomin", "zoomout"}) action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
     action("close")->setEnabled(sc && !busy);
     for (const char* k : {"draw", "addsec"}) action(k)->setEnabled(sc && !busy && secCtx);
@@ -261,11 +262,11 @@ void MainWindow::updateEnabled() {
     for (const char* k : {"plan", "points", "xyz", "las", "sheet", "plansheet", "sectionsheet"}) action(k)->setEnabled(sc && !busy && !home && !drawing);
     for (const char* k : {"secjson", "secimport", "image", "line", "levels", "ticks", "fade", "smooth", "listpanel"}) action(k)->setEnabled(sc && !busy && !home);
     for (const char* k : {"seclist", "view1", "view2", "contrast"}) action(k)->setEnabled(!home);
-    for (QWidget* wd : {static_cast<QWidget*>(front_), static_cast<QWidget*>(back_)}) wd->setEnabled(sc && secCtx);
-    for (auto* c : depthChip_) if (c) c->setEnabled(sc && secCtx);
-    if (depthBox_) depthBox_->setEnabled(sc && secCtx);
-    for (QWidget* wd : {elevRow2_, static_cast<QWidget*>(opacityMenu_), lineWidthMenu_}) if (wd) wd->setEnabled(sc && secCtx);   // 입면 아래 줄 · 입면 ▾ 안의 같은 칸도 입면 칸과 같이
-    action("elevmenu")->setEnabled(sc && secCtx);
+    for (QWidget* wd : {static_cast<QWidget*>(front_), static_cast<QWidget*>(back_)}) wd->setEnabled(sc && elevCtx);
+    for (auto* c : depthChip_) if (c) c->setEnabled(sc && elevCtx);
+    if (depthBox_) depthBox_->setEnabled(sc && elevCtx);
+    for (QWidget* wd : {elevRow2_, static_cast<QWidget*>(opacityMenu_), lineWidthMenu_}) if (wd) wd->setEnabled(sc && elevCtx);   // 입면 아래 줄 · 입면 ▾ 안의 같은 칸도 입면 칸과 같이
+    action("elevmenu")->setEnabled(sc && elevCtx);
     action("open")->setEnabled(!busy); action("recent")->setEnabled(!busy && !recentFiles().isEmpty());
 }
 
@@ -429,6 +430,7 @@ void MainWindow::onSectionDone(SectionOutput&& out, uint64_t gen, bool final, co
     section_->setResult(last_.result, secIm, last_.image.s0, last_.image.z1, last_.image.res, !fitNextResult_, final && wasPreview);
     if (plan_) plan_->setSectionPlane(secIm, last_.result.line, last_.image.s0, last_.image.z1, last_.image.res);
     if (fitNextResult_ && final) fitNextResult_ = false;
+    if (final) notifySheetDoc();   // 도면 탭이 열려 있으면 새 단면으로 조판 갱신
     section_->setBusy(!(final && newest));
     size_t nv = 0, nClosed = 0;
     for (auto& pl : last_.result.profile) { nv += pl.size(); if (pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9) ++nClosed; }

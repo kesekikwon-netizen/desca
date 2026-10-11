@@ -313,6 +313,7 @@ QWidget* MainWindow::buildRibbon() {
     // ---- 입면: 뒤 깊이 칩(숫자키 1–5) · 뒤 m · 앞 m
     ribbon_->addGroup(QStringLiteral("elev"), QStringLiteral("입면"));
     front_ = new QDoubleSpinBox; back_ = new QDoubleSpinBox;
+    front_->setObjectName(QStringLiteral("frontSpin")); back_->setObjectName(QStringLiteral("backSpin"));   // 명령줄 점검(--sheet-back)용 이름
     for (auto* sp : {front_, back_}) { sp->setRange(0, kMaxBandDepth); sp->setDecimals(2); sp->setSingleStep(0.05); sp->setSuffix(" m"); sp->setFixedWidth(56); sp->setFixedHeight(24); sp->setAlignment(Qt::AlignRight); }
     front_->setToolTip(QStringLiteral("단면선 앞쪽(보는 사람 쪽) 두께, 0–5 m"));
     back_->setToolTip(QStringLiteral("단면선 뒤쪽(보는 방향) 깊이 — 입면 영상(배경)에 보이는 깊이, 0–5 m, 기본 3 m(입면도용). 숫자키 1–5 = 0.5 / 1 / 2 / 3 / 5 m"));
@@ -442,6 +443,7 @@ void MainWindow::closeSheetTab() {
 
 // 「도면」 탭 · 조판 위젯 · 저장 함수를 버린다(검토 I4): 모델을 닫거나 다른 모델을 열어도 옛 모델의 도면이 남아 다른 이름으로 저장되지 않게
 void MainWindow::discardSheetTab() {
+    sheetRefresh_ = nullptr;
     if (viewTabs_ && viewTabs_->count() > 2) { QSignalBlocker b(viewTabs_); viewTabs_->removeTab(2); }
     if (sheetHost_) { if (body_) body_->removeWidget(sheetHost_); sheetHost_->deleteLater(); sheetHost_ = nullptr; }
     embeddedSave_ = nullptr;
@@ -1660,6 +1662,7 @@ void MainWindow::setSectionLineWidth(double px) {
     QSettings().setValue("view/sectionLineWidth", px);
     for (QToolButton* c : lineWidthChips_) c->setChecked(std::fabs(c->property("lineWidth").toDouble() - px) < 0.01);
     if (section_) section_->setStyle(secStyle());
+    notifySheetDoc();
 }
 
 void MainWindow::applyHighContrast(bool on) {
@@ -1955,7 +1958,7 @@ MainWindow::MainWindow() {
         QObject::connect(action(k), &QAction::toggled, this, [this, nm](bool) { section_->setStyle(secStyle()); commitState(nm); });
     }
     QObject::connect(action("ticks"), &QAction::toggled, this, [](bool on) { QSettings().setValue("section/ticks", on); });
-    QObject::connect(opacity_, &QSlider::valueChanged, this, [this](int) { section_->setStyle(secStyle()); });
+    QObject::connect(opacity_, &QSlider::valueChanged, this, [this](int) { section_->setStyle(secStyle()); notifySheetDoc(); });
     QObject::connect(action("smooth"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/smooth", on); requestSection(true); commitState(QStringLiteral("평활")); });
     QObject::connect(action("fade"), &QAction::toggled, this, [this](bool on) { QSettings().setValue("section/depthFade", on); section_->setStyle(secStyle()); requestSection(true); commitState(QStringLiteral("깊이 음영")); });
     QObject::connect(action("info"), &QAction::triggered, this, [this] { dlgInfo(); });

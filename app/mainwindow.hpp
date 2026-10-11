@@ -207,6 +207,8 @@ private:
     QTabBar* viewTabs_ = nullptr;
     QWidget* sheetHost_ = nullptr;
     std::function<void()> embeddedSave_;
+    std::function<void()> sheetRefresh_;   // 열린 단면도 조판에 새 단면(입면 변경 뒤)을 넣는 훅 — buildSheetDialog 가 설정
+    void notifySheetDoc() { if (sheetRefresh_) sheetRefresh_(); }
     void showSheetTab(QWidget* page);
     void showSheetTab(QDialog* d, std::function<void()> save);
     // 조판 탭 왼쪽 목록(평면도 1줄 + 단면들). 작업 화면 단면 목록과 같은 선택을 씀

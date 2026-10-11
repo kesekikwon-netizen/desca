@@ -221,6 +221,7 @@ int main(int argc, char** argv) {
     int sheetWheel = 0;
     int sheetPick = -1;   // --sheet-pick N: 조판 탭 왼쪽 도면 목록 N 번째 줄을 누름(0 = 평면도)
     bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
+    double sheetBack = -1;    // --sheet-back m: 도면 탭이 열린 채 리본 「뒤」 깊이를 바꿔 단면 재계산 → 조판이 따라오는지 점검(2026-10-11)
     QString file, shot, logPath, perfPath, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, uiAuditDir, sheetBatch;
     QString iconSheetPng; bool iconSheet = false;
     int splashEsc = -1;   // --splash-esc N: 여는 화면을 띄우고 N ms 에 Esc 를 눌러 건너뛰는지 잰다(종료 6 = 늦게 닫힘)
@@ -289,6 +290,7 @@ int main(int argc, char** argv) {
         else if (s == "--sheet-wheel") sheetWheel = nx().toInt();
         else if (s == "--sheet-edit") sheetEdit = true;
         else if (s == "--sheet-pick") sheetPick = nx().toInt();
+        else if (s == "--sheet-back") sheetBack = nx().toDouble();
         else if (s == "--split") split = true;
         else if (s == "--extra-line" && i + 4 < a.size()) { extraLines.push_back({a[i + 1].toDouble(), a[i + 2].toDouble(), a[i + 3].toDouble(), a[i + 4].toDouble()}); i += 4; }
         else if (s.startsWith("--export-")) exports.append({s.mid(9), nx()});
@@ -713,6 +715,16 @@ int main(int argc, char** argv) {
             } else head = QStringLiteral("(plan)");
             log(QStringLiteral("sheet-pick head: %1").arg(head));
         } else log(QStringLiteral("sheet-pick: list not found"));
+    }
+    if (!openSheet.isEmpty() && sheetBack >= 0) {   // 도면 탭에서 입면 조절: 뒤 깊이 칸이 켜져 있고, 바꾸면 단면·조판이 새 값으로
+        QDoubleSpinBox* bs = w.findChild<QDoubleSpinBox*>(QStringLiteral("backSpin"));
+        if (bs) {
+            const bool en = bs->isEnabled();
+            bs->setValue(sheetBack);
+            processFor(6000);   // 단면 재계산(최종) + 조판 고해상 미리보기
+            const SectionDoc d = w.sectionView()->doc();
+            log(QStringLiteral("sheet-back: spin-enabled=%1 set=%2 doc.back=%3 imgRes=%4").arg(en ? 1 : 0).arg(sheetBack, 0, 'f', 2).arg(d.r.line.back, 0, 'f', 2).arg(d.imgRes, 0, 'g', 3));
+        } else log(QStringLiteral("sheet-back: backSpin not found"));
     }
     if (!openSheet.isEmpty() && sheetEdit) {
         for (QPushButton* b : w.findChildren<QPushButton*>()) if (b->isVisible() && b->text() == QStringLiteral("조판편집")) { b->click(); break; }
