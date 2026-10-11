@@ -48,6 +48,10 @@ struct SheetPaintProbe {
     double levelMinorPx = 0, levelMajorPx = 0;   // 실제로 쓴 레벨선 펜 굵기(painter 단위) — --sheet-check 가 pt 기대값과 비교
     int distTickCount = 0, distTickMajorCount = 0;   // 그린 거리 눈금 수(굵은 눈금 포함 · 굵은 눈금만)
     double distTickStepM = 0, distTickMinorPx = 0, distTickMajorPx = 0;   // 눈금 간격(m) · 실제로 쓴 펜 굵기(painter 단위, 레벨선과 같은 pt 값)
+    // 조판 미리보기 마우스 연동(위치도 선 ↔ 단면): paintSheet 가 채움. 단위 = painter 픽셀(종이 원점 기준)
+    double sectionS0 = 0, sectionPpm = 0, sectionLenM = 0;   // 단면 칸 왼쪽의 거리(m)·픽셀/m·A–A′ 길이(m)
+    QRectF strip;                                            // 위치도 띠(그린 범위). 비어 있으면 위치도 없음
+    double stripLineY = 0;                                   // 위치도 안 단면선(t=0)의 y
 };
 
 /// 보고서용 그리기(화면·내보내기 공용, 아무 스레드에서나 QImage 에 그릴 수 있음). ppm = 픽셀/m, ui = 글자·선 배율(DPI/96)

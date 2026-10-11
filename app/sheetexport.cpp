@@ -289,7 +289,7 @@ bool renderPlanStrip(MeshSource& src, const SectionLine& ln, double halfM, doubl
 }
 
 /// 위치도 띠 그리기: 단면선이 가로(A 왼쪽), 단면의 '뒤' 쪽이 위. 영상 → 두께 띠(앞/뒤) → 단면선(빨강) → 테두리·설명
-void paintPlanStrip(QPainter& p, const SectionDoc& doc, const SheetGeom& G, const SectionPaperWindow& W, const SectionXf& xf, double k, double ui, const PlanStrip* plan) {
+void paintPlanStrip(QPainter& p, const SectionDoc& doc, const SheetGeom& G, const SectionPaperWindow& W, const SectionXf& xf, double k, double ui, const PlanStrip* plan, SheetPaintProbe* probe = nullptr) {
     const SectionLine& ln = doc.r.line;
     const SheetLayout& L = G.L;
     const double mmPerM = 1.0 / W.mPerMm;              // 확대 포함
@@ -302,6 +302,7 @@ void paintPlanStrip(QPainter& p, const SectionDoc& doc, const SheetGeom& G, cons
     const QRectF room(L.plotX * k, L.frameY * k, L.plotW * k, (L.plotY + stripMm0 - L.frameY) * k);   // 확대해도 틈·단면 쪽으로 넘치지 않게
     const QRectF clip = strip.intersected(room);
     if (clip.isEmpty()) return;
+    if (probe) { probe->strip = clip; probe->stripLineY = Y(0); }
     p.save();
     p.setClipRect(clip);
     p.fillRect(strip, Qt::white);
@@ -392,7 +393,8 @@ void MainWindow::paintSheet(QPainter& p, const SectionDoc& doc0, const SheetPara
     const double areaTop = G.strip ? (secY - G.gapMm) * k : frame.top();   // 위치도가 있으면 A/A′ 글자 띠부터
     const QRectF area(frame.left(), areaTop, frame.width(), L.titleY * k - areaTop);
     paintSectionDoc(p, doc, area, xf, ui, img, true, QString(), &geo, false, false, 0, 0, 1, 0, 0, probe);
-    if (G.strip) paintPlanStrip(p, doc0, G, W, xf, k, ui, plan);
+    if (probe) { probe->sectionS0 = xf.s0; probe->sectionPpm = xf.ppm; probe->sectionLenM = G.lenM; probe->strip = QRectF(); }
+    if (G.strip) paintPlanStrip(p, doc0, G, W, xf, k, ui, plan, probe);
     SheetChrome ch;
     ch.title = sp.title; ch.srs = sp.srsLabel; ch.date = sp.date; ch.facing = sp.facing;
     ch.kind = QStringLiteral("단면도"); ch.paper = paperLabel(sp.spec); ch.denom = sp.spec.denom; ch.showTitle = sp.withTitle;
@@ -887,7 +889,45 @@ public:
     QPointF lastPaperO, lastPaperSize;   // 마지막으로 그린 종이 자리·크기(px) — 커서 기준 확대용
     QPointF viewPan;
     QPointF zoomCenter;
-    SheetPreview() { setMouseTracking(false); setFocusPolicy(Qt::WheelFocus); setObjectName(QStringLiteral("sheetPreview")); }
+    // 위치도 선 ↔ 단면 연동(사용자 결정 2026-10-11): 위 선 근처(자석)·아래 단면 칸 위에서 마우스가 가리키는 A 로부터의 거리 s(m). paintFn 이 geom 을 채운다
+    SheetPaintProbe geom; bool geomValid = false;
+    bool hasHover = false; double hoverS = 0; bool hoverOnStrip = false;
+    static constexpr double kSnapPx = 14;   // 위치도 선에서 이만큼 안이면 선에 붙는다
+    SheetPreview() { setMouseTracking(true); setFocusPolicy(Qt::WheelFocus); setObjectName(QStringLiteral("sheetPreview")); }
+    /// 위젯 좌표 → 거리 s. 띠 선 근처면 선에 붙고, 단면 칸 위면 그 x 의 거리. 둘 다 아니면 false
+    bool hoverAt(const QPointF& wpos, double* s, bool* onStrip) const {
+        if (!geomValid || geom.sectionPpm <= 0) return false;
+        const double sc = std::max(1e-9, fitPxPerMm) ;   // paintFn 은 종이 원점 o 로 옮긴 뒤 pxPerMm = sc 로 그린다 → geom 은 그 픽셀 단위
+        (void)sc;
+        const QPointF q = wpos - lastPaperO;   // 종이 원점 기준 픽셀
+        auto sAtX = [&](double x) { return std::clamp(geom.sectionS0 + (x - geom.plot.left()) / geom.sectionPpm, 0.0, geom.sectionLenM); };
+        if (!geom.strip.isEmpty() && geom.strip.adjusted(0, -kSnapPx, 0, kSnapPx).contains(q) && std::fabs(q.y() - geom.stripLineY) <= kSnapPx) { *s = sAtX(q.x()); *onStrip = true; return true; }
+        if (geom.plot.contains(q)) { *s = sAtX(q.x()); *onStrip = false; return true; }
+        return false;
+    }
+    /// 연동 표시: 단면 칸 세로선 + 위치도 선 위 점 + 거리 글자(화면 전용, 저장에는 안 들어감). 종이 원점 기준 painter 에서 부른다
+    void paintHover(QPainter& p) const {
+        if (!hasHover || !geomValid || geom.sectionPpm <= 0) return;
+        const double x = geom.plot.left() + (hoverS - geom.sectionS0) * geom.sectionPpm;
+        if (x < geom.plot.left() - 1 || x > geom.plot.right() + 1) return;
+        p.save();
+        QPen pen(theme::SectionRed, 1.2, Qt::DashLine, Qt::FlatCap); p.setPen(pen);
+        p.drawLine(QPointF(x, geom.plot.top()), QPointF(x, geom.plot.bottom()));
+        if (!geom.strip.isEmpty()) {
+            p.drawLine(QPointF(x, geom.strip.top()), QPointF(x, geom.strip.bottom()));
+            p.setPen(QPen(theme::SectionRed, 1.5)); p.setBrush(Qt::white);
+            p.drawEllipse(QPointF(x, geom.stripLineY), 4.5, 4.5);
+        }
+        const QString t = QStringLiteral("A 에서 %1 m").arg(hoverS, 0, 'f', 2);
+        QFont f = theme::monoFont(11); p.setFont(f);
+        const QRectF tb = QFontMetricsF(f).boundingRect(t).adjusted(-5, -2, 5, 2);
+        QRectF box(QPointF(x + 8, geom.plot.top() + 6), tb.size());
+        if (box.right() > geom.plot.right()) box.moveRight(x - 8);
+        p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 230)); p.drawRect(box);
+        p.setPen(theme::SectionRed); p.drawText(box, Qt::AlignCenter, t);
+        p.restore();
+    }
+    void leaveEvent(QEvent* e) override { if (hasHover) { hasHover = false; update(); } QWidget::leaveEvent(e); }
     void paintEvent(QPaintEvent*) override {
         QPainter p(this);
         p.fillRect(rect(), theme::Wash);
@@ -926,7 +966,11 @@ public:
         const QPointF d = e->position() - last_;
         last_ = e->position();
         if (editing && (e->buttons() & Qt::MiddleButton) && onImageDrag) { onImageDrag(d); e->accept(); return; }
-        if (e->buttons() & Qt::LeftButton) { viewPan += d; update(); e->accept(); }
+        if (e->buttons() & Qt::LeftButton) { viewPan += d; update(); e->accept(); return; }
+        double sv = 0; bool onStrip = false;
+        const bool h = hoverAt(e->position(), &sv, &onStrip);
+        if (h != hasHover || (h && (std::fabs(sv - hoverS) > 1e-9 || onStrip != hoverOnStrip))) { hasHover = h; hoverS = sv; hoverOnStrip = onStrip; update(); }
+        setCursor(h && onStrip ? Qt::CrossCursor : (editing ? Qt::SizeAllCursor : Qt::ArrowCursor));
     }
     void mouseReleaseEvent(QMouseEvent* e) override {
         if (e->button() == drag_) { const bool img = drag_ == Qt::MiddleButton; releaseMouse(); drag_ = Qt::NoButton; e->accept(); if (img) scheduleSettled(); }
@@ -1293,7 +1337,10 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         p.setClipRect(QRectF(QPointF(0, 0), pz));
         pv->fitPxPerMm = sc;
         pv->zoomCenter = o + QPointF((G.L.plotX + G.L.plotW / 2) * sc, (G.L.plotY + G.L.plotH / 2) * sc);
-        paintSheet(p, doc, *st, sc, 0, *screenImgP, *screenGeoP, pv->zoom, 0, 0, nullptr, screenPlan.get());
+        pv->geom = SheetPaintProbe();
+        paintSheet(p, doc, *st, sc, 0, *screenImgP, *screenGeoP, pv->zoom, 0, 0, &pv->geom, screenPlan.get());
+        pv->geomValid = true;
+        pv->paintHover(p);
         p.restore();
         paintPaperFrame(p, o, pz);
     };
