@@ -1,7 +1,9 @@
 // 3SM(ScalableMesh, SQLite) 판독: 합성 3SM(tests/sm3_synth.hpp) 으로 색인·기하·가상 타일·단면 일치·읽기 전용을 고정한다.
 #include "catch_amalgamated.hpp"
+#include <atomic>
 #include <cstdlib>
 #include <fstream>
+#include <thread>
 #include "asec/engine.hpp"
 #include "asec/lod.hpp"
 #include "asec/sm3.hpp"
@@ -234,6 +236,50 @@ TEST_CASE("3SM: 텍스처 없음(TexID -1)·SMUVs 행 없음 → 텍스처 없�
     CHECK(sm->readNodeTile(4, again, &err));
 }
 
+TEST_CASE("3SM: 깨진 Size 값(거대)·순환 SubNode 는 그 노드 실패·간선 제거로 끝나고 프로그램은 계속 간다") {
+    auto dir = tmpDir("sm3robust");
+    auto f = sm3synth::groundFile(kOrigin, kSize, kLeaf);
+    f.nodes[2].sizePtsOverride = int64_t(1) << 40;   // 노드 4: SizePts 가 1 TB
+    f.nodes[1].children = {4, 5, 2, 4};              // 노드 3: 뿌리로 되돌아가는 간선 + 중복
+    fs::path file = dir / "robust.3sm";
+    std::string err;
+    REQUIRE(sm3synth::write(file, f, &err));
+    auto sm = SmFile::open(file, &err);
+    REQUIRE(sm);
+    CHECK(sm->nodes().at(3).children == std::vector<int64_t>{4, 5});
+    CHECK(sm->cycleEdgesRemoved() == 2);
+    TmxTile t4, t5;
+    err.clear();
+    CHECK_FALSE(sm->readNodeTile(4, t4, &err));
+    CHECK(err.find("3SM") != std::string::npos);
+    CHECK(sm->readNodeTile(5, t5, &err));
+    SmSource src;
+    REQUIRE(src.openSm(file, &err));
+    CHECK_FALSE(src.scene.warnings.empty());
+}
+
+TEST_CASE("3SM 연결 풀: 여러 스레드가 동시에 노드를 읽어도 결과가 같다") {
+    auto dir = tmpDir("sm3parallel");
+    fs::path file = writeGround(dir);
+    std::string err;
+    auto sm = SmFile::open(file, &err);
+    REQUIRE(sm);
+    std::atomic<int> ok{0}, bad{0};
+    std::vector<std::thread> th;
+    for (int t = 0; t < 8; ++t)
+        th.emplace_back([&, t] {
+            for (int k = 0; k < 40; ++k) {
+                TmxTile tile; std::string e;
+                const int64_t id = 3 + (t + k) % 3;
+                if (sm->readNodeTile(id, tile, &e) && tile.nodes.size() == 1 && tile.nodes[0].meshes.size() == 1) ++ok; else ++bad;
+            }
+        });
+    for (auto& x : th) x.join();
+    CHECK(ok == 320);
+    CHECK(bad == 0);
+    CHECK(sm->geometryReads() == 320);
+}
+
 TEST_CASE("3SM 가상 경로를 readTmxTile 이 읽고, 파일을 닫으면 오류로 돌려준다") {
     auto dir = tmpDir("sm3virtual");
     fs::path file = writeGround(dir);
@@ -257,6 +303,24 @@ TEST_CASE("3SM 가상 경로를 readTmxTile 이 읽고, 파일을 닫으면 오�
     REQUIRE(ct->nodes[0].meshes[0]->texture);
     CHECK(ct->nodes[0].meshes[0]->texture->rgba.w == 32);
     CHECK(cache.loadedBytes() > 0);
+    // 예산 회계: 가상 타일은 bytes 가 비어도 메시(float pos·uv·idx)와 풀린 텍스처 RGBA 가 잡혀야 한다
+    {
+        const Mesh& m = *ct->nodes[0].meshes[0];
+        const size_t meshBytes = m.pos.size() * 4 + m.uv.size() * 4 + m.idx.size() * 4;
+        CHECK(cache.loadedBytes() >= meshBytes + size_t(32) * 32 * 4);
+        TileCache fresh;
+        auto g = fresh.get(vp, &err);
+        REQUIRE(g);
+        CHECK(fresh.loadedBytes() >= meshBytes);   // get() 직후에도 0 이 아니다
+    }
+    // 같은 파일을 두 번 열어도(같은 불변 파일) 가상 타일은 계속 읽힌다
+    {
+        auto sm2 = SmFile::open(file, &err);
+        REQUIRE(sm2);
+        sm2.reset();
+        TmxTile t3;
+        CHECK(readTmxTile(vp, t3, &err));
+    }
     sm.reset();   // 모델 닫음
     TmxTile t2;
     err.clear();

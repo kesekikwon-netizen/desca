@@ -27,7 +27,7 @@ std::shared_ptr<TmxTile> TileCache::get(const fs::path& p, std::string* err) {
     if (it != tiles_.end()) return it->second;
     tiles_[p] = t;
     lastUse_[p] = ++clock_;
-    bytes_[p] = t->bytes.size();
+    bytes_[p] = tileBytes(*t);   // 3MX = 원본 바이트. 3SM 가상 타일은 bytes 가 비고 메시가 이미 상주 → 메시 크기
     evictLocked();
     return t;
 }

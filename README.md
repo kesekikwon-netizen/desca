@@ -1,6 +1,6 @@
 # Trench — 발굴 평·단면 (Excavation Section Viewer, 옛 이름 Kerf)
 
-3MX 실사 메시(iTwin Capture / ContextCapture)를 열어 평면에서 단면선을 긋고, 10 cm 레벨선이 있는 단면도를
+3MX·3SM 실사 메시(iTwin Capture / ContextCapture · Bentley ScalableMesh)를 열어 평면에서 단면선을 긋고, 10 cm 레벨선이 있는 단면도를
 바로 보고 DXF · PNG/TIFF/GeoTIFF · 점군(XYZ/LAS)으로 내보내는 Windows 데스크톱 프로그램.
 
 - 언어/도구: C++17, Qt 6.8 Widgets + OpenGL, OpenCTM(C). Linux 에서 MinGW-w64 로 Windows x64 교차 빌드.
@@ -25,7 +25,7 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
   (필요: g++-mingw-w64-x86-64-posix, libz-mingw-w64-dev, nsis, zip, Qt 6.8.3 win64_mingw — `QT_WIN` 환경 변수로 경로 지정)
 
 ## 명령줄 자동화(시험·캡처용)
-`SectionViewer <파일.3mx> --line AX AY BX BY [--local] [--front m] [--back m] [--scale N] [--dpi N]
+`SectionViewer <파일.3mx|.3sm> --line AX AY BX BY [--local] [--front m] [--back m] [--scale N] [--dpi N]
  [--export-png|tiff|geotiff|dxf|plan|xyz|las|csv 파일] [--area whole|band|view] [--spacing m] [--shot 파일.png] [--log 파일]
  [--pick X Y]... [--hover] [--perf-log 파일.csv] [--wheel-test] [--depth-fade on|off] [--quit]`
 - `--front/--back m`: 두께 띠(0–5 m, 뒤 기본 3 m). 입면 영상은 뒤 깊이까지 그림. 단면선(잘린 면)은 미리보기 때도 언제나 최고 해상도 잎으로 자름. `--depth-fade on|off`: 깊이 음영

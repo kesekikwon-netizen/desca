@@ -32,6 +32,9 @@ bool SmSource::openSm(const fs::path& p, std::string* err) {
     scene.layers = {L};
     scene.rootFile = L.rootFile;
     if (file->gcs().empty()) scene.warnings.push_back("3SM 에 좌표계(GCS) 정보가 없습니다.");
+    if (file->parentBackfills() || file->cycleEdgesRemoved())
+        scene.warnings.push_back("3SM 노드 색인을 정리했습니다: SubNode 없이 ParentNodeId 로 이은 자식 " + std::to_string(file->parentBackfills()) +
+                                 "개, 순환·중복 간선 " + std::to_string(file->cycleEdgesRemoved()) + "개.");
     srs = scene.srs;
     bounds = file->boundsLocal();
     return bounds.valid();

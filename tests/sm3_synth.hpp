@@ -34,6 +34,7 @@ struct Node {
     bool writeUvs = true;
     bool compress = true;               // false 면 원시(비압축) BLOB
     std::vector<uint8_t> rawPointBlob;  // 비어 있지 않으면 PointData 를 이 바이트로 덮어씀(깨진 BLOB 시험)
+    int64_t sizePtsOverride = -1;       // >= 0 이면 SizePts 를 이 값으로 씀(깨진 크기 값 시험)
 };
 struct File {
     std::string gcs = kBentley3smWkt;
@@ -106,7 +107,7 @@ inline bool write(const fs::path& out, const File& f, std::string* err) {
         auto ib = zlibBytes(n.idx1.data(), n.idx1.size() * 4, n.compress);
         sqlite3_prepare_v2(db, "INSERT INTO SMPoint (NodeId,PointData,IndexData,SizePts,SizeIndices) VALUES (?,?,?,?,?)", -1, &st, nullptr);
         sqlite3_bind_int64(st, 1, n.id); sqlite3_bind_blob(st, 2, pb.data(), int(pb.size()), SQLITE_TRANSIENT); sqlite3_bind_blob(st, 3, ib.data(), int(ib.size()), SQLITE_TRANSIENT);
-        sqlite3_bind_int64(st, 4, int64_t(n.xyz.size() * 8)); sqlite3_bind_int64(st, 5, int64_t(n.idx1.size() * 4));
+        sqlite3_bind_int64(st, 4, n.sizePtsOverride >= 0 ? n.sizePtsOverride : int64_t(n.xyz.size() * 8)); sqlite3_bind_int64(st, 5, int64_t(n.idx1.size() * 4));
         ok = sqlite3_step(st) == SQLITE_DONE; if (!ok && err) *err = sqlite3_errmsg(db); sqlite3_finalize(st);
         if (!ok || !n.writeUvs || n.uv.empty()) continue;
         const std::vector<int32_t>& ui = n.uvIdx1.empty() ? n.idx1 : n.uvIdx1;

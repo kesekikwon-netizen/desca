@@ -1,5 +1,5 @@
 // Trench(발굴 평·단면) 진입점. 명령줄 자동화(화면 캡처·내보내기 시험용):
-//   SectionViewer [파일.3mx|.obj] [--line AX AY BX BY] [--local] [--front m] [--back m] [--size WxH] [--tab N]
+//   SectionViewer [파일.3mx|.3sm|.obj] [--line AX AY BX BY] [--local] [--front m] [--back m] [--size WxH] [--tab N]
 //                 [--shot out.png] [--export-png f] [--export-tiff f] [--export-geotiff f] [--export-dxf f] [--dxf3d]
 //                 [--export-plan f] [--plan-view] [--export-xyz f] [--export-las f] [--area whole|band|view] [--spacing m] [--norgb]
 //                 [--scale N] [--dpi N] [--log f] [--perf-log f.csv] [--pick X Y]... [--hover] [--quit]

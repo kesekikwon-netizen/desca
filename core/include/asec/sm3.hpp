@@ -48,6 +48,9 @@ public:
     bool readNodeTile(int64_t id, TmxTile& out, std::string* err);
     /// readNodeTile 호출 수(지연 읽기 확인용)
     size_t geometryReads() const;
+    /// 색인 정리 때 고친 수: SubNode 없이 ParentNodeId 로만 이어진 자식 + 순환·중복으로 끊은 간선
+    size_t parentBackfills() const { return backfills_; }
+    size_t cycleEdgesRemoved() const { return cycleEdges_; }
 
 private:
     SmFile() = default;
@@ -55,6 +58,7 @@ private:
     std::shared_ptr<Conn> acquire(std::string* err);   // 풀에서 하나 빌림(없으면 새로 연다, 최대 8)
     void release(std::shared_ptr<Conn> c);
     bool openConnection(sqlite3** db, std::string* err) const;
+    bool readNodeTileImpl(int64_t id, TmxTile& out, std::string* err);
 
     fs::path path_;
     std::string uri_;
@@ -64,8 +68,8 @@ private:
     Box3 boundsLocal_;
     std::map<int64_t, SmNodeInfo> nodes_;
     mutable std::mutex poolMu_;
-    std::vector<std::shared_ptr<Conn>> pool_;
-    size_t poolSize_ = 0;
+    std::vector<std::shared_ptr<Conn>> pool_;   // 보관 최대 8(동시에 더 필요하면 그때 열고, 돌려줄 때 넘치면 닫는다)
+    size_t backfills_ = 0, cycleEdges_ = 0;
     std::atomic<size_t> reads_{0};
 };
 

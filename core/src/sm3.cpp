@@ -18,7 +18,7 @@ void setErr(std::string* err, const std::string& m) { if (err) *err = m; }
 
 // ---- 가상 타일 등록부(열린 3SM: 경로 → SmFile). readTmxTile 이 `<x.3sm>/n<id>` 를 만나면 여기서 찾는다
 std::mutex& regMu() { static std::mutex m; return m; }
-std::map<fs::path, std::weak_ptr<SmFile>>& reg() { static std::map<fs::path, std::weak_ptr<SmFile>> r; return r; }
+std::map<fs::path, std::vector<std::weak_ptr<SmFile>>>& reg() { static std::map<fs::path, std::vector<std::weak_ptr<SmFile>>> r; return r; }
 
 fs::path canon(const fs::path& p) {
     std::error_code ec;
@@ -62,17 +62,24 @@ struct Stmt {   // 준비된 문장 RAII
 };
 
 /// zlib(머리 0x78) 이면 풀고(크기 = size 힌트, 모르면 늘려 가며), 아니면 원시 바이트 그대로
+constexpr int64_t kMaxBlobBytes = int64_t(256) << 20;   // 노드 하나의 풀린 BLOB 상한(실제 파일 최대 ~0.6 MB). 깨진 Size* 값으로 거대 할당을 막는다
+
 bool inflateBlob(const std::vector<uint8_t>& b, int64_t sizeHint, std::vector<uint8_t>& out, std::string* err) {
     if (b.empty()) { out.clear(); return true; }
-    if (b[0] != 0x78) { out = b; return true; }
+    if (sizeHint > kMaxBlobBytes) { setErr(err, "3SM BLOB 크기 값이 비정상입니다(" + std::to_string(sizeHint) + " B)"); return false; }
+    // zlib 머리: 첫 바이트 0x78(deflate, 32K 창) 이고 두 바이트가 31 의 배수(FCHECK). 아니면 원시(비압축)
+    const bool looksZlib = b.size() >= 2 && b[0] == 0x78 && ((unsigned(b[0]) << 8) | b[1]) % 31 == 0;
+    if (!looksZlib) { out = b; return true; }
     size_t cap = sizeHint > 0 ? size_t(sizeHint) : std::max<size_t>(b.size() * 4, 1 << 16);
     for (int attempt = 0; attempt < 6; ++attempt) {
         out.assign(cap, 0);
         uLongf n = uLongf(cap);
         const int rc = ::uncompress(out.data(), &n, b.data(), uLong(b.size()));
         if (rc == Z_OK) { out.resize(n); return true; }
+        if (rc == Z_DATA_ERROR && int64_t(b.size()) == sizeHint) { out = b; return true; }   // 우연히 zlib 머리처럼 보인 원시 배열
         if (rc != Z_BUF_ERROR) { setErr(err, "3SM BLOB 압축을 풀 수 없습니다(zlib " + std::to_string(rc) + ")"); return false; }
         cap *= 4;
+        if (int64_t(cap) > kMaxBlobBytes) break;
     }
     setErr(err, "3SM BLOB 압축을 풀 수 없습니다(크기 초과)");
     return false;
@@ -192,12 +199,26 @@ std::shared_ptr<SmFile> SmFile::open(const fs::path& p, std::string* err) {
     for (auto& [id, n] : f->nodes_)
         if (n.parent >= 0 && n.parent != id)
             if (auto it = f->nodes_.find(n.parent); it != f->nodes_.end())
-                if (std::find(it->second.children.begin(), it->second.children.end(), id) == it->second.children.end()) it->second.children.push_back(id);
+                if (std::find(it->second.children.begin(), it->second.children.end(), id) == it->second.children.end()) { it->second.children.push_back(id); f->backfills_++; }
     for (auto& [id, n] : f->nodes_) std::sort(n.children.begin(), n.children.end());
     if (f->rootId_ < 0 || !f->nodes_.count(f->rootId_)) {
         f->rootId_ = -1;
         for (auto& [id, n] : f->nodes_) if (n.parent < 0) { f->rootId_ = id; break; }
         if (f->rootId_ < 0) f->rootId_ = f->nodes_.begin()->first;
+    }
+    // 뿌리부터 너비 우선으로 돌며 이미 방문한 노드로 가는 간선(순환·두 부모)은 끊는다 → 트리 보장(collect·LodStreamer 무한 재귀 방지)
+    {
+        std::vector<int64_t> q{f->rootId_};
+        std::map<int64_t, bool> seen; seen[f->rootId_] = true;
+        for (size_t qi = 0; qi < q.size(); ++qi) {
+            auto& ch = f->nodes_.at(q[qi]).children;
+            std::vector<int64_t> keep;
+            for (int64_t c : ch) {
+                if (seen.count(c)) { f->cycleEdges_++; continue; }
+                seen[c] = true; keep.push_back(c); q.push_back(c);
+            }
+            ch.swap(keep);
+        }
     }
     const SmNodeInfo& root = f->nodes_.at(f->rootId_);
     Box3 ext = root.extentWorld;
@@ -209,7 +230,7 @@ std::shared_ptr<SmFile> SmFile::open(const fs::path& p, std::string* err) {
     f->boundsLocal_.add(ext.mx - f->origin_);
     {
         std::lock_guard<std::mutex> lk(regMu());
-        reg()[f->path_] = f;
+        reg()[f->path_].push_back(f);
     }
     return f;
 }
@@ -217,7 +238,10 @@ std::shared_ptr<SmFile> SmFile::open(const fs::path& p, std::string* err) {
 SmFile::~SmFile() {
     std::lock_guard<std::mutex> lk(regMu());
     auto it = reg().find(path_);
-    if (it != reg().end() && it->second.expired()) reg().erase(it);
+    if (it == reg().end()) return;
+    auto& v = it->second;
+    v.erase(std::remove_if(v.begin(), v.end(), [](const std::weak_ptr<SmFile>& w) { return w.expired(); }), v.end());
+    if (v.empty()) reg().erase(it);
 }
 
 fs::path SmFile::virtualTilePath(int64_t id) const { return path_ / ("n" + std::to_string(id)); }
@@ -225,6 +249,16 @@ size_t SmFile::geometryReads() const { return reads_.load(); }
 
 // ---------------------------------------------------------------- 노드 → 가상 타일
 bool SmFile::readNodeTile(int64_t id, TmxTile& out, std::string* err) {
+    try {
+        return readNodeTileImpl(id, out, err);
+    } catch (const std::bad_alloc&) {
+        out = TmxTile();
+        setErr(err, "3SM 노드 n" + std::to_string(id) + " 를 읽을 메모리가 부족합니다(BLOB 크기 비정상)");
+        return false;
+    }
+}
+
+bool SmFile::readNodeTileImpl(int64_t id, TmxTile& out, std::string* err) {
     auto it = nodes_.find(id);
     if (it == nodes_.end()) { setErr(err, "3SM 노드가 없습니다: n" + std::to_string(id)); return false; }
     const SmNodeInfo& n = it->second;
@@ -329,6 +363,7 @@ bool SmFile::readNodeTile(int64_t id, TmxTile& out, std::string* err) {
                 t->format = "jpg";
                 t->encoded = std::move(jpg);
                 m->texture = t;
+                out.textures.emplace_back("tex" + std::to_string(n.texId), t);   // TileCache 가 RGBA 크기를 예산에 넣는 목록
             }
             m->computeBBox();
             if (!N.bb.valid()) N.bb = m->bbox;
@@ -374,7 +409,7 @@ bool readSmVirtualTile(const fs::path& p, TmxTile& out, std::string* err) {
     {
         std::lock_guard<std::mutex> lk(regMu());
         auto it = reg().find(canon(f3sm));
-        if (it != reg().end()) f = it->second.lock();
+        if (it != reg().end()) for (auto& w : it->second) if ((f = w.lock())) break;   // 같은(불변) 파일이면 어느 것이든 같다
     }
     if (!f) { setErr(err, "3SM 파일이 닫혀 있습니다: " + f3sm.filename().u8string()); return false; }
     return f->readNodeTile(id, out, err);
