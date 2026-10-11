@@ -1,5 +1,17 @@
 # 바뀐 점 (CHANGELOG)
 
+## 1.2.1 이후 (2026-10-11, Trench · 3SM 스트리밍 · 프로젝트 파일 · 포터블)
+- **프로젝트 파일 `<모델이름>.trench.json`**(사용자 결정 C) — 단면 목록·지금 단면선·앞/뒤 깊이·입면(불투명도·선 굵기·평활·깊이 음영)·평면 카메라·
+  마지막 단면도/평면도 조판 설정을 한 파일에. 모델을 열고 닫을 때·단면이 바뀔 때마다 앱 폴더 `projects\` 에 자동 저장(쓸 수 없으면
+  `%LOCALAPPDATA%\Trench\projects\`), 모델을 열 때 있으면 레지스트리보다 먼저 읽음. 리본 「모델 → 프로젝트」 칩: 저장 · 다른 이름으로 저장… · 프로젝트 열기….
+  「열기」 대화상자·끌어놓기·명령줄도 `.trench.json` 을 받음(모델이 없으면 파일 옆 같은 이름 → 사용자에게 물음). 모델 폴더(H:sm 등)에는 쓰지 않음.
+  core `asec/project.hpp`(Qt 없음) + `tests/test_project.cpp`.
+- **포터블** — exe 옆 `portable.txt` 가 있으면 설정을 레지스트리 대신 `settings\` 에(폴더째 옮겨도 그대로). `packaging/make_portable_msvc.py <build-msvc> <dist>`
+  가 MSVC 빌드로 `dist/Trench-<버전>-portable/` + zip(Qt·플러그인·OSGeo4W DLL·VC 런타임·아이콘·읽어보기·라이선스·`projects\`·`settings\`)을 만든다.
+- **도면 탭에서 입면 조절** — 뒤·앞 깊이·불투명도·선 굵기·평활을 도면 탭에서도 바꾸면 단면을 다시 계산해 조판 미리보기·저장에 바로 반영.
+- 조판 위치도 띠(단면선이 가로, 같은 축척) · 위치도 선 ↔ 단면 마우스 연동 · 평면에 다른 단면들도 가늘게 · 단면 글자(B·B′) · 시작 화면 5초 + 저작권.
+- **.3sm 스트리밍** — 변환 없이 SQLite 노드를 LOD 타일처럼 바로 읽음(`core/src/sm3.cpp`, SQLite 동봉). 4.3 GB 열기 0.1 s, 성산리 22호 단면 31–49 s → 2 s.
+
 ## 1.2.1 이후 (2026-10-08, 휴대용 Kerf)
 - **이름 Kerf**(발굴 평·단면) — 창 제목·정보·표제란 만든 이·실행 파일 리소스, 새 아이콘(`packaging/assets/make_icons.py`), 그림으로 그린 시작 움직임 5초.
 - **.3sm(Bentley ScalableMesh) 열기** — `app/sm3convert.cpp`: SQLite(Qt Sql) 안 LOD 트리를 처음 한 번 3MX 캐시로 바꿔 3MX 와 같은 경로로 엶(원본 읽기 전용).

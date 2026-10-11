@@ -22,6 +22,7 @@ third_party/                  OpenCTM, stb, nlohmann/json, Catch2
 ## 빌드
 - Linux 개발: `./build-linux.sh` (Qt6 dev, cmake, ninja, zlib)
 - Windows: `./build-win.sh` → `dist/SectionViewer-<버전>-Setup.exe`, `dist/SectionViewer-<버전>-portable-win64.zip`, `dist/SHA256SUMS.txt`(이전 버전 줄은 유지)
+- Windows MSVC 빌드의 포터블: `python packaging/make_portable_msvc.py build-msvc dist` → `dist/Trench-<버전>-portable/` + zip(exe 옆 `portable.txt` → 설정은 `settings\`, 프로젝트는 `projects\`)
   (필요: g++-mingw-w64-x86-64-posix, libz-mingw-w64-dev, nsis, zip, Qt 6.8.3 win64_mingw — `QT_WIN` 환경 변수로 경로 지정)
 
 ## 명령줄 자동화(시험·캡처용)

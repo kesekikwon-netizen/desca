@@ -17,6 +17,7 @@
 #include "asec/pick.hpp"
 #include "asec/tiff.hpp"
 #include "asec/sheet.hpp"
+#include "asec/project.hpp"
 #include "planview.hpp"
 #include "theme.hpp"
 #include <map>
@@ -103,6 +104,8 @@ public:
     static QImage renderOpeningSplash(const QSize& size, double t = 1.0);   // t 0~1: 선 그림이 그려지는 정도(1 = 완성)
     static void paintOpeningSplash(QPainter& p, const QSize& size, double t);   // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs, 1 초)
     static bool loadScene(const QString& path, OpenedScene& out, QString* err, const std::function<void(double)>& progress = {});
+    /// .trench.json → 적용 대기에 올리고 모델 경로를 돌려줌(ask=false 면 묻지 않음 — 명령줄). applyScene 뒤 restoreModelState 가 적용
+    bool stageProject(const QString& path, QString* modelPath, QString* msg, bool ask);
     void applyScene(OpenedScene&& s);
     bool computeNow(const asec::SectionLine& l, QString* err);  // 동기 단면(자동화용)
     bool ensureFinalSection();  // 화면 결과가 미리보기면 최종(잎) 계산
@@ -182,8 +185,22 @@ public:
     int addSectionAt(const asec::SectionLine& l);      // 자동화: 단면 목록에 더함(로컬 좌표) → 번호
     void selectSectionAt(int i) { selectSection(i); }
     int sectionCount() const { return int(sections_.size()); }
-    void restoreModelState();                          // 모델별 마지막 단면선·두께·화면·단면 목록 되살리기
+    void restoreModelState();                          // 모델별 마지막 단면선·두께·화면·단면 목록 되살리기(프로젝트 파일 → 없으면 설정)
     void saveModelState();
+    void restoreFromSettings();                        // 설정(레지스트리)에서 — 프로젝트 파일이 없을 때
+    // ---- 프로젝트 파일 <모델이름>.trench.json(core asec/project.hpp · app/project.cpp) — 사용자 결정 2026-10-11 C
+    static QString projectRootOverride;                // --settings DIR 이면 DIR(자동 저장 폴더 = DIR/projects — 시험 격리)
+    QString projectDir() const;                        // 자동 저장 폴더(exe 옆 projects\ → 못 쓰면 %LOCALAPPDATA%\Trench\projects)
+    QString autoProjectPath() const;                   // projectDir()/<모델이름>.trench.json
+    QString projectSavedLabel() const;                 // 헤더 「저장됨 · projects\이름.trench.json」
+    asec::ProjectDoc captureProject() const;
+    bool writeProject(const QString& path, QString* msg);
+    bool readProjectFile(const QString& path, asec::ProjectDoc& out, QString* msg);
+    void applyProject(const asec::ProjectDoc& p);
+    bool openProjectFile(const QString& path);         // 모델을 찾아 열고 restoreModelState 가 pendingProject_ 를 적용
+    void saveProjectNow(); void saveProjectAs(); void openProjectDialog();
+    QString projectPath_;                              // 마지막으로 쓴 프로젝트 파일
+    std::shared_ptr<asec::ProjectDoc> pendingProject_; QString pendingProjectPath_;
 
 protected:
     bool eventFilter(QObject* o, QEvent* e) override;   // 앱 전체 키보드 초점 테(qApp 에 설치)

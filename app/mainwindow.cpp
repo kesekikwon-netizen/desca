@@ -256,6 +256,8 @@ void MainWindow::updateEnabled() {
     const bool elevCtx = secCtx || ribbonCtx_ == 2;   // 입면 묶음은 도면 탭에서도 쓴다(조판이 따라옴 — 2026-10-11)
     for (const char* k : {"fit", "top", "zoomin", "zoomout"}) action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
     action("close")->setEnabled(sc && !busy);
+    for (const char* k : {"projsave", "projsaveas"}) action(k)->setEnabled(sc && !busy);
+    action("projopen")->setEnabled(!busy);
     for (const char* k : {"draw", "addsec"}) action(k)->setEnabled(sc && !busy && secCtx);
     for (const char* k : {"flip", "clear", "move"}) action(k)->setEnabled(sc && plan_->hasLine() && secCtx);
     for (const char* k : {"dxf", "secimg", "csv", "info"}) action(k)->setEnabled(sec && !busy && !home && !drawing);
@@ -293,14 +295,15 @@ void MainWindow::runTask(const QString& what, std::function<bool(QString*)> work
 // ---------------------------------------------------------------- 열기
 void MainWindow::chooseOpen() {
     QSettings st;
-    QString f = QFileDialog::getOpenFileName(this, QStringLiteral("실사 메시 열기"), st.value("dir/open").toString(),
-                                             QStringLiteral("실사 메시 (*.3mx *.3sm *.obj);;3MX 실사 메시 (*.3mx);;3SM ScalableMesh (*.3sm);;OBJ 메시 (*.obj);;모든 파일 (*.*)"));
+    QString f = QFileDialog::getOpenFileName(this, QStringLiteral("실사 메시 · 프로젝트 열기"), st.value("dir/open").toString(),
+                                             QStringLiteral("실사 메시 · 프로젝트 (*.3mx *.3sm *.obj *.trench.json);;3MX 실사 메시 (*.3mx);;3SM ScalableMesh (*.3sm);;OBJ 메시 (*.obj);;Trench 프로젝트 (*.trench.json);;모든 파일 (*.*)"));
     if (f.isEmpty()) return;
     st.setValue("dir/open", QFileInfo(f).absolutePath());
     openFile(f);
 }
 
 void MainWindow::openFile(const QString& path) {
+    if (asec::isProjectFileName(QFileInfo(path).fileName().toStdString())) { openProjectFile(path); return; }   // .trench.json → 모델을 찾아 연다
     auto res = std::make_shared<OpenedScene>();
     runTask(QStringLiteral("여는 중: %1").arg(QFileInfo(path).fileName()),
         [this, path, res](QString* m) {
@@ -350,7 +353,7 @@ void MainWindow::closeScene() {
     srsLabel_->setText(QStringLiteral("수평 —")); srsLabel_->setToolTip(QString()); srsLabel_->setProperty("state", "none"); info_->clear();   // 모델 없음 = 회색(검토 UI 4)
     srsLabel_->style()->unpolish(srsLabel_); srsLabel_->style()->polish(srsLabel_);
     notice_->setVisible(false); srsReport_ = SrsReport();
-    src_.reset(); path_.clear();
+    src_.reset(); path_.clear(); projectPath_.clear();
     sections_.clear(); thumbs_.clear(); current_ = -1; refreshSectionList();
     undo_->clear();
     setWindowTitle(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
@@ -370,7 +373,7 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
 void MainWindow::dropEvent(QDropEvent* e) {
     for (auto& u : e->mimeData()->urls()) {
         QString f = u.toLocalFile();
-        if (f.toLower().endsWith(".3mx") || f.toLower().endsWith(".3sm") || f.toLower().endsWith(".obj")) { openFile(f); return; }
+        if (f.toLower().endsWith(".3mx") || f.toLower().endsWith(".3sm") || f.toLower().endsWith(".obj") || f.toLower().endsWith(".trench.json")) { openFile(f); return; }
     }
 }
 

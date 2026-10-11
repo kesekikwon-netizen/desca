@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <QDialog>
 #include <QSettings>
+#include <QFileInfo>
 #include <QStyleHints>
 #include <array>
 #include <memory>
@@ -204,6 +205,15 @@ int main(int argc, char** argv) {
     QApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
     QSurfaceFormat fmt; fmt.setSamples(4); fmt.setDepthBufferSize(24); QSurfaceFormat::setDefaultFormat(fmt);
     QApplication app(argc, argv);
+    {   // 포터블(사용자 요청 2026-10-11): exe 옆에 portable.txt 가 있으면 설정을 레지스트리 대신 exe 옆 settings\ 에(폴더째 옮겨도 따라감). --settings 가 우선
+        bool haveSettingsArg = false;
+        for (int i = 1; i + 1 < argc; ++i) if (std::string(argv[i]) == "--settings") { haveSettingsArg = true; MainWindow::projectRootOverride = QString::fromLocal8Bit(argv[i + 1]); }
+        const QString appDir = QCoreApplication::applicationDirPath();
+        if (!haveSettingsArg && QFileInfo::exists(appDir + "/portable.txt")) {
+            QSettings::setDefaultFormat(QSettings::IniFormat);
+            QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, appDir + "/settings");
+        }
+    }
     QApplication::setOrganizationName("ExcavSection");
     QApplication::setApplicationName("SectionViewer");
     // 표시 이름 = 창 제목 끝과 같게(「… — Trench x.y.z」). Qt(Windows·X11)는 제목이 표시 이름으로 끝나지 않으면
@@ -368,6 +378,12 @@ int main(int argc, char** argv) {
 
     processFor(200);
     OpenedScene sc; QString err;
+    if (asec::isProjectFileName(QFileInfo(file).fileName().toStdString())) {   // 프로젝트 파일 → 그 모델을 열고 상태를 적용
+        QString model;
+        if (!w.stageProject(file, &model, &err, false)) { log("open-error: " + err); return 2; }
+        log(QStringLiteral("project: %1 -> %2").arg(file, model));
+        file = model;
+    }
     auto t0 = std::chrono::steady_clock::now();
     if (!MainWindow::loadScene(file, sc, &err)) { log("open-error: " + err); return 2; }
     log(QStringLiteral("open-ok: %1 kind=%2 displayTris=%3 srs=%4 origin=%5,%6,%7 ms=%8").arg(file, sc.kind).arg(sc.displayTris)

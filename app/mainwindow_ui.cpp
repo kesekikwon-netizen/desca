@@ -301,6 +301,8 @@ QWidget* MainWindow::buildRibbon() {
     action("recent")->setMenu(recentMenu_);
     add("model", "open", K::Normal, "folder", QStringLiteral("열기"));
     add("model", "recent", K::Normal, "clock", QStringLiteral("최근"));
+    { auto* pm = new QMenu(this); pm->addAction(action("projsave")); pm->addAction(action("projsaveas")); pm->addSeparator(); pm->addAction(action("projopen")); action("project")->setMenu(pm); }
+    add("model", "project", K::Normal, "sections-list", QStringLiteral("프로젝트"));   // 작업 상태 파일(.trench.json) — 자동 저장은 늘, 여기는 손으로
     add("model", "close", K::Normal, "x", QStringLiteral("닫기"));
     // ---- 단면: 긋기(도구) · 새 단면 · 반전 · 이동 ▾ · 잘린 돌(도구, F단계) · 윤곽(도구, G단계)
     ribbon_->addGroup(QStringLiteral("sec"), QStringLiteral("단면"));
@@ -430,7 +432,7 @@ void MainWindow::setRibbonContext(int ctx) {
     const bool home = ctx == 0, sheet = ctx == 2;
     for (const char* g : {"sec", "elev", "view", "data", "out"}) ribbon_->setGroupDim(QString::fromLatin1(g), home);
     if (sheetChip_) ribbon_->setChipOn(sheetChip_, sheet);
-    if (docTabCorner_) docTabCorner_->setText(src_ ? QStringLiteral("%1 · 저장됨").arg(QFileInfo(path_).completeBaseName()) : QString());
+    if (docTabCorner_) docTabCorner_->setText(src_ ? QStringLiteral("%1 · %2").arg(QFileInfo(path_).completeBaseName(), projectSavedLabel()) : QString());
     updateEnabled();   // 켜고 끄기는 updateEnabled 한 곳(검토 I1)
 }
 
@@ -1020,7 +1022,7 @@ QWidget* MainWindow::buildSidePanel() {
         rv->addLayout(g);
         auto* ronote = lab(QStringLiteral("계산한 값이라 여기서 고칠 수 없습니다. 단면선을 옮기면 바로 바뀝니다."), "faint"); ronote->setWordWrap(true); rv->addWidget(ronote); }
     v->addWidget(readout_);
-    auto* foot = lab(QStringLiteral("누르면 그 단면으로 · 두 번 누르면 이름 바꾸기\n목록은 이 PC 설정에 모델별로 저장(파일 → 단면 목록 내보내기)"), "faint");
+    auto* foot = lab(QStringLiteral("누르면 그 단면으로 · 두 번 누르면 이름 바꾸기\n목록·단면선·입면·조판 설정은 projects 폴더의 프로젝트 파일(.trench.json)에 자동 저장"), "faint");
     foot->setWordWrap(true);
     v->addWidget(foot);
     return w;
@@ -1333,10 +1335,33 @@ void MainWindow::saveModelState() {
     }
     st.setValue(k + "srs", srsReport_.desc.horizontalEpsg ? QStringLiteral("EPSG:%1").arg(srsReport_.desc.horizontalEpsg) : qs8(srsReport_.desc.shortAscii()));
     st.setValue(k + "lastOpened", QDateTime::currentDateTime().toString(Qt::ISODate));
+    writeProject(autoProjectPath(), nullptr);   // 프로젝트 파일(앱 폴더 projects\) — 다른 PC·포터블로도 작업이 따라간다(2026-10-11)
 }
 
 void MainWindow::restoreModelState() {
     sections_.clear(); thumbs_.clear(); current_ = -1;
+    projectPath_.clear();
+    // 프로젝트 파일이 있으면 그걸로(열기 대화상자·끌어놓기로 연 .trench.json → 없으면 projects\ 의 자동 저장본). 없으면 설정(레지스트리)
+    std::shared_ptr<ProjectDoc> pj = pendingProject_; QString pjPath = pendingProjectPath_;
+    pendingProject_.reset(); pendingProjectPath_.clear();
+    if (!pj) {
+        ProjectDoc d; QString e;
+        const QString ap = autoProjectPath();
+        if (!ap.isEmpty() && QFileInfo::exists(ap) && readProjectFile(ap, d, &e)) {
+            // 같은 이름의 다른 모델(다른 폴더)이면 그 파일은 남의 것 — 설정으로 간다
+            if (QFileInfo(qs8(d.modelPath)).fileName().compare(QFileInfo(path_).fileName(), Qt::CaseInsensitive) == 0) { pj = std::make_shared<ProjectDoc>(d); pjPath = ap; }
+        }
+    }
+    if (pj) {
+        applyProject(*pj);
+        projectPath_ = pjPath;
+    } else restoreFromSettings();
+    if (undo_) undo_->clear();
+    lastState_ = captureState();
+    updateDepthChips(); refreshSectionList(); updateHeader();
+}
+
+void MainWindow::restoreFromSettings() {
     QSettings st; const QString k = modelKey(path_);
     const Vec3 o = srs().origin;
     if (st.contains(k + "sections")) {
@@ -1369,9 +1394,6 @@ void MainWindow::restoreModelState() {
         double cx = cam[0].toDouble() - o.x, cy = cam[1].toDouble() - o.y, mpp = cam[2].toDouble();
         QTimer::singleShot(50, this, [this, cx, cy, mpp] { if (src_) plan_->setCamera(cx, cy, mpp); });
     }
-    if (undo_) undo_->clear();
-    lastState_ = captureState();
-    updateDepthChips(); refreshSectionList(); updateHeader();
 }
 
 // ---------------------------------------------------------------- 시작 화면
@@ -1794,6 +1816,10 @@ MainWindow::MainWindow() {
     makeAction("las", QStringLiteral("점군 LAS"), "Points LAS", I::Las);
     makeAction("csv", QStringLiteral("단면선 CSV"), "Profile CSV", I::Csv);
     makeAction("secjson", QStringLiteral("단면 목록 내보내기"), "Export Sections", I::Csv);
+    makeAction("project", QStringLiteral("프로젝트"), "Project", I::Sheet);
+    makeAction("projsave", QStringLiteral("저장 (projects 폴더에)"), "Save Project", I::Sheet);
+    makeAction("projsaveas", QStringLiteral("다른 이름으로 저장…"), "Save Project As", I::Sheet);
+    makeAction("projopen", QStringLiteral("프로젝트 열기…"), "Open Project", I::Open);
     makeAction("secimport", QStringLiteral("단면 목록 가져오기"), "Import Sections", I::Open);
     makeAction("seclist", QStringLiteral("단면 목록"), "Section List", I::Csv);                 // v5 리본 「자료 › 목록 ▾」(내보내기 · 가져오기)
     makeAction("elevmenu", QStringLiteral("입면"), "Elevation", I::Sliders);                   // 리본이 낮을 때만 보이는 「입면 ▾」(불투명도 · 굵기 · 평활)
@@ -2003,6 +2029,9 @@ MainWindow::MainWindow() {
         QString m; bool ok = exportSectionsJson(fn, &m); report(ok, m);
     });
     QObject::connect(action("secimport"), &QAction::triggered, this, [this] { importSectionsJson(); });
+    QObject::connect(action("projsave"), &QAction::triggered, this, [this] { saveProjectNow(); });
+    QObject::connect(action("projsaveas"), &QAction::triggered, this, [this] { saveProjectAs(); });
+    QObject::connect(action("projopen"), &QAction::triggered, this, [this] { openProjectDialog(); });
     QObject::connect(action("contrast"), &QAction::toggled, this, [this](bool on) { applyHighContrast(on); });
     auto bandChanged = [this] {
         plan_->setBand(front_->value(), back_->value());
