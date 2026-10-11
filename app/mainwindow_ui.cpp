@@ -302,7 +302,7 @@ QWidget* MainWindow::buildRibbon() {
     add("model", "open", K::Normal, "folder", QStringLiteral("열기"));
     add("model", "recent", K::Normal, "clock", QStringLiteral("최근"));
     { auto* pm = new QMenu(this); pm->addAction(action("projsave")); pm->addAction(action("projsaveas")); pm->addSeparator(); pm->addAction(action("projopen")); action("project")->setMenu(pm); }
-    add("model", "project", K::Normal, "sections-list", QStringLiteral("프로젝트"));   // 작업 상태 파일(.trench.json) — 자동 저장은 늘, 여기는 손으로
+    add("model", "project", K::Normal, "save", QStringLiteral("프로젝트"));   // 아이콘은 목록 파일(sections-list)과 달라야 함(--ui-audit dup-icons)   // 작업 상태 파일(.trench.json) — 자동 저장은 늘, 여기는 손으로
     add("model", "close", K::Normal, "x", QStringLiteral("닫기"));
     // ---- 단면: 긋기(도구) · 새 단면 · 반전 · 이동 ▾ · 잘린 돌(도구, F단계) · 윤곽(도구, G단계)
     ribbon_->addGroup(QStringLiteral("sec"), QStringLiteral("단면"));
@@ -432,7 +432,7 @@ void MainWindow::setRibbonContext(int ctx) {
     const bool home = ctx == 0, sheet = ctx == 2;
     for (const char* g : {"sec", "elev", "view", "data", "out"}) ribbon_->setGroupDim(QString::fromLatin1(g), home);
     if (sheetChip_) ribbon_->setChipOn(sheetChip_, sheet);
-    if (docTabCorner_) docTabCorner_->setText(src_ ? QStringLiteral("%1 · %2").arg(QFileInfo(path_).completeBaseName(), projectSavedLabel()) : QString());
+    applyProjectHeader();
     updateEnabled();   // 켜고 끄기는 updateEnabled 한 곳(검토 I1)
 }
 

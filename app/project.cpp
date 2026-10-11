@@ -53,13 +53,22 @@ QString MainWindow::autoProjectPath() const {
     return projectDir() + "/" + qs8(projectFileName(QFileInfo(path_).fileName().toStdString()));
 }
 
-// 헤더 「저장됨 · projects\이름.trench.json」 — 앱 폴더 안이면 상대 경로, 아니면 전체
+// 헤더 「저장됨 · projects\이름.trench.json」 — 앱 폴더 안이면 상대 경로, 아니면 파일 이름만(긴 경로가 창 최소 너비를 키우지 않게 — CI --ui-audit min-width).
+// 전체 경로는 applyProjectHeader 가 풍선 도움말에 넣는다
 QString MainWindow::projectSavedLabel() const {
     if (projectPath_.isEmpty()) return QStringLiteral("저장됨");
     const QString appDir = QDir(QCoreApplication::applicationDirPath()).absolutePath();
     QString shown = projectPath_;
     if (shown.startsWith(appDir + "/", Qt::CaseInsensitive)) shown = shown.mid(appDir.size() + 1);
+    else shown = QFileInfo(projectPath_).fileName();
     return QStringLiteral("저장됨 · %1").arg(QDir::toNativeSeparators(shown));
+}
+
+void MainWindow::applyProjectHeader() {
+    if (!docTabCorner_) return;
+    if (!src_) { docTabCorner_->setText(QString()); docTabCorner_->setToolTip(QString()); return; }
+    docTabCorner_->setText(QStringLiteral("%1 · %2").arg(QFileInfo(path_).completeBaseName(), projectSavedLabel()));
+    docTabCorner_->setToolTip(projectPath_.isEmpty() ? QString() : QStringLiteral("프로젝트 파일: %1").arg(QDir::toNativeSeparators(projectPath_)));
 }
 
 ProjectDoc MainWindow::captureProject() const {
@@ -107,7 +116,7 @@ bool MainWindow::writeProject(const QString& path, QString* msg) {
     f.write(text.data(), qint64(text.size()));
     f.close();
     projectPath_ = QFileInfo(path).absoluteFilePath();
-    if (docTabCorner_ && src_) docTabCorner_->setText(QStringLiteral("%1 · %2").arg(QFileInfo(path_).completeBaseName(), projectSavedLabel()));
+    applyProjectHeader();
     if (msg) *msg = QStringLiteral("프로젝트 저장: %1").arg(QDir::toNativeSeparators(projectPath_));
     return true;
 }

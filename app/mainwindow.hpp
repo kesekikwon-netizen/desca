@@ -192,7 +192,8 @@ public:
     static QString projectRootOverride;                // --settings DIR 이면 DIR(자동 저장 폴더 = DIR/projects — 시험 격리)
     QString projectDir() const;                        // 자동 저장 폴더(exe 옆 projects\ → 못 쓰면 %LOCALAPPDATA%\Trench\projects)
     QString autoProjectPath() const;                   // projectDir()/<모델이름>.trench.json
-    QString projectSavedLabel() const;                 // 헤더 「저장됨 · projects\이름.trench.json」
+    QString projectSavedLabel() const;                 // 헤더 「저장됨 · projects\이름.trench.json」(짧게 — 전체 경로는 풍선 도움말)
+    void applyProjectHeader();                         // 탭 줄 오른쪽 글 · 풍선 도움말
     asec::ProjectDoc captureProject() const;
     bool writeProject(const QString& path, QString* msg);
     bool readProjectFile(const QString& path, asec::ProjectDoc& out, QString* msg);
