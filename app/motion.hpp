@@ -32,7 +32,7 @@ constexpr int kNoticeClose = 120;      // 알림 닫힘 fade
 constexpr int kSheetTab = 150;         // 도면 탭 열기 · 종이 fade
 constexpr int kSaved = 150;            // 「n장 저장됨 · 폴더 열기」 fade in
 constexpr int kStatusText = 120;       // 상태줄 문장 글자 크로스페이드
-constexpr int kSplash = 1000;          // 여는 화면 전체 길이(UI 전환이 아님)
+constexpr int kSplash = 5000;          // 여는 화면 전체 길이(UI 전환이 아님) — 5 초(사용자 요청 2026-10-11, 이전 1 초). 그림은 앞 2 초, 나머지는 끝 장면 + 저작권
 constexpr int kSplashEnd = 300;        // 건너뜀 · 애니메이션 끔: 마지막 장면을 보이는 시간
 constexpr int kSplashToWindow = 150;   // 여는 화면 → 창 크로스페이드
 

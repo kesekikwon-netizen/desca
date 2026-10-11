@@ -40,6 +40,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <thread>
+#include <atomic>
+#include <QPointer>
 #include "asec/dxf.hpp"
 #include "guideband.hpp"
 #include "icons.hpp"
@@ -325,7 +328,8 @@ void paintPlanStrip(QPainter& p, const SectionDoc& doc, const SheetGeom& G, cons
     p.drawRect(clip);
     QFont fSmall = theme::uiFont(std::max(5, int(std::lround(9 * ui))));
     p.setFont(fSmall);
-    const QString cap = QStringLiteral("위치도 · 평면 %1 · 위 = 단면의 뒤쪽(%2) · 앞 %3 m / 뒤 %4 m").arg(denomText(G.spec.denom), QString::fromUtf8(facingKo(sectionAzimuthDeg(ln)).c_str())).arg(G.halfM, 0, 'g', 3).arg(G.halfM, 0, 'g', 3);
+    QString cap = QStringLiteral("위치도 · 평면 %1 · 위 = 단면의 뒤쪽(%2) · 앞 %3 m / 뒤 %4 m").arg(denomText(G.spec.denom), QString::fromUtf8(facingKo(sectionAzimuthDeg(ln)).c_str())).arg(G.halfM, 0, 'g', 3).arg(G.halfM, 0, 'g', 3);
+    if (!plan || plan->img.isNull()) cap += QStringLiteral(" · 평면 영상 준비 중…");
     QFontMetricsF fm(fSmall);
     QRectF cr(clip.left() + 1.5 * k, clip.top() + 1.0 * k, std::min(clip.width() - 3 * k, fm.horizontalAdvance(cap) + 3 * k), fm.height() + 1.0 * k);
     p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 220)); p.drawRect(cr);
@@ -1098,24 +1102,40 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     d->setObjectName("sheetDialog");
     auto st = std::make_shared<SheetParams>(io);
     const SectionDoc doc = section_->doc();
-    QImage screenImg = doc.img;
-    SectionImgGeo screenGeo{doc.imgS0, doc.imgZ1, doc.imgRes};
-    if (src_ && doc.imgRes > 0.0016) {   // 화면 해상도 영상은 조판에서 흐리므로 1.5 mm/px 로 다시 계산
-        SectionRequest rq; rq.line = doc.r.line; rq.depthFade = doc.st.depthFade ? kDepthFadeStrength : 0.0;
-        rq.imageRes = 0.0015; rq.maxImagePixels = size_t(60) << 20;
-        SectionOutput out; std::string e;
-        if (computeSection(*src_, rq, out, &e, nullptr)) { screenImg = toQImageS(out.image.img); screenGeo = SectionImgGeo{out.image.s0, out.image.z1, out.image.res}; }
-    }
+    // 미리보기 영상은 화면 것(doc.img)으로 바로 열고, 더 촘촘한 입면 영상(1.5 mm/px)과 위치도 영상은 작업 스레드가 만들어 뒤에 바꿔 넣는다
+    // (전환이 느리다는 요청 2026-10-11 — 큰 모델에서 UI 스레드가 수 초 멈추던 곳)
+    auto screenImgP = std::make_shared<QImage>(doc.img);
+    auto screenGeoP = std::make_shared<SectionImgGeo>(SectionImgGeo{doc.imgS0, doc.imgZ1, doc.imgRes});
+    auto screenPlan = std::make_shared<PlanStrip>();
+    auto previewCancel = std::make_shared<std::atomic<bool>>(false);
+    QObject::connect(d, &QObject::destroyed, [previewCancel] { previewCancel->store(true); });
     auto* outer = new QHBoxLayout(d); outer->setContentsMargins(0, 0, 0, 0); outer->setSpacing(0);
     // ---- 책상(Desk): 종이 가운데, 떠 있는 안내 · 도구 줄은 아래에서
-    // 위치도 미리보기 영상(화면용: 최대 6 Mpx). 조판 저장 때는 출력 해상도로 다시 만든다
-    auto screenPlan = std::make_shared<PlanStrip>();
+    auto* pv = new SheetPreview; pv->setMinimumSize(470, 330);
     if (src_) {
+        const bool needImg = doc.imgRes > 0.0016;   // 화면 영상이 1.5 mm/px 보다 거칠면 다시 계산
         const SheetGeom G0 = sheetGeom(doc, *st);
         const double h0 = planStripHalfWidth(doc.r.line.front, doc.r.line.back);
-        if (G0.lenM > 0) renderPlanStrip(*src_, doc.r.line, h0, groundResolution(std::max(10.0, G0.spec.denom), 150), 6e6, *screenPlan, nullptr);
+        const double planRes = groundResolution(std::max(10.0, G0.spec.denom), 150);
+        const bool needPlan = G0.lenM > 0;
+        std::thread([src = src_, doc, needImg, needPlan, h0, planRes, screenImgP, screenGeoP, screenPlan, previewCancel, pvp = QPointer<SheetPreview>(pv)] {
+            if (needPlan && !previewCancel->load()) {   // 위치도부터(가볍다) → 바로 보이게
+                PlanStrip ps;
+                if (renderPlanStrip(*src, doc.r.line, h0, planRes, 6e6, ps, previewCancel.get()) && !previewCancel->load())
+                    QMetaObject::invokeMethod(qApp, [screenPlan, ps, pvp] { *screenPlan = ps; if (pvp) pvp->update(); }, Qt::QueuedConnection);
+            }
+            if (needImg && !previewCancel->load()) {
+                SectionRequest rq; rq.line = doc.r.line; rq.depthFade = doc.st.depthFade ? kDepthFadeStrength : 0.0;
+                rq.imageRes = 0.0015; rq.maxImagePixels = size_t(60) << 20;
+                SectionOutput out; std::string e;
+                if (computeSection(*src, rq, out, &e, previewCancel.get()) && !previewCancel->load()) {
+                    QImage im = toQImageS(out.image.img);
+                    const SectionImgGeo g{out.image.s0, out.image.z1, out.image.res};
+                    QMetaObject::invokeMethod(qApp, [screenImgP, screenGeoP, im, g, pvp] { *screenImgP = im; *screenGeoP = g; if (pvp) pvp->update(); }, Qt::QueuedConnection);
+                }
+            }
+        }).detach();
     }
-    auto* pv = new SheetPreview; pv->setMinimumSize(470, 330);
     bindImageDrag(pv, &st->imgDxMm, &st->imgDyMm);
     outer->addWidget(pv, 1);
     // ---- 오른쪽 판 320: 머리 · 도면 항목 · 도면 정보 · 선 글자 · 형식 · 도면 점검 | 바닥
@@ -1136,8 +1156,10 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     auto* tTitle = sheetTile(QStringLiteral("title-block"), QStringLiteral("표제란"), QStringLiteral("표제란 · 축척 막대(끄면 그림 칸 안에 작은 축척 막대)"));
     auto* tPlan = sheetTile(QStringLiteral("image-layer"), QStringLiteral("위치도"), QStringLiteral("단면선 주변 평면(같은 축척, 단면선이 가로) — 단면 위. 앞·뒤 각 3 m(뒤 깊이가 크면 그 값). DXF 에는 없음"));
     { auto* row = new QWidget; auto* h = new QHBoxLayout(row); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(0);
-        h->setSpacing(8); for (auto* tb : {tImg, tLine, tLev, tTitle, tPlan}) h->addWidget(tb);
+        h->setSpacing(8); for (auto* tb : {tImg, tLine, tLev, tTitle}) h->addWidget(tb);
         h->addStretch(); v->addWidget(row); }
+    { auto* row = new QWidget; auto* h = new QHBoxLayout(row); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(8);   // 둘째 줄: 위치도(옆 칸 너비에 맞춰)
+        h->addWidget(tPlan); h->addStretch(); v->addWidget(row); }
     // 도면 정보: 도면명 · 용지 · 축척 1 : [칸] 맞춤 · 격자
     v->addWidget(sideCaption(QStringLiteral("도면 정보")));
     auto* g = new QGridLayout; g->setContentsMargins(0, 0, 0, 0); g->setHorizontalSpacing(10); g->setVerticalSpacing(8); g->setColumnMinimumWidth(0, 40); g->setColumnStretch(1, 1);
@@ -1271,7 +1293,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         p.setClipRect(QRectF(QPointF(0, 0), pz));
         pv->fitPxPerMm = sc;
         pv->zoomCenter = o + QPointF((G.L.plotX + G.L.plotW / 2) * sc, (G.L.plotY + G.L.plotH / 2) * sc);
-        paintSheet(p, doc, *st, sc, 0, screenImg, screenGeo, pv->zoom, 0, 0, nullptr, screenPlan.get());
+        paintSheet(p, doc, *st, sc, 0, *screenImgP, *screenGeoP, pv->zoom, 0, 0, nullptr, screenPlan.get());
         p.restore();
         paintPaperFrame(p, o, pz);
     };

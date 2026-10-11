@@ -2322,7 +2322,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
     {
         const auto& tb = motion::table();
         int maxUi = 0, nUi = 0; for (const auto& e : tb) if (e.ui) { maxUi = std::max(maxUi, e.ms); ++nUi; }
-        const bool tableOk = !tb.isEmpty() && maxUi <= 300 && maxUi > 0 && MainWindow::kOpeningSplashMs == motion::kSplash && motion::easing().type() == QEasingCurve::OutCubic && motion::kSplash == 1000;
+        const bool tableOk = !tb.isEmpty() && maxUi <= 300 && maxUi > 0 && MainWindow::kOpeningSplashMs == motion::kSplash && motion::easing().type() == QEasingCurve::OutCubic && motion::kSplash == 5000;
         QSettings st; const QVariant keepAnim = st.value(QStringLiteral("ui/animations"));
         motion::setForcedOff(false); st.setValue(QStringLiteral("ui/animations"), true);
         const bool onNow = motion::animationsOn();

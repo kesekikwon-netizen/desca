@@ -154,7 +154,7 @@ public:
     void run(int ms, const QString& captureDir = QString(), int escAtMs = -1) {   // escAtMs ≥ 0 = 그 시각에 Esc 를 눌러 건너뛰기 시험(--splash-esc)
         total_ = ms;
         if (!motion::animationsOn()) { finalOnly_ = true; skipMs_ = 300; skipClock_.start(); }
-        const int caps[] = {120, 400, 700, 1000};
+        const int caps[] = {motion::kSplash * 12 / 100, motion::kSplash * 40 / 100, motion::kSplash * 70 / 100, motion::kSplash};   // 장면 시각 = 전체 길이의 .12 · .40 · .70 · 1.0
         int nextCap = 0;
         clock_.start();
         if (escAtMs >= 0) QTimer::singleShot(escAtMs, this, [this] { QKeyEvent ev(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier); keyPressEvent(&ev); });
@@ -323,7 +323,7 @@ int main(int argc, char** argv) {
             if (tt < 1.0) f.insert(f.lastIndexOf('.') < 0 ? f.size() : f.lastIndexOf('.'), QStringLiteral("_t%1").arg(std::lround(tt * 100)));
             ok = im.save(f) && ok; ++frames; sz = im.size();
         }
-        const bool timing = frames == 4 && MainWindow::kOpeningSplashMs == 1000;
+        const bool timing = frames == 4 && MainWindow::kOpeningSplashMs == motion::kSplash && motion::kSplash == 5000;
         fprintf(stdout, "splash-shot %s: %s (%dx%d) frames=%d total-ms=%d%s\n", ok ? "ok" : "FAILED", splashShot.toUtf8().constData(), sz.width(), sz.height(), frames, MainWindow::kOpeningSplashMs, timing ? "" : "  FAIL");
         return ok && timing ? 0 : 6;
     }

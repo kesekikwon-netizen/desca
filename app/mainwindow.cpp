@@ -44,6 +44,7 @@
 #include <cstdio>
 #include <unordered_map>
 #include "asec/obj.hpp"
+#include "sqlite3.h"   // SQLITE_VERSION(프로그램 정보)
 #include "stb_image.h"
 
 using namespace asec;
@@ -51,6 +52,17 @@ using clk = std::chrono::steady_clock;
 
 extern const char* const kVersion;
 const char* const kVersion = "1.2.1";
+// 저작권 표시(여는 화면·프로그램 정보). 권리자 이름은 사용자가 정한다(비어 있으면 연도만)
+const char* const kCopyrightYear = "2026";
+const char* const kCopyrightHolder = "";
+QString copyrightLine() {
+    const QString who = QString::fromUtf8(kCopyrightHolder).trimmed();
+    return QStringLiteral("© %1%2").arg(QString::fromUtf8(kCopyrightYear), who.isEmpty() ? QString() : QStringLiteral(" ") + who);
+}
+/// 가져다 쓴 외부 구성요소와 라이선스(packaging/licenses/THIRD_PARTY.txt 와 같은 목록, 한 줄)
+QString thirdPartyLine() {
+    return QStringLiteral("Qt %1 (LGPL-3.0, 동적 링크) · OpenCTM (zlib) · SQLite (public domain) · stb (public domain/MIT) · nlohmann/json (MIT)").arg(QString::fromLatin1(qVersion()));
+}
 static constexpr double kDepthFade = kDepthFadeStrength;
 // 모델별 설정 키(경로 기준, 대소문자 무시)
 static QString heightSettingsKey(const QString& path) {
@@ -912,7 +924,9 @@ void MainWindow::dlgInfo() {
 // (모두 OutCubic). 값은 960×600 기준을 k = 너비/960 으로 키운다. 끝 장면(t ≥ .85)의 타일은 앱 아이콘 그림(kerf::appPixmap) 그대로 — 아이콘과 한 SVG 에서 나온다.
 void MainWindow::paintOpeningSplash(QPainter& p, const QSize& sz, double t) {
     t = std::clamp(t, 0.0, 1.0);
-    auto seg = [&](double a, double b) { double u = std::clamp((t - a) / (b - a), 0.0, 1.0); return 1 - std::pow(1 - u, 3.0); };   // OutCubic
+    // 그림 움직임은 전체 5 초 중 앞 2 초(tm 0→1)에 끝나고, 그 뒤는 끝 장면 + 저작권 줄을 보인다. 진행 막대·상태 글의 시계는 t(실제 시간)
+    const double tm = std::min(1.0, t * (double(motion::kSplash) / 2000.0));
+    auto seg = [&](double a, double b) { double u = std::clamp((tm - a) / (b - a), 0.0, 1.0); return 1 - std::pow(1 - u, 3.0); };   // OutCubic
     const QRect im(QPoint(0, 0), sz.isEmpty() ? QSize(960, 600) : sz);
     p.fillRect(im, theme::Ground);
     p.setRenderHint(QPainter::Antialiasing);
@@ -924,7 +938,7 @@ void MainWindow::paintOpeningSplash(QPainter& p, const QSize& sz, double t) {
     const double side = 160 * k;
     const QRectF tile(110 * k, 180 * k + (1 - tileIn) * 10 * k, side, side);
     p.setOpacity(tileIn);
-    if (t >= 0.85) {   // 끝 장면 = 앱 아이콘 그대로
+    if (tm >= 0.85) {   // 끝 장면 = 앱 아이콘 그대로
         QPixmap ic = kerf::appPixmap(int(std::lround(side)), p.device()->devicePixelRatioF());
         p.drawPixmap(tile.topLeft(), ic);
     } else {
@@ -980,13 +994,18 @@ void MainWindow::paintOpeningSplash(QPainter& p, const QSize& sz, double t) {
         p.setPen(theme::Muted);
         p.drawText(QRectF(110 * k, 392 * k, 780 * k, 24 * k), Qt::AlignLeft | Qt::AlignVCenter,
                    QStringLiteral("발굴 평·단면 · 3MX · 3SM · OBJ 실사 메시 · %1").arg(QString::fromUtf8(kVersion)));
+        // 저작권 · 가져다 쓴 외부 구성요소(사용자 요청 2026-10-11)
+        p.setFont(theme::uiFont(int(std::lround(12 * k))));
+        p.setPen(theme::Faint);
+        p.drawText(QRectF(110 * k, 420 * k, 800 * k, 20 * k), Qt::AlignLeft | Qt::AlignVCenter, copyrightLine() + QStringLiteral(" · 모든 권리 보유"));
+        p.drawText(QRectF(110 * k, 440 * k, 800 * k, 20 * k), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("사용 구성요소: ") + thirdPartyLine());
         p.setOpacity(1.0);
     }
     // 4) 아래 기반암 띠 + 상태 글(.30 · .85 에서 바뀜) + 진행 막대(맨 위 3 px, 1 초 시계)
     p.fillRect(QRectF(0, im.height() - 72 * k, im.width(), 72 * k), QColor(0x26, 0x26, 0x24));
     p.setPen(theme::Ground);
     p.setFont(theme::uiFont(int(std::lround(14 * k))));
-    const QString status = t >= 0.85 ? QStringLiteral("준비 완료") : t >= 0.30 ? QStringLiteral("잠시 후 화면이 열립니다") : QStringLiteral("앱을 준비하고 있습니다");
+    const QString status = tm >= 0.85 ? QStringLiteral("준비 완료") : tm >= 0.30 ? QStringLiteral("잠시 후 화면이 열립니다") : QStringLiteral("앱을 준비하고 있습니다");
     p.drawText(QRectF(48 * k, im.height() - 64 * k, 500 * k, 24 * k), Qt::AlignLeft | Qt::AlignVCenter, status);
     p.setPen(theme::Edge);
     p.setFont(theme::uiFont(int(std::lround(12 * k))));
@@ -1007,9 +1026,17 @@ void MainWindow::dlgAbout() {
     mb.setWindowTitle(QStringLiteral("프로그램 정보"));   // Qt 가 「 - Trench x.y.z」를 붙임
     mb.setIconPixmap(windowIcon().pixmap(64, 64));
     mb.setTextFormat(Qt::RichText);
-    mb.setText(QStringLiteral("<b>Trench</b> v%1 · 발굴 평·단면<br>3MX 실사 메시 단면 · 10 cm 레벨선 · DXF / GeoTIFF / 점군 내보내기<br><br>"
-                              "<small>Qt %2 (LGPLv3, 동적 링크) · OpenCTM (zlib) · stb (공개 도메인/MIT) · nlohmann/json (MIT)<br>"
-                              "3MX 는 공개 형식 사양에 따라 직접 읽습니다.</small>").arg(kVersion).arg(qVersion()));
+    mb.setText(QStringLiteral("<b>Trench</b> v%1 · 발굴 평·단면<br>3MX · 3SM 실사 메시 단면 · 10 cm 레벨선 · DXF / GeoTIFF / 점군 내보내기<br>"
+                              "%2 · 모든 권리 보유<br><br>"
+                              "<small><b>가져다 쓴 외부 구성요소</b><br>"
+                              "· Qt %3 — The Qt Company, LGPL-3.0 (수정 없이 동적 링크)<br>"
+                              "· OpenCTM 1.0.3 — Marcus Geelnard, zlib 라이선스 (LZMA SDK 공개 도메인 포함)<br>"
+                              "· SQLite %4 — public domain (3SM 읽기)<br>"
+                              "· stb_image / stb_image_write — Sean Barrett, 공개 도메인 또는 MIT<br>"
+                              "· nlohmann/json 3.11.3 — Niels Lohmann, MIT<br>"
+                              "· Catch2 3.7.1 — BSL-1.0 (시험 전용, 배포에 포함되지 않음)<br>"
+                              "3MX 는 Bentley 가 공개한 형식 사양에 따라, 3SM 은 파일 구조를 직접 확인해 읽습니다. Bentley Systems 와 관계가 없으며 그 코드·아이콘·로고를 쓰지 않습니다.<br>"
+                              "전문은 설치 폴더 licenses/THIRD_PARTY.txt</small>").arg(kVersion, copyrightLine(), qVersion(), QString::fromLatin1(SQLITE_VERSION)));
     mb.exec();
 }
 
