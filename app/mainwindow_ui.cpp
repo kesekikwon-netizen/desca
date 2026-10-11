@@ -884,8 +884,9 @@ void MainWindow::updateReadout() {
         setRo(RoFloor, QStringLiteral("바닥 EL."), QStringLiteral("%1 m").arg(zLo + org.z, 0, 'f', 2));
         setRo(RoCut, QStringLiteral("잘린 선"), QStringLiteral("%1줄 · %2점").arg(r.profile.size()).arg(groupedFixed(double(nv), 0)));
     }
-    setRo(RoA, QStringLiteral("A"), groupedFixed(ln.a.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(ln.a.y + org.y, 3));
-    setRo(RoB, QStringLiteral("A′"), groupedFixed(ln.b.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(ln.b.y + org.y, 3));
+    { QString la, lb; PlanView::splitLetters(sectionName(), la, lb);   // 단면 이름의 글자(B–B′ → B · B′)
+      setRo(RoA, la, groupedFixed(ln.a.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(ln.a.y + org.y, 3));
+      setRo(RoB, lb, groupedFixed(ln.b.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(ln.b.y + org.y, 3)); }
     if (roVal_[RoDepth]) roVal_[RoDepth]->setToolTip(QStringLiteral("지표(높은 쪽 끝)에서 바닥(가장 낮은 점)까지"));
     setRo(RoSrs, QStringLiteral("수평"), qs8(srsReport_.desc.horizontalShortKo()));
 }
@@ -908,7 +909,8 @@ void MainWindow::readoutDrawing(int stage, const SectionLine& l) {
     setRo(RoBearing, QStringLiteral("방위"), qs8(formatAzimuth(sectionAzimuthDeg(l))));
     setRo(RoFacing, QStringLiteral("보는 쪽"), qs8(facingKo(sectionAzimuthDeg(l))));
     setRo(RoBand, QStringLiteral("앞 / 뒤"), QStringLiteral("%1 / %2 m").arg(front_->value(), 0, 'f', 2).arg(back_->value(), 0, 'f', 2));
-    setRo(RoA, QStringLiteral("A"), groupedFixed(l.a.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(l.a.y + org.y, 3));
+    { QString la, lb; PlanView::splitLetters(sectionName(), la, lb);
+      setRo(RoA, la, groupedFixed(l.a.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(l.a.y + org.y, 3)); }
     setRo(RoB, QStringLiteral("커서"), groupedFixed(l.b.x + org.x, 3) + QLatin1Char('\n') + groupedFixed(l.b.y + org.y, 3));
     setRo(RoSrs, QStringLiteral("수평"), qs8(srsReport_.desc.horizontalShortKo()));
 }
