@@ -54,7 +54,7 @@ extern const char* const kVersion;
 const char* const kVersion = "1.2.1";
 // 저작권 표시(여는 화면·프로그램 정보). 권리자 이름은 사용자가 정한다(비어 있으면 연도만)
 const char* const kCopyrightYear = "2026";
-const char* const kCopyrightHolder = "";
+const char* const kCopyrightHolder = "권영인";   // 사용자 지정 2026-10-11
 QString copyrightLine() {
     const QString who = QString::fromUtf8(kCopyrightHolder).trimmed();
     return QStringLiteral("© %1%2").arg(QString::fromUtf8(kCopyrightYear), who.isEmpty() ? QString() : QStringLiteral(" ") + who);
@@ -1010,7 +1010,7 @@ void MainWindow::paintOpeningSplash(QPainter& p, const QSize& sz, double t) {
     p.setPen(theme::Edge);
     p.setFont(theme::uiFont(int(std::lround(12 * k))));
     p.drawText(QRectF(48 * k, im.height() - 38 * k, 700 * k, 22 * k), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("원본 파일은 바꾸지 않습니다 · Esc = 건너뜀"));
-    p.drawText(QRectF(im.width() - 420 * k, im.height() - 38 * k, 372 * k, 22 * k), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("© 2026 Trench · Qt 6.8"));
+    p.drawText(QRectF(im.width() - 420 * k, im.height() - 38 * k, 372 * k, 22 * k), Qt::AlignRight | Qt::AlignVCenter, copyrightLine() + QStringLiteral(" · Trench · Qt %1").arg(QString::fromLatin1(qVersion()).section(QLatin1Char('.'), 0, 1)));
     p.fillRect(QRectF(0, im.height() - 72 * k, im.width() * t, 3 * k), theme::Action);
 }
 
