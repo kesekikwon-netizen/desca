@@ -258,6 +258,86 @@ bool SmFile::readNodeTile(int64_t id, TmxTile& out, std::string* err) {
     }
 }
 
+namespace {
+/// 가상 타일에 담긴 원시 BLOB 위치(out.bytes 안). 압축 풀기·변환은 lazyDecode 에서
+struct SmRaw {
+    size_t ptsOff = 0, ptsLen = 0, idxOff = 0, idxLen = 0, uvOff = 0, uvLen = 0, uvIdxOff = 0, uvIdxLen = 0, texOff = 0, texLen = 0;
+    int64_t sizePts = 0, sizeIdx = 0, sizeUv = 0, sizeUvIdx = 0;
+    int64_t nodeId = 0, texId = -1;
+    Vec3 origin;
+};
+std::vector<uint8_t> slice(const std::vector<uint8_t>& b, size_t off, size_t len) {
+    if (!len || off + len > b.size()) return {};
+    return std::vector<uint8_t>(b.begin() + ptrdiff_t(off), b.begin() + ptrdiff_t(off + len));
+}
+
+/// 원시 BLOB → Mesh(+텍스처). 타일 잠금 아래에서 불린다(TileCache::decode / decodeGeometry / LodStreamer 작업 스레드)
+bool decodeSmNode(const SmRaw& r, TmxTile& t, size_t ni, std::string* err) {
+    TmxNode& N = t.nodes[ni];
+    const std::string tag = "3SM 노드 n" + std::to_string(r.nodeId);
+    const std::vector<uint8_t> ptsRaw = slice(t.bytes, r.ptsOff, r.ptsLen), idxRaw = slice(t.bytes, r.idxOff, r.idxLen);
+    const std::vector<uint8_t> uvRaw = slice(t.bytes, r.uvOff, r.uvLen), uvIdxRaw = slice(t.bytes, r.uvIdxOff, r.uvIdxLen), texRaw = slice(t.bytes, r.texOff, r.texLen);
+    if (ptsRaw.empty() || idxRaw.empty()) return true;   // 메시 없음
+    std::vector<uint8_t> pb, ib, ub, uib;
+    if (!inflateBlob(ptsRaw, r.sizePts, pb, err) || !inflateBlob(idxRaw, r.sizeIdx, ib, err)) return false;
+    const auto P = asVec<double>(pb);
+    const auto I = asVec<int32_t>(ib);
+    const size_t np = P.size() / 3;
+    if (np == 0 || I.size() < 3 || I.size() % 3 != 0 || pb.size() % 24 != 0 || ib.size() % 4 != 0) { setErr(err, tag + " 의 기하 크기가 맞지 않습니다"); return false; }
+    std::vector<double> U; std::vector<int32_t> UI;
+    if (!uvRaw.empty()) {
+        if (!inflateBlob(uvRaw, r.sizeUv, ub, err)) return false;
+        U = asVec<double>(ub);
+        if (!uvIdxRaw.empty()) { if (!inflateBlob(uvIdxRaw, r.sizeUvIdx, uib, err)) return false; UI = asVec<int32_t>(uib); }
+        if (U.size() % 2 != 0 || (UI.empty() && U.size() / 2 != np) || (!UI.empty() && UI.size() != I.size())) { U.clear(); UI.clear(); }   // 맞지 않는 UV 는 버림(텍스처 없이)
+    }
+    const bool sameIdx = UI.empty() || std::equal(UI.begin(), UI.end(), I.begin());
+    const Vec3& o = r.origin;
+    auto m = std::make_shared<Mesh>();
+    if (U.empty() || (sameIdx && U.size() / 2 == np)) {
+        m->pos.resize(np * 3);
+        for (size_t i = 0; i < np; ++i) { m->pos[3 * i] = float(P[3 * i] - o.x); m->pos[3 * i + 1] = float(P[3 * i + 1] - o.y); m->pos[3 * i + 2] = float(P[3 * i + 2] - o.z); }
+        if (!U.empty()) { m->uv.resize(np * 2); for (size_t i = 0; i < np * 2; ++i) m->uv[i] = float(U[i]); }
+        m->idx.reserve(I.size());
+        for (int32_t k : I) {
+            if (k < 1 || size_t(k) > np) { setErr(err, tag + " 의 삼각형 인덱스가 범위를 벗어났습니다(" + std::to_string(k) + ")"); return false; }
+            m->idx.push_back(uint32_t(k - 1));
+        }
+    } else {
+        // UV 인덱스가 따로 → (점, UV) 짝마다 꼭짓점 하나
+        const size_t nuv = U.size() / 2;
+        std::unordered_map<uint64_t, uint32_t> remap;
+        remap.reserve(I.size());
+        m->idx.reserve(I.size());
+        for (size_t k = 0; k < I.size(); ++k) {
+            const int64_t pi = int64_t(I[k]) - 1, ui = int64_t(UI[k]) - 1;
+            if (pi < 0 || size_t(pi) >= np || ui < 0 || size_t(ui) >= nuv) { setErr(err, tag + " 의 인덱스가 범위를 벗어났습니다"); return false; }
+            const uint64_t key = (uint64_t(pi) << 32) | uint64_t(ui);
+            auto f = remap.find(key);
+            if (f == remap.end()) {
+                const uint32_t nv = uint32_t(m->pos.size() / 3);
+                m->pos.push_back(float(P[3 * pi] - o.x)); m->pos.push_back(float(P[3 * pi + 1] - o.y)); m->pos.push_back(float(P[3 * pi + 2] - o.z));
+                m->uv.push_back(float(U[2 * ui])); m->uv.push_back(float(U[2 * ui + 1]));
+                f = remap.emplace(key, nv).first;
+            }
+            m->idx.push_back(f->second);
+        }
+    }
+    std::vector<uint8_t> jpg;
+    if (!m->uv.empty() && jpegOf(texRaw, jpg)) {
+        auto tx = std::make_shared<Texture>();
+        tx->format = "jpg";
+        tx->encoded = std::move(jpg);
+        m->texture = tx;
+        t.textures.emplace_back("tex" + std::to_string(r.texId), tx);   // TileCache 가 RGBA 크기를 예산에 넣는 목록
+    }
+    m->computeBBox();
+    if (!N.bb.valid()) N.bb = m->bbox;
+    N.meshes.push_back(m);
+    return true;
+}
+}  // namespace
+
 bool SmFile::readNodeTileImpl(int64_t id, TmxTile& out, std::string* err) {
     auto it = nodes_.find(id);
     if (it == nodes_.end()) { setErr(err, "3SM 노드가 없습니다: n" + std::to_string(id)); return false; }
@@ -271,104 +351,46 @@ bool SmFile::readNodeTileImpl(int64_t id, TmxTile& out, std::string* err) {
     // 3MX 규칙: 화면 지름(px) > maxScreenDiameter 이면 자식으로. 노드 해상도 geomRes(m) 가 화면 1 px 보다 거칠어지는 지점 = 대각선/geomRes
     N.maxScreenDiameter = (!n.children.empty() && n.geomRes > 0 && N.bb.valid()) ? N.bb.diag() / n.geomRes : 0.0;
     for (int64_t c : n.children) N.children.push_back(virtualTilePath(c));
-    N.decoded = true;
+    N.decoded = true;   // 메시 없는 노드는 더 할 일 없음
     N.ready = false;
     if (n.hasMesh) {
         auto conn = acquire(err);
         if (!conn) return false;
         struct Ret { SmFile* f; std::shared_ptr<Conn>& c; ~Ret() { f->release(std::move(c)); } } ret{this, conn};
-        // ---- 점·삼각형
-        std::vector<uint8_t> ptsRaw, idxRaw, uvRaw, uvIdxRaw, texRaw;
-        int64_t sizePts = 0, sizeIdx = 0, sizeUv = 0, sizeUvIdx = 0;
+        // ---- 바이트만 읽는다(압축 풀기·변환·텍스처는 lazyDecode 에서 — 수집 순회가 직렬이라 여기서는 가볍게)
+        SmRaw r; r.nodeId = id; r.texId = n.texId; r.origin = origin_;
+        auto append = [&](const std::vector<uint8_t>& b, size_t& off, size_t& len) { off = out.bytes.size(); len = b.size(); out.bytes.insert(out.bytes.end(), b.begin(), b.end()); };
         conn->point.reset();
         sqlite3_bind_int64(conn->point.s, 1, id);
         int rc = sqlite3_step(conn->point.s);
         if (rc == SQLITE_ROW) {
-            ptsRaw = conn->point.blob(0); idxRaw = conn->point.blob(1);
-            sizePts = sqlite3_column_int64(conn->point.s, 2); sizeIdx = sqlite3_column_int64(conn->point.s, 3);
+            append(conn->point.blob(0), r.ptsOff, r.ptsLen); append(conn->point.blob(1), r.idxOff, r.idxLen);
+            r.sizePts = sqlite3_column_int64(conn->point.s, 2); r.sizeIdx = sqlite3_column_int64(conn->point.s, 3);
         } else if (rc != SQLITE_DONE) { setErr(err, std::string("3SM 기하를 읽지 못했습니다: ") + sqlite3_errmsg(conn->db)); return false; }
         conn->point.reset();
-        // ---- UV(선택)
         conn->uv.reset();
         sqlite3_bind_int64(conn->uv.s, 1, id);
         rc = sqlite3_step(conn->uv.s);
         if (rc == SQLITE_ROW) {
-            uvRaw = conn->uv.blob(0); sizeUv = sqlite3_column_int64(conn->uv.s, 1);
-            uvIdxRaw = conn->uv.blob(2); sizeUvIdx = sqlite3_column_int64(conn->uv.s, 3);
+            append(conn->uv.blob(0), r.uvOff, r.uvLen); r.sizeUv = sqlite3_column_int64(conn->uv.s, 1);
+            append(conn->uv.blob(2), r.uvIdxOff, r.uvIdxLen); r.sizeUvIdx = sqlite3_column_int64(conn->uv.s, 3);
         } else if (rc != SQLITE_DONE) { setErr(err, std::string("3SM UV 를 읽지 못했습니다: ") + sqlite3_errmsg(conn->db)); return false; }
         conn->uv.reset();
-        // ---- 텍스처(선택)
         if (n.texId >= 0) {
             conn->tex.reset();
             sqlite3_bind_int64(conn->tex.s, 1, n.texId);
             rc = sqlite3_step(conn->tex.s);
-            if (rc == SQLITE_ROW) texRaw = conn->tex.blob(0);
+            if (rc == SQLITE_ROW) append(conn->tex.blob(0), r.texOff, r.texLen);
             else if (rc != SQLITE_DONE) { setErr(err, std::string("3SM 텍스처를 읽지 못했습니다: ") + sqlite3_errmsg(conn->db)); return false; }
             conn->tex.reset();
         }
-
-        if (!ptsRaw.empty() && !idxRaw.empty()) {
-            std::vector<uint8_t> pb, ib, ub, uib;
-            if (!inflateBlob(ptsRaw, sizePts, pb, err) || !inflateBlob(idxRaw, sizeIdx, ib, err)) return false;
-            const auto P = asVec<double>(pb);
-            const auto I = asVec<int32_t>(ib);
-            const size_t np = P.size() / 3;
-            if (np == 0 || I.size() < 3 || I.size() % 3 != 0 || pb.size() % 24 != 0 || ib.size() % 4 != 0) {
-                setErr(err, "3SM 노드 n" + std::to_string(id) + " 의 기하 크기가 맞지 않습니다"); return false;
-            }
-            std::vector<double> U; std::vector<int32_t> UI;
-            if (!uvRaw.empty()) {
-                if (!inflateBlob(uvRaw, sizeUv, ub, err)) return false;
-                U = asVec<double>(ub);
-                if (!uvIdxRaw.empty()) { if (!inflateBlob(uvIdxRaw, sizeUvIdx, uib, err)) return false; UI = asVec<int32_t>(uib); }
-                if (U.size() % 2 != 0 || (UI.empty() && U.size() / 2 != np) || (!UI.empty() && UI.size() != I.size())) { U.clear(); UI.clear(); }   // 맞지 않는 UV 는 버림(텍스처 없이)
-            }
-            const bool sameIdx = UI.empty() || std::equal(UI.begin(), UI.end(), I.begin());
-            auto m = std::make_shared<Mesh>();
-            if (U.empty() || (sameIdx && U.size() / 2 == np)) {
-                // 꼭짓점마다 UV 하나(확인한 파일 전부) — 그대로
-                m->pos.resize(np * 3);
-                for (size_t i = 0; i < np; ++i) {
-                    m->pos[3 * i] = float(P[3 * i] - origin_.x); m->pos[3 * i + 1] = float(P[3 * i + 1] - origin_.y); m->pos[3 * i + 2] = float(P[3 * i + 2] - origin_.z);
-                }
-                if (!U.empty()) { m->uv.resize(np * 2); for (size_t i = 0; i < np * 2; ++i) m->uv[i] = float(U[i]); }
-                m->idx.reserve(I.size());
-                for (int32_t k : I) {
-                    if (k < 1 || size_t(k) > np) { setErr(err, "3SM 노드 n" + std::to_string(id) + " 의 삼각형 인덱스가 범위를 벗어났습니다(" + std::to_string(k) + ")"); return false; }
-                    m->idx.push_back(uint32_t(k - 1));
-                }
-            } else {
-                // UV 인덱스가 따로 → (점, UV) 짝마다 꼭짓점 하나
-                const size_t nuv = U.size() / 2;
-                std::unordered_map<uint64_t, uint32_t> remap;
-                remap.reserve(I.size());
-                m->idx.reserve(I.size());
-                for (size_t k = 0; k < I.size(); ++k) {
-                    const int64_t pi = int64_t(I[k]) - 1, ui = int64_t(UI[k]) - 1;
-                    if (pi < 0 || size_t(pi) >= np || ui < 0 || size_t(ui) >= nuv) { setErr(err, "3SM 노드 n" + std::to_string(id) + " 의 인덱스가 범위를 벗어났습니다"); return false; }
-                    const uint64_t key = (uint64_t(pi) << 32) | uint64_t(ui);
-                    auto f = remap.find(key);
-                    if (f == remap.end()) {
-                        const uint32_t nv = uint32_t(m->pos.size() / 3);
-                        m->pos.push_back(float(P[3 * pi] - origin_.x)); m->pos.push_back(float(P[3 * pi + 1] - origin_.y)); m->pos.push_back(float(P[3 * pi + 2] - origin_.z));
-                        m->uv.push_back(float(U[2 * ui])); m->uv.push_back(float(U[2 * ui + 1]));
-                        f = remap.emplace(key, nv).first;
-                    }
-                    m->idx.push_back(f->second);
-                }
-            }
-            std::vector<uint8_t> jpg;
-            if (!m->uv.empty() && jpegOf(texRaw, jpg)) {
-                auto t = std::make_shared<Texture>();
-                t->format = "jpg";
-                t->encoded = std::move(jpg);
-                m->texture = t;
-                out.textures.emplace_back("tex" + std::to_string(n.texId), t);   // TileCache 가 RGBA 크기를 예산에 넣는 목록
-            }
-            m->computeBBox();
-            if (!N.bb.valid()) N.bb = m->bbox;
-            N.meshes.push_back(m);
-            N.resourceIds.push_back("geometry0");   // LodStreamer 는 resourceIds 로 "그릴 기하가 있는 노드" 를 판단한다(decoded=true 라 다시 찾지는 않음)
+        // 깨진 크기 값은 읽는 단계에서 바로 거른다(거대 할당 방지)
+        for (int64_t v : {r.sizePts, r.sizeIdx, r.sizeUv, r.sizeUvIdx})
+            if (v > kMaxBlobBytes) { setErr(err, "3SM 노드 n" + std::to_string(id) + " 의 BLOB 크기 값이 비정상입니다(" + std::to_string(v) + " B)"); return false; }
+        if (r.ptsLen && r.idxLen) {
+            N.decoded = false;
+            N.resourceIds.push_back("geometry0");   // LodStreamer 는 resourceIds 로 "그릴 기하가 있는 노드" 를 판단한다
+            out.lazyDecode = [r](TmxTile& tt, size_t ni, std::string* e) { return decodeSmNode(r, tt, ni, e); };
         }
     }
     out.nodes.push_back(std::move(N));

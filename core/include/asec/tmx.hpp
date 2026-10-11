@@ -89,6 +89,9 @@ struct TmxTile {
     struct Res { std::string id, type, format, texId, file; size_t off = 0, size = 0; Box3 bb; };
     std::vector<Res> resources;
     std::vector<std::pair<std::string, TexturePtr>> textures;
+    /// 비-3MX 공급원(3SM 가상 타일)의 지연 디코드: decodeNode 가 decoded=false 인 노드에 부른다(타일 잠금 아래, 타일마다 병렬).
+    /// 읽기(readTmxTile)는 바이트만 빨리 가져오고, 압축 풀기·변환·텍스처 붙이기는 여기서 — 수집 순회가 직렬이라 읽기를 가볍게 둬야 한다
+    std::function<bool(TmxTile&, size_t, std::string*)> lazyDecode;
 };
 
 /// OpenCTM 메모리 디코드/인코드

@@ -24,6 +24,8 @@ public:
     }
     SrsInfo srs;
     Box3 bounds;  // 로컬
+    /// 이번 수집의 영상 해상도(m/px) 힌트 — computeSection 이 넣고, TmxSource 가 TileCache 의 텍스처 축소에 쓴다. 0 = 힌트 없음(원본 그대로)
+    double textureResHint = 0;
 };
 
 class TmxSource : public MeshSource {

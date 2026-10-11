@@ -1,4 +1,5 @@
 #include "asec/lod.hpp"
+#include <chrono>
 
 #include <algorithm>
 #include <functional>
@@ -14,20 +15,65 @@ static size_t tileBytes(const TmxTile& t) {
     return b;
 }
 
+namespace {
+/// RGBA 를 f×f 상자 평균으로 줄인다(f = 2ⁿ)
+void downsampleRgba(RgbaImage& im, int f) {
+    if (f <= 1 || im.empty()) return;
+    const int w = std::max(1, im.w / f), h = std::max(1, im.h / f);
+    std::vector<uint8_t> out(size_t(w) * h * 4);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            unsigned acc[4] = {0, 0, 0, 0}; unsigned n = 0;
+            for (int dy = 0; dy < f; ++dy) {
+                const int sy = y * f + dy; if (sy >= im.h) break;
+                const uint8_t* row = &im.px[(size_t(sy) * im.w) * 4];
+                for (int dx = 0; dx < f; ++dx) {
+                    const int sx = x * f + dx; if (sx >= im.w) break;
+                    acc[0] += row[sx * 4]; acc[1] += row[sx * 4 + 1]; acc[2] += row[sx * 4 + 2]; acc[3] += row[sx * 4 + 3]; ++n;
+                }
+            }
+            uint8_t* o = &out[(size_t(y) * w + x) * 4];
+            for (int k = 0; k < 4; ++k) o[k] = uint8_t(n ? (acc[k] + n / 2) / n : 0);
+        }
+    im.w = w; im.h = h; im.px.swap(out);
+}
+/// 노드 크기와 영상 크기로 텍셀 길이(m) 추정
+double texelOf(const Box3& bb, const RgbaImage& im) {
+    if (!bb.valid() || im.empty()) return 0;
+    const Vec3 d = bb.mx - bb.mn;
+    const double side = std::max({d.x, d.y, d.z});
+    return side > 0 ? side / std::max(im.w, im.h) : 0;
+}
+/// 요청 텍셀(want)에 맞는 2ⁿ 축소 배수(원본 텍셀 texel): 줄인 텍셀 texel×f ≤ want 인 가장 큰 f(최대 16) — 영상 1 px 에 텍셀 1개 이상
+int downsampleFactor(double texel, double want) {
+    if (!(texel > 0) || !(want > 0)) return 1;
+    int f = 1;
+    while (f < 16 && texel * (f * 2) <= want) f *= 2;
+    return f;
+}
+}  // namespace
+
+namespace { std::atomic<size_t> g_texDecodes{0}, g_evictScans{0}, g_evicted{0}; std::atomic<double> g_texMs{0.0}; }
+TileCacheCounters tileCacheCounters() { TileCacheCounters c; c.texDecodes = g_texDecodes.load(); c.texMs = g_texMs.load(); c.evictScans = g_evictScans.load(); c.evicted = g_evicted.load(); return c; }
+
+void TileCache::setBytesLocked(Entry& e, size_t b) {
+    total_ -= e.bytes; e.bytes = b; total_ += b;
+}
+
 std::shared_ptr<TmxTile> TileCache::get(const fs::path& p, std::string* err) {
     {
         std::lock_guard<std::mutex> lk(mu_);
         auto it = tiles_.find(p);
-        if (it != tiles_.end()) { lastUse_[p] = ++clock_; return it->second; }
+        if (it != tiles_.end()) { it->second.lastUse = ++clock_; return it->second.tile; }
     }
     auto t = std::make_shared<TmxTile>();
     if (!readTmxTile(p, *t, err)) return nullptr;  // 파일 읽기는 잠금 밖
     std::lock_guard<std::mutex> lk(mu_);
     auto it = tiles_.find(p);
-    if (it != tiles_.end()) return it->second;
-    tiles_[p] = t;
-    lastUse_[p] = ++clock_;
-    bytes_[p] = tileBytes(*t);   // 3MX = 원본 바이트. 3SM 가상 타일은 bytes 가 비고 메시가 이미 상주 → 메시 크기
+    if (it != tiles_.end()) return it->second.tile;
+    Entry& e = tiles_[p];
+    e.tile = t; e.lastUse = ++clock_;
+    setBytesLocked(e, tileBytes(*t));   // 3MX = 원본 바이트. 3SM 가상 타일 = 원시 BLOB 바이트
     evictLocked();
     return t;
 }
@@ -35,31 +81,48 @@ std::shared_ptr<TmxTile> TileCache::get(const fs::path& p, std::string* err) {
 bool TileCache::decode(const std::shared_ptr<TmxTile>& t, size_t node, std::string* err) {
     if (!t || node >= t->nodes.size()) return false;
     std::vector<TexturePtr> todo;
+    const double want = wantTexelM.load();
+    Box3 nodeBox;
     {
         std::lock_guard<std::mutex> lk(*t->mu);  // 이 타일만 잠금
         TmxNode& N = t->nodes[node];
-        if (N.ready) return true;
-        if (!decodeNode(*t, node, err)) return false;
-        if (textureDecoder)
-            for (auto& m : N.meshes)
-                if (m->texture && m->texture->rgba.empty() && !m->texture->encoded.empty() &&
-                    std::find(todo.begin(), todo.end(), m->texture) == todo.end())
-                    todo.push_back(m->texture);
-        if (todo.empty()) N.ready = true;
+        if (!N.ready || want > 0) {
+            if (!decodeNode(*t, node, err)) return false;
+            nodeBox = N.bb;
+            if (textureDecoder)
+                for (auto& m : N.meshes) {
+                    auto& tx = m->texture;
+                    if (!tx || tx->encoded.empty() || std::find(todo.begin(), todo.end(), tx) != todo.end()) continue;
+                    const bool missing = tx->rgba.empty();
+                    // 전에 더 거칠게 줄여 둔 것이면(요청이 더 촘촘) 다시 디코드
+                    const bool tooCoarse = !missing && want > 0 && tx->rgbaDownsample > 1 && tx->rgbaTexelM > want * 1.001;
+                    if (missing || tooCoarse) todo.push_back(tx);
+                }
+        }
+        if (todo.empty()) { N.ready = true; }
     }
     if (!todo.empty()) {
-        // JPG 디코드(가장 비싼 부분)는 잠금 없이 사본에 → 잠금 안에서 비어 있을 때만 옮김.
-        // 준비된(ready) 노드가 가진 텍스처는 이미 차 있으므로 그 노드를 읽는 스레드와 겹쳐 쓰지 않는다.
+        // JPG 디코드(가장 비싼 부분)는 잠금 없이 사본에 → 잠금 안에서 옮김. 요청 해상도보다 훨씬 촘촘한 사진은 2ⁿ 로 줄여 둔다(메모리·예산)
         std::vector<RgbaImage> imgs(todo.size());
+        std::vector<double> texel(todo.size(), 0.0);
+        std::vector<int> factor(todo.size(), 1);
         for (size_t k = 0; k < todo.size(); ++k) {
             Texture tmp;
             tmp.format = todo[k]->format; tmp.filePath = todo[k]->filePath; tmp.encoded = todo[k]->encoded;
+            const auto td0 = std::chrono::steady_clock::now();
             textureDecoder(tmp);
+            g_texDecodes++; { double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - td0).count(); double cur = g_texMs.load(); while (!g_texMs.compare_exchange_weak(cur, cur + ms)) {} }
+            texel[k] = texelOf(nodeBox, tmp.rgba);
+            factor[k] = downsampleFactor(texel[k], want);
+            downsampleRgba(tmp.rgba, factor[k]);
             imgs[k] = std::move(tmp.rgba);
         }
         std::lock_guard<std::mutex> lk(*t->mu);
-        for (size_t k = 0; k < todo.size(); ++k)
-            if (todo[k]->rgba.empty() && !imgs[k].empty()) todo[k]->rgba = std::move(imgs[k]);
+        for (size_t k = 0; k < todo.size(); ++k) {
+            auto& tx = todo[k];
+            const bool replaceCoarser = !tx->rgba.empty() && tx->rgbaDownsample > factor[k];
+            if ((tx->rgba.empty() || replaceCoarser) && !imgs[k].empty()) { tx->rgba = std::move(imgs[k]); tx->rgbaTexelM = texel[k] * factor[k]; tx->rgbaDownsample = factor[k]; }
+        }
         t->nodes[node].ready = true;
     }
     size_t b;
@@ -69,7 +132,7 @@ bool TileCache::decode(const std::shared_ptr<TmxTile>& t, size_t node, std::stri
     }
     std::lock_guard<std::mutex> lk(mu_);
     auto it = tiles_.find(t->path);
-    if (it != tiles_.end() && it->second == t) { bytes_[t->path] = b; evictLocked(); }
+    if (it != tiles_.end() && it->second.tile == t) { setBytesLocked(it->second, b); evictLocked(); }
     return true;
 }
 
@@ -83,38 +146,39 @@ bool TileCache::decodeGeometry(const std::shared_ptr<TmxTile>& t, size_t node, s
     { std::lock_guard<std::mutex> lk(*t->mu); b = tileBytes(*t); }
     std::lock_guard<std::mutex> lk(mu_);
     auto it = tiles_.find(t->path);
-    if (it != tiles_.end() && it->second == t) { bytes_[t->path] = b; evictLocked(); }
+    if (it != tiles_.end() && it->second.tile == t) { setBytesLocked(it->second, b); evictLocked(); }
     return true;
 }
 
 size_t TileCache::loadedBytes() const {
     std::lock_guard<std::mutex> lk(mu_);
-    size_t b = 0;
-    for (auto& kv : bytes_) b += kv.second;
-    return b;
+    return total_;
 }
 
 void TileCache::clear() {
     std::lock_guard<std::mutex> lk(mu_);
-    tiles_.clear(); lastUse_.clear(); bytes_.clear();
+    tiles_.clear(); total_ = 0;
 }
 
 void TileCache::evictLocked() {
-    size_t total = 0;
-    for (auto& kv : bytes_) total += kv.second;
-    while (total > budget_ && tiles_.size() > 1) {
-        auto victim = tiles_.end(); uint64_t best = UINT64_MAX;
-        for (auto it = tiles_.begin(); it != tiles_.end(); ++it) {
-            if (it->second.use_count() > 1) continue;  // 사용 중
-            uint64_t u = lastUse_[it->first];
-            if (u < best) { best = u; victim = it; }
-        }
-        if (victim == tiles_.end()) break;
-        total -= bytes_[victim->first];
-        lastUse_.erase(victim->first);
-        bytes_.erase(victim->first);
-        tiles_.erase(victim);
+    // 예산 안이면 아무것도 훑지 않는다(수집 중에는 get/decode 마다 불리므로 O(n) 훑기가 큰 비용이었다).
+    // 예산을 넘었는데 모든 타일이 사용 중(수집이 붙잡음)이면 훑어도 뺄 것이 없다 → 타일 수만큼 건너뛰어 상각 O(1)
+    if (total_ <= budget_) { evictSkip_ = 0; return; }
+    if (evictSkip_ > 0) { --evictSkip_; return; }
+    // 한 번 훑어 사용 중이 아닌 타일을 오래된 순으로 모아 예산 안에 들 때까지 뺀다(훑기 한 번에 여러 개 — 수집 중 반복 호출에도 O(n) 한 번)
+    g_evictScans++;
+    std::vector<std::pair<uint64_t, std::map<fs::path, Entry>::iterator>> cand;
+    for (auto it = tiles_.begin(); it != tiles_.end(); ++it)
+        if (it->second.tile.use_count() <= 1) cand.emplace_back(it->second.lastUse, it);
+    if (cand.empty()) { evictSkip_ = tiles_.size(); return; }
+    std::sort(cand.begin(), cand.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (auto& c : cand) {
+        if (total_ <= budget_ || tiles_.size() <= 1) break;
+        total_ -= c.second->second.bytes;
+        tiles_.erase(c.second);
+        g_evicted++;
     }
+    if (total_ > budget_) evictSkip_ = tiles_.size();   // 남은 건 전부 사용 중 → 당분간 훑지 않는다
 }
 
 namespace {
@@ -184,13 +248,19 @@ bool collectLeafMeshes(TileCache& c, const fs::path& root, const BandQuad& band,
                        const std::atomic<bool>* cancel, bool textures, size_t maxThreads) {
     LeafStats s;
     std::vector<Job> jobs;
+    const auto t0 = std::chrono::steady_clock::now();
     bool ok = collectRec(c, root, band, jobs, s, err, 0, cancel);
+    const auto t1 = std::chrono::steady_clock::now();
     if (ok) ok = decodeJobs(c, jobs, err, cancel, textures, maxThreads);
+    const auto t2 = std::chrono::steady_clock::now();
+    s.msRead = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    s.msDecode = std::chrono::duration<double, std::milli>(t2 - t1).count();
     if (ok)
         for (auto& j : jobs)
             for (auto& m : j.tile->nodes[j.node].meshes) {
                 if (m->bbox.valid() && !bandIntersectsBox(band, m->bbox)) continue;
                 out.push_back(m); s.meshes++; s.triangles += m->triangleCount();
+                if (m->texture) s.texBytes += m->texture->rgba.px.size();
             }
     if (st) *st = s;
     return ok;

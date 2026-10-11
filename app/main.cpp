@@ -506,12 +506,19 @@ int main(int argc, char** argv) {
     if (haveLine) {
         Vec3 o = local ? Vec3() : w.srs().origin;
         SectionLine l; l.a = Vec2(ax - o.x, ay - o.y); l.b = Vec2(bx - o.x, by - o.y);
+        QElapsedTimer secClock; secClock.start();
         if (!w.computeNow(l, &err)) { log("section-error: " + err); rc = 3; }
         else {
+            const qint64 secWallMs = secClock.elapsed();
             auto d = w.sectionDoc();
             size_t nv = 0; for (auto& pl : d.r.profile) nv += pl.size();
-            log(QStringLiteral("section-ok: polylines=%1 vertices=%2 z=[%3,%4] image=%5x%6").arg(d.r.profile.size()).arg(nv)
-                    .arg(d.r.zMin + d.r.srs.origin.z, 0, 'f', 2).arg(d.r.zMax + d.r.srs.origin.z, 0, 'f', 2).arg(d.img.width()).arg(d.img.height()));
+            const auto& so = w.lastSection();
+            log(QStringLiteral("section-ok: polylines=%1 vertices=%2 z=[%3,%4] image=%5x%6 collect-ms=%7 cut-ms=%8 image-ms=%9 leaves=%10 tris=%11 cut-leaves=%12 read-ms=%13 decode-ms=%14 texMB=%15 wall-ms=%16")
+                    .arg(d.r.profile.size()).arg(nv).arg(d.r.zMin + d.r.srs.origin.z, 0, 'f', 2).arg(d.r.zMax + d.r.srs.origin.z, 0, 'f', 2).arg(d.img.width()).arg(d.img.height())
+                    .arg(int(so.msCollect)).arg(int(so.msCut)).arg(int(so.msImage)).arg(so.stats.leafNodes).arg(so.stats.triangles).arg(so.cutStats.leafNodes)
+                    .arg(int(so.stats.msRead)).arg(int(so.stats.msDecode)).arg(so.stats.texBytes >> 20).arg(secWallMs));
+            { const TileCacheCounters tc = tileCacheCounters();
+              log(QStringLiteral("cache: tex-decodes=%1 tex-ms=%2 evict-scans=%3 evicted=%4").arg(tc.texDecodes).arg(int(tc.texMs)).arg(tc.evictScans).arg(tc.evicted)); }
             log(QStringLiteral("vex-suggest: relief=%1cm visible1to1=%2m suggest=x%3").arg(w.vexRelief() * 100, 0, 'f', 1)
                     .arg(w.sectionView()->fitVisibleHeight(), 0, 'f', 2).arg(w.vexSuggestion()));
             if (vexArg > 0) { w.setVex(vexArg); log(QStringLiteral("vex: x%1 (화면만)").arg(w.sectionView()->verticalExaggeration(), 0, 'g', 3)); }

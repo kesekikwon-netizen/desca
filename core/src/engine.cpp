@@ -43,6 +43,7 @@ bool SmSource::openSm(const fs::path& p, std::string* err) {
 static void addStats(LeafStats& a, const LeafStats& b) {
     a.tilesVisited += b.tilesVisited; a.leafNodes += b.leafNodes; a.meshes += b.meshes; a.triangles += b.triangles;
     a.maxDepth = std::max(a.maxDepth, b.maxDepth); a.fallbackNodes += b.fallbackNodes;
+    a.msRead += b.msRead; a.msDecode += b.msDecode; a.texBytes += b.texBytes;
 }
 
 // 병합 3MX: 레이어(루트)마다 모아서 합친다
@@ -59,6 +60,7 @@ static bool eachRoot(const TmxScene& sc, LeafStats* st, F&& f) {
 }
 
 bool TmxSource::leafMeshes(const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) {
+    cache->wantTexelM.store(textureResHint);
     return eachRoot(scene, st, [&](const fs::path& r, LeafStats* s) { return collectLeafMeshes(*cache, r, band, out, s, err, cancel); });
 }
 
@@ -69,10 +71,12 @@ bool TmxSource::cutMeshes(const BandQuad& band, std::vector<MeshPtr>& out, LeafS
 }
 
 bool TmxSource::bandMeshes(const BandQuad& band, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) {
+    cache->wantTexelM.store(textureResHint > 0 ? textureResHint : res);
     return eachRoot(scene, st, [&](const fs::path& r, LeafStats* s) { return collectBandMeshesForResolution(*cache, r, band, res, out, s, err, cancel); });
 }
 
 bool TmxSource::areaMeshes(const Box3& areaXY, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) {
+    cache->wantTexelM.store(res);   // 정사영상: 그 해상도면 충분
     return eachRoot(scene, st, [&](const fs::path& r, LeafStats* s) { return collectMeshesForResolution(*cache, r, areaXY, res, out, s, err, cancel); });
 }
 
@@ -97,6 +101,7 @@ bool computeSection(MeshSource& src, const SectionRequest& rq, SectionOutput& ou
     // 단면 평면 자체(두께 0)도 포함되도록 띠가 비어 있으면 약간 넓힘
     if (rq.line.front + rq.line.back < 1e-6) band = sectionBand(SectionLine{rq.line.a, rq.line.b, 0.001, 0.001}, 0.0);
     out.previewLod = rq.meshRes > 0;
+    src.textureResHint = rq.wantImage ? rq.imageRes : 0;   // 텍스처는 입면 영상 해상도까지만(TileCache 가 그 이상은 줄여 둔다)
     if (!(out.previewLod ? src.bandMeshes(band, rq.meshRes, meshes, &out.stats, err, cancel) : src.leafMeshes(band, meshes, &out.stats, err, cancel))) return false;
     // 잘린 면은 언제나 최고 해상도 잎: 최종은 위 잎 메시 그대로, 미리보기는 단면 평면 ±1 mm 얇은 띠의 잎을 따로 모음
     std::vector<MeshPtr> cutMeshes;

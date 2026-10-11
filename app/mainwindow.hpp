@@ -145,6 +145,7 @@ public:
     bool iconSheet(const QString& png, QString* log);   // 자동화(v5 A3): 모든 Ico 이름에 SVG 가 있는지 + 칩 모양 격자 캡처
     class GuideBand* guideBand() const { return guide_; }   // 자동화 --ctx-shot: 그리는 동안 떠 있는 안내(v5 C4)
     std::shared_ptr<asec::MeshSource> source() const { return src_; }
+    const asec::SectionOutput& lastSection() const { return last_; }   // 명령줄 기록용(수집·절단·영상 ms, 잎·삼각형 수)
     SectionDoc sectionDoc() const { return section_->doc(); }
     /// 조판 목록에서 고른 도면 전부를 dir 에 저장(이름 sheetFileName + uniqueSheetFileName, 축척 · 용지는 도면마다 자기 값). 동기 — 명령줄 --sheet-batch 도 쓴다. 저장한 수를 돌려주고 log 에 줄마다
     int saveCheckedSheets(const QString& dir, const SheetParams& base, QStringList* log);

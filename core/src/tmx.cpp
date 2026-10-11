@@ -209,6 +209,11 @@ bool decodeNode(TmxTile& t, size_t ni, std::string* err) {
     if (ni >= t.nodes.size()) return false;
     TmxNode& N = t.nodes[ni];
     if (N.decoded) return true;
+    if (t.lazyDecode) {   // 3SM 가상 타일 등
+        if (!t.lazyDecode(t, ni, err)) return false;
+        N.decoded = true;
+        return true;
+    }
     for (auto& rid : N.resourceIds) {
         for (auto& R : t.resources) {
             if (R.id != rid) continue;

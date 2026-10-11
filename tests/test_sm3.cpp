@@ -111,6 +111,10 @@ TEST_CASE("3SM 노드 → 가상 타일: 좌표(실좌표−원점)·1 기반 �
     REQUIRE(sm->readNodeTile(4, t, &err));
     CHECK(t.path == sm->virtualTilePath(4));
     REQUIRE(t.nodes.size() == 1);
+    CHECK_FALSE(t.nodes[0].decoded);     // 읽기는 바이트만(지연 디코드)
+    CHECK(t.nodes[0].meshes.empty());
+    CHECK(t.bytes.size() > 0);
+    REQUIRE(decodeNode(t, 0, &err));
     const TmxNode& N = t.nodes[0];
     CHECK(N.id == "4");
     CHECK(N.children.empty());
@@ -144,6 +148,7 @@ TEST_CASE("3SM 노드 → 가상 타일: 좌표(실좌표−원점)·1 기반 �
     REQUIRE(t3.nodes.size() == 1);
     CHECK(t3.nodes[0].children == std::vector<fs::path>{sm->virtualTilePath(4), sm->virtualTilePath(5)});
     CHECK(t3.nodes[0].maxScreenDiameter == Approx(extBox(f.nodes[1].ext).diag() / f.nodes[1].geomRes));
+    REQUIRE(decodeNode(t3, 0, &err));
     CHECK(t3.nodes[0].meshes.size() == 1);
     CHECK(sm->geometryReads() == 2);
 
@@ -185,6 +190,7 @@ TEST_CASE("3SM: UV 인덱스가 점 인덱스와 다르면 (점, UV) 짝마다 �
     TmxTile t;
     REQUIRE(sm->readNodeTile(2, t, &err));
     REQUIRE(t.nodes.size() == 1);
+    REQUIRE(decodeNode(t, 0, &err));
     REQUIRE(t.nodes[0].meshes.size() == 1);
     const Mesh& m = *t.nodes[0].meshes[0];
     CHECK(m.vertexCount() == 6);
@@ -218,22 +224,24 @@ TEST_CASE("3SM: 텍스처 없음(TexID -1)·SMUVs 행 없음 → 텍스처 없�
     REQUIRE(sm);
     CHECK(sm->nodes().size() == 7);
     TmxTile t4, t5, t3, t6, t7, t8;
-    REQUIRE(sm->readNodeTile(4, t4, &err));
+    auto readDecoded = [&](int64_t id, TmxTile& t) { return sm->readNodeTile(id, t, &err) && decodeNode(t, 0, &err); };
+    REQUIRE(readDecoded(4, t4));
     REQUIRE(t4.nodes[0].meshes.size() == 1);
     CHECK_FALSE(t4.nodes[0].meshes[0]->texture);
     CHECK_FALSE(t4.nodes[0].meshes[0]->uv.empty());
-    REQUIRE(sm->readNodeTile(5, t5, &err));
+    REQUIRE(readDecoded(5, t5));
     REQUIRE(t5.nodes[0].meshes.size() == 1);
     CHECK(t5.nodes[0].meshes[0]->uv.empty());
     CHECK_FALSE(t5.nodes[0].meshes[0]->texture);
-    REQUIRE(sm->readNodeTile(3, t3, &err));
+    REQUIRE(readDecoded(3, t3));
     CHECK(t3.nodes[0].meshes.size() == 1);
-    err.clear(); CHECK_FALSE(sm->readNodeTile(6, t6, &err)); CHECK_FALSE(err.empty());
-    err.clear(); CHECK_FALSE(sm->readNodeTile(7, t7, &err)); CHECK_FALSE(err.empty());
-    err.clear(); CHECK_FALSE(sm->readNodeTile(8, t8, &err)); CHECK_FALSE(err.empty());
+    // 깨진 내용은 읽기(바이트)는 되고 디코드에서 그 노드만 실패한다
+    err.clear(); CHECK_FALSE(readDecoded(6, t6)); CHECK_FALSE(err.empty());
+    err.clear(); CHECK_FALSE(readDecoded(7, t7)); CHECK_FALSE(err.empty());
+    err.clear(); CHECK_FALSE(readDecoded(8, t8)); CHECK_FALSE(err.empty());
     // 깨진 노드가 있어도 다른 노드는 계속 읽힌다
     TmxTile again;
-    CHECK(sm->readNodeTile(4, again, &err));
+    CHECK(readDecoded(4, again));
 }
 
 TEST_CASE("3SM: 깨진 Size 값(거대)·순환 SubNode 는 그 노드 실패·간선 제거로 끝나고 프로그램은 계속 간다") {
@@ -250,9 +258,10 @@ TEST_CASE("3SM: 깨진 Size 값(거대)·순환 SubNode 는 그 노드 실패·�
     CHECK(sm->cycleEdgesRemoved() == 2);
     TmxTile t4, t5;
     err.clear();
-    CHECK_FALSE(sm->readNodeTile(4, t4, &err));
+    CHECK_FALSE(sm->readNodeTile(4, t4, &err));   // 크기 값은 읽기 단계에서 거른다
     CHECK(err.find("3SM") != std::string::npos);
     CHECK(sm->readNodeTile(5, t5, &err));
+    CHECK(decodeNode(t5, 0, &err));
     SmSource src;
     REQUIRE(src.openSm(file, &err));
     CHECK_FALSE(src.scene.warnings.empty());
@@ -271,7 +280,7 @@ TEST_CASE("3SM 연결 풀: 여러 스레드가 동시에 노드를 읽어도 결
             for (int k = 0; k < 40; ++k) {
                 TmxTile tile; std::string e;
                 const int64_t id = 3 + (t + k) % 3;
-                if (sm->readNodeTile(id, tile, &e) && tile.nodes.size() == 1 && tile.nodes[0].meshes.size() == 1) ++ok; else ++bad;
+                if (sm->readNodeTile(id, tile, &e) && decodeNode(tile, 0, &e) && tile.nodes.size() == 1 && tile.nodes[0].meshes.size() == 1) ++ok; else ++bad;
             }
         });
     for (auto& x : th) x.join();
@@ -291,7 +300,8 @@ TEST_CASE("3SM 가상 경로를 readTmxTile 이 읽고, 파일을 닫으면 오�
     REQUIRE(readTmxTile(vp, t, &err));
     REQUIRE(t.nodes.size() == 1);
     CHECK(t.nodes[0].id == "3");
-    CHECK(decodeNode(t, 0, &err));   // 이미 디코드됨 → 그대로 true
+    CHECK(t.nodes[0].meshes.empty());
+    CHECK(decodeNode(t, 0, &err));   // 지연 디코드 → 메시
     CHECK(t.nodes[0].meshes.size() == 1);
     // TileCache 경로: 텍스처 디코드까지
     TileCache cache;
@@ -311,7 +321,7 @@ TEST_CASE("3SM 가상 경로를 readTmxTile 이 읽고, 파일을 닫으면 오�
         TileCache fresh;
         auto g = fresh.get(vp, &err);
         REQUIRE(g);
-        CHECK(fresh.loadedBytes() >= meshBytes);   // get() 직후에도 0 이 아니다
+        CHECK(fresh.loadedBytes() > 0);   // get() 직후에도 0 이 아니다(원시 BLOB 바이트)
     }
     // 같은 파일을 두 번 열어도(같은 불변 파일) 가상 타일은 계속 읽힌다
     {
@@ -413,6 +423,37 @@ TEST_CASE("3SM 평면 스트리밍(LodStreamer): 가상 뿌리에서 내려가 �
     CHECK(f.draw.size() == 2);   // 잎 4·5 만 그린다
     CHECK(f.maxDepthDrawn == 2);
     for (auto k : f.draw) CHECK(s.nodeDepth(k) == 2);
+}
+
+TEST_CASE("TileCache 텍스처 축소: 요청 해상도보다 훨씬 촘촘한 사진은 2ⁿ 로 줄여 두고, 더 촘촘한 요청이 오면 다시 디코드") {
+    auto dir = tmpDir("sm3texdown");
+    fs::path file = writeGround(dir);   // 잎 4: 4 m × 8 m 노드에 32×32 사진 → 텍셀 ≈ 8/32 = 0.25 m
+    std::string err;
+    auto sm = SmFile::open(file, &err);
+    REQUIRE(sm);
+    TileCache cache;
+    cache.textureDecoder = decodeTexStb;
+    const fs::path vp = sm->virtualTilePath(4);
+    cache.wantTexelM.store(2.5);   // 2.5 m/px 요청 → 줄인 텍셀이 요청 이하인 가장 큰 2ⁿ: 0.25×8 = 2.0 → f = 8
+    auto t = cache.get(vp, &err);
+    REQUIRE(t);
+    REQUIRE(cache.decode(t, 0, &err));
+    auto tex = t->nodes[0].meshes[0]->texture;
+    REQUIRE(tex);
+    CHECK(tex->rgba.w == 4); CHECK(tex->rgba.h == 4);
+    CHECK(tex->rgbaDownsample == 8);
+    CHECK(tex->rgbaTexelM == Approx(2.0).epsilon(0.01));
+    // 같은 요청이면 그대로(다시 디코드 안 함)
+    REQUIRE(cache.decode(t, 0, &err));
+    CHECK(tex->rgba.w == 4);
+    // 더 촘촘한 요청(0.1 m/px) → 원본으로 다시 디코드
+    cache.wantTexelM.store(0.1);
+    REQUIRE(cache.decode(t, 0, &err));
+    CHECK(tex->rgba.w == 32); CHECK(tex->rgbaDownsample == 1);
+    // 힌트 0 = 원본 그대로
+    TileCache raw; raw.textureDecoder = decodeTexStb;
+    auto t2 = raw.get(vp, &err); REQUIRE(t2); REQUIRE(raw.decode(t2, 0, &err));
+    CHECK(t2->nodes[0].meshes[0]->texture->rgba.w == 32);
 }
 
 TEST_CASE("3SM 읽기 전용: 열고 자른 뒤 파일 바이트 동일, 부속 파일 없음, 읽기 전용 속성 파일도 열린다") {

@@ -43,7 +43,7 @@ public:
     const std::map<int64_t, SmNodeInfo>& nodes() const { return nodes_; }
     /// 가상 타일 경로: path()/n<id>
     fs::path virtualTilePath(int64_t id) const;
-    /// 노드 하나 → TmxTile(노드 1개, 메시 디코드 완료·decoded=true, 텍스처는 JPEG 바이트(ready=false → TileCache 가 디코드)).
+    /// 노드 하나 → TmxTile(노드 1개). 원시 BLOB 바이트만 읽어 두고(bytes), 압축 풀기·변환·텍스처는 tile.lazyDecode(decodeNode)가 한다 — 수집 순회는 직렬, 디코드는 병렬.
     /// 메시 없는 노드는 meshes 가 비어 있다. 자식은 가상 경로. 여러 스레드에서 동시에 불러도 된다(연결 풀).
     bool readNodeTile(int64_t id, TmxTile& out, std::string* err);
     /// readNodeTile 호출 수(지연 읽기 확인용)

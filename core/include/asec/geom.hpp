@@ -57,6 +57,8 @@ struct Texture {
     std::vector<uint8_t> encoded; // 원본 바이트
     std::string filePath;         // textureFile 이면 경로
     RgbaImage rgba;               // 디코드 결과(앱이 채움)
+    double rgbaTexelM = 0;        // rgba 한 픽셀이 덮는 실제 길이(m, TileCache 가 노드 크기/영상 크기로 추정). 0 = 모름
+    int rgbaDownsample = 1;       // TileCache 가 요청 해상도에 맞춰 줄인 배수(1 = 원본)
 };
 using TexturePtr = std::shared_ptr<Texture>;
 
