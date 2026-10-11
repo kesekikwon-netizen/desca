@@ -9,6 +9,10 @@
 - **포터블** — exe 옆 `portable.txt` 가 있으면 설정을 레지스트리 대신 `settings\` 에(폴더째 옮겨도 그대로). `packaging/make_portable_msvc.py <build-msvc> <dist>`
   가 MSVC 빌드로 `dist/Trench-<버전>-portable/` + zip(Qt·플러그인·OSGeo4W DLL·VC 런타임·아이콘·읽어보기·라이선스·`projects\`·`settings\`)을 만든다.
 - **도면 탭에서 입면 조절** — 뒤·앞 깊이·불투명도·선 굵기·평활을 도면 탭에서도 바꾸면 단면을 다시 계산해 조판 미리보기·저장에 바로 반영.
+  - 점점 느려지던 것 수정(사용자 신고): 도면 탭이 있는 동안 불투명도를 끌거나 단면이 바뀔 때마다 고해상 입면(1.5 mm/px) 계산을 새로 띄우고
+    앞 계산을 멈추지 않아 쌓였다. 이제 불투명도·선 굵기는 다시 계산하지 않고, 깊이·단면선·깊이 음영이 바뀌면 0.3 s 모아 한 번, 도면 탭이
+    보일 때만 계산하며 앞 계산은 취소한다. 목록에서 다른 단면을 고른 뒤 연동이 끊기던 것도 함께(`--sheet-stress`).
+- **노트북 고성능 GPU** — 실행 파일이 `NvOptimusEnablement` · `AmdPowerXpressRequestHighPerformance` 를 내보내 그래픽이 두 개인 노트북에서 NVIDIA/AMD 쪽을 쓰게 함.
 - 조판 위치도 띠(단면선이 가로, 같은 축척) · 위치도 선 ↔ 단면 마우스 연동 · 평면에 다른 단면들도 가늘게 · 단면 글자(B·B′) · 시작 화면 5초 + 저작권.
 - **.3sm 스트리밍** — 변환 없이 SQLite 노드를 LOD 타일처럼 바로 읽음(`core/src/sm3.cpp`, SQLite 동봉). 4.3 GB 열기 0.1 s, 성산리 22호 단면 31–49 s → 2 s.
 

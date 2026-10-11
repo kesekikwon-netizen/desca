@@ -14,6 +14,9 @@
 //   --cut-check: 잘린 면 정확도(단면선 윗면 vs 잎 연직 피킹, 미리보기 vs 최종) + 단면선이 배경 위에 순수 빨강으로 그려졌는지(화면·내보내기)
 //   --vex N: 단면 화면 세로 과장(1·2·5·10, 화면만) / 창 제목 중복 검사는 항상 로그(window-title=…)
 //   --plan-cam X Y mpp: 캡처 전에 평면 카메라를 실좌표 중심·m/px 로(평면-단면 정합 확인)
+//   --open-sheet section 과 함께: --sheet-back m(도면 탭에서 뒤 깊이 변경 → 조판이 따라오는지) ·
+//     --sheet-stress(불투명도 끌기 · 뒤 깊이 연타 · 단면 탭에서 변경 · 목록에서 다른 단면 → 조판 미리보기 계산이 쌓이지 않는지, 실패 종료 코드 12)
+//   .trench.json 을 파일로 주면 그 프로젝트의 모델을 열고 상태를 되살림(로그 project:)
 #include <QApplication>
 #include <QLabel>
 #include <QListWidget>
@@ -40,6 +43,9 @@
 #include <QElapsedTimer>
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include <QSlider>
+#include <QTabBar>
+#include <QDoubleSpinBox>
 #include "asec/pick.hpp"
 #include "mainwindow.hpp"
 #include "guideband.hpp"
@@ -196,6 +202,15 @@ private:
     bool finalOnly_ = false;
 };
 
+#ifdef _WIN32
+// 그래픽이 두 개인 노트북(내장 + NVIDIA/AMD)에서 성능 좋은 쪽을 쓰게 하는 드라이버 약속. 실행 파일이 이 이름으로 내보내야 드라이버가 읽는다
+// (사용자 질문 2026-10-11 「포터블은 어느 컴퓨터에서도 그곳의 GPU 를 쓰나」)
+extern "C" {
+__declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+#endif
+
 int main(int argc, char** argv) {
     for (int i = 1; i + 1 < argc; ++i)
         if (std::string(argv[i]) == "--settings") {   // 시험용: 사용자 설정을 건드리지 않게
@@ -231,6 +246,7 @@ int main(int argc, char** argv) {
     int sheetWheel = 0;
     int sheetPick = -1;   // --sheet-pick N: 조판 탭 왼쪽 도면 목록 N 번째 줄을 누름(0 = 평면도)
     bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
+    bool sheetStress = false; // --sheet-stress: 도면 탭을 연 채 불투명도 끌기 · 뒤 깊이 연타 · 단면 탭에서 바꾸기 → 조판 미리보기 계산이 쌓이지 않는지(종료 코드 12)
     double sheetBack = -1;    // --sheet-back m: 도면 탭이 열린 채 리본 「뒤」 깊이를 바꿔 단면 재계산 → 조판이 따라오는지 점검(2026-10-11)
     QString file, shot, logPath, perfPath, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, uiAuditDir, sheetBatch;
     QString iconSheetPng; bool iconSheet = false;
@@ -301,6 +317,7 @@ int main(int argc, char** argv) {
         else if (s == "--sheet-edit") sheetEdit = true;
         else if (s == "--sheet-pick") sheetPick = nx().toInt();
         else if (s == "--sheet-back") sheetBack = nx().toDouble();
+        else if (s == "--sheet-stress") sheetStress = true;
         else if (s == "--split") split = true;
         else if (s == "--extra-line" && i + 4 < a.size()) { extraLines.push_back({a[i + 1].toDouble(), a[i + 2].toDouble(), a[i + 3].toDouble(), a[i + 4].toDouble()}); i += 4; }
         else if (s.startsWith("--export-")) exports.append({s.mid(9), nx()});
@@ -741,6 +758,62 @@ int main(int argc, char** argv) {
             const SectionDoc d = w.sectionView()->doc();
             log(QStringLiteral("sheet-back: spin-enabled=%1 set=%2 doc.back=%3 imgRes=%4").arg(en ? 1 : 0).arg(sheetBack, 0, 'f', 2).arg(d.r.line.back, 0, 'f', 2).arg(d.imgRes, 0, 'g', 3));
         } else log(QStringLiteral("sheet-back: backSpin not found"));
+    }
+    if (openSheet == QStringLiteral("section") && sheetStress) {
+        // 사용자 신고 2026-10-11 「실행하면 너무 느려진다」: 도면 탭이 있는 동안 단면이 다시 계산될 때마다 · 불투명도를 움직일 때마다
+        // 고해상 입면(1.5 mm/px) 계산을 새로 띄우고 앞 계산을 멈추지 않아 쌓였다. 여기서 그 수를 잰다
+        QSlider* op = w.findChild<QSlider*>(QStringLiteral("opacityRow"));
+        QDoubleSpinBox* bs = w.findChild<QDoubleSpinBox*>(QStringLiteral("backSpin"));
+        QTabBar* tabs = w.findChild<QTabBar*>(QStringLiteral("docTabs"));
+        if (!op || !bs || !tabs) { log(QStringLiteral("sheet-stress: widgets not found op=%1 back=%2 tabs=%3").arg(op != nullptr).arg(bs != nullptr).arg(tabs != nullptr)); rc = 12; }
+        else {
+            auto C = [] { return MainWindow::sheetPreviewCounters(); };
+            auto settle = [&](int ms) { QElapsedTimer t; t.start(); processFor(ms); while (C().active > 0 && t.elapsed() < 60000) processFor(100); };
+            settle(1500);
+            const auto c0 = C();
+            for (int v = op->value() - 1, n = 0; n < 40 && v >= 10; --v, ++n) { op->setValue(v); processFor(5); }   // 불투명도 끌기(스타일만)
+            settle(1500);
+            const auto c1 = C();
+            const double b0 = bs->value();
+            bs->setValue(b0 > 1.0 ? b0 - 0.5 : b0 + 0.5); processFor(30);   // 뒤 깊이 연타 셋(도면 탭에서)
+            bs->setValue(b0 > 1.0 ? b0 - 1.0 : b0 + 1.0); processFor(30);
+            bs->setValue(b0 > 1.0 ? b0 - 0.75 : b0 + 0.75);
+            settle(4000);
+            const auto c2 = C();
+            tabs->setCurrentIndex(1); processFor(300);                         // 단면 탭으로 — 조판이 안 보임
+            bs->setValue(b0);
+            settle(4000);
+            const auto c3 = C();
+            tabs->setCurrentIndex(2); processFor(200);                         // 도면 탭으로 돌아오면 그때 한 번
+            settle(4000);
+            const auto c4 = C();
+            int pickDepth = -1, pickOpen = -1;   // 목록에서 다른 단면을 고른 뒤 뒤 깊이를 바꾸면 새 조판이 따라오는가(단면이 둘 이상일 때만)
+            QListWidget* lw = nullptr;
+            if (QWidget* page = w.findChild<QWidget*>(QStringLiteral("sheetPage"))) lw = page->findChild<QListWidget*>(QStringLiteral("sectionList"));
+            if (lw) {
+                // 목록 줄: 머리(-1) · 평면도(0) · 단면(1..). 지금 단면이 아닌 단면 줄을 누르면 새 조판이 열린다(지금 단면이면 아무 일 없음 → 다음 줄)
+                MainWindow::SheetPreviewCounters c5 = c4;
+                for (int i = 0; i < lw->count() && pickOpen <= 0; ++i) {
+                    if (lw->item(i)->data(Qt::UserRole).toInt() < 1) continue;
+                    const auto before = C();
+                    emit lw->itemClicked(lw->item(i));
+                    settle(4000);
+                    c5 = C();
+                    pickOpen = c5.started - before.started;
+                    if (QWidget* page = w.findChild<QWidget*>(QStringLiteral("sheetPage"))) lw = page->findChild<QListWidget*>(QStringLiteral("sectionList"));   // 새 조판이면 목록도 새것
+                    if (!lw) break;
+                }
+                if (QDoubleSpinBox* bs2 = w.findChild<QDoubleSpinBox*>(QStringLiteral("backSpin"))) bs2->setValue(bs2->value() > 1.0 ? bs2->value() - 0.5 : bs2->value() + 0.5);
+                settle(4000);
+                pickDepth = C().started - c5.started;
+            }
+            const auto c6 = C();
+            const int open = c0.started, opac = c1.started - c0.started, depth = c2.started - c1.started, hidden = c3.started - c2.started, shown = c4.started - c3.started;
+            const bool ok = open == 1 && opac == 0 && depth >= 1 && depth <= 2 && hidden == 0 && shown == 1 && c6.peak <= 2 && pickDepth != 0;
+            log(QStringLiteral("sheet-stress: open=%1 opacity=%2 depth=%3 hidden=%4 shown=%5 pick-open=%6 pick-depth=%7 peak=%8 active=%9 %10")
+                    .arg(open).arg(opac).arg(depth).arg(hidden).arg(shown).arg(pickOpen).arg(pickDepth).arg(c6.peak).arg(c6.active).arg(ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
+            if (!ok) rc = 12;
+        }
     }
     if (!openSheet.isEmpty() && sheetEdit) {
         for (QPushButton* b : w.findChildren<QPushButton*>()) if (b->isVisible() && b->text() == QStringLiteral("조판편집")) { b->click(); break; }

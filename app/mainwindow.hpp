@@ -136,6 +136,9 @@ public:
     PlanSheetParams defaultPlanSheetParams() const;
     void dlgChooseSheet();                            // 평면 / 단면 조판 고르기
     void dlgSheet();                                   // 단면도 조판
+    /// 조판 미리보기(고해상 입면 · 위치도) 작업 스레드 셈 — 명령줄 점검 --sheet-stress 용(2026-10-11 「포터블이 느려진다」)
+    struct SheetPreviewCounters { int started = 0, active = 0, peak = 0; };
+    static SheetPreviewCounters sheetPreviewCounters();
     void dlgPlanSheet();                               // 평면도 조판
     QDialog* buildSheetDialog(SheetParams& io, bool& accepted);   // 자동화(창 캡처)에서도 씀
     QDialog* buildPlanSheetDialog(PlanSheetParams& io, const QImage& preview, double prevX0, double prevY1, double prevRes, bool& accepted);
@@ -226,6 +229,7 @@ private:
     QWidget* sheetHost_ = nullptr;
     std::function<void()> embeddedSave_;
     std::function<void()> sheetRefresh_;   // 열린 단면도 조판에 새 단면(입면 변경 뒤)을 넣는 훅 — buildSheetDialog 가 설정
+    quint64 sheetRefreshGen_ = 0;          // 훅을 건 조판 세대 — 옛 조판이 늦게 지워질 때 새 조판의 훅을 지우지 않게
     void notifySheetDoc() { if (sheetRefresh_) sheetRefresh_(); }
     void showSheetTab(QWidget* page);
     void showSheetTab(QDialog* d, std::function<void()> save);

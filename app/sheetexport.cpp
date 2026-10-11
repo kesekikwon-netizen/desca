@@ -1140,6 +1140,27 @@ void paintPaperFrame(QPainter& p, const QPointF& o, const QSizeF& pz) {
 }
 }  // namespace
 
+namespace {
+std::atomic<int> g_pvStarted{0}, g_pvActive{0}, g_pvPeak{0};
+struct PreviewActive {   // 조판 미리보기 작업 스레드 하나가 도는 동안(동시에 몇 개 도는지 셈)
+    PreviewActive() { const int a = ++g_pvActive; int p = g_pvPeak.load(); while (a > p && !g_pvPeak.compare_exchange_weak(p, a)) {} }
+    ~PreviewActive() { --g_pvActive; }
+};
+}  // namespace
+
+MainWindow::SheetPreviewCounters MainWindow::sheetPreviewCounters() { return {g_pvStarted.load(), g_pvActive.load(), g_pvPeak.load()}; }
+
+namespace {
+// 조판의 고해상 입면 · 위치도를 다시 계산해야 하는 차이: 단면선 양 끝 · 앞/뒤 깊이 · 깊이 음영.
+// 불투명도 · 선 굵기 · 평활은 그리기(또는 단면선)만 바뀌므로 다시 계산하지 않는다
+bool sameElevation(const SectionDoc& a, const SectionDoc& b) {
+    const SectionLine& x = a.r.line; const SectionLine& y = b.r.line;
+    auto eq = [](double u, double v) { return std::fabs(u - v) < 1e-9; };
+    return eq(x.a.x, y.a.x) && eq(x.a.y, y.a.y) && eq(x.b.x, y.b.x) && eq(x.b.y, y.b.y) && eq(x.front, y.front) && eq(x.back, y.back)
+        && a.st.depthFade == b.st.depthFade;
+}
+}  // namespace
+
 QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     accepted = false;
     auto* d = new QDialog(this);
@@ -1152,16 +1173,20 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     auto screenImgP = std::make_shared<QImage>((*docP).img);
     auto screenGeoP = std::make_shared<SectionImgGeo>(SectionImgGeo{(*docP).imgS0, (*docP).imgZ1, (*docP).imgRes});
     auto screenPlan = std::make_shared<PlanStrip>();
-    auto previewCancel = std::make_shared<std::atomic<bool>>(false);
-    QObject::connect(d, &QObject::destroyed, [previewCancel] { previewCancel->store(true); });
+    auto runCancel = std::make_shared<std::shared_ptr<std::atomic<bool>>>();   // 지금 도는 미리보기 계산의 취소 표시 — 새 계산이 시작되거나 조판이 닫히면 멈춘다
+    QObject::connect(d, &QObject::destroyed, [runCancel] { if (*runCancel) (*runCancel)->store(true); });
     auto* outer = new QHBoxLayout(d); outer->setContentsMargins(0, 0, 0, 0); outer->setSpacing(0);
     // ---- 책상(Desk): 종이 가운데, 떠 있는 안내 · 도구 줄은 아래에서
     auto* pv = new SheetPreview; pv->setMinimumSize(470, 330);
     // 고해상 입면·위치도 영상을 작업 스레드로(열 때 한 번, 그리고 도면 탭에서 입면을 바꿔 단면이 다시 계산될 때마다)
     auto previewGen = std::make_shared<std::atomic<int>>(0);   // 늦게 끝난 옛 미리보기 스레드 결과는 버린다
     auto startPreview = std::make_shared<std::function<void()>>();
-    *startPreview = [this, docP, st, screenImgP, screenGeoP, screenPlan, previewCancel, previewGen, pv] {   // CI 는 MSVC C++17: [=, this] 는 C++20(C3791)
+    *startPreview = [this, docP, st, screenImgP, screenGeoP, screenPlan, runCancel, previewGen, pv] {   // CI 는 MSVC C++17: [=, this] 는 C++20(C3791)
         if (!src_) return;
+        // 앞 계산은 바로 멈춘다 — 전에는 멈추지 않아 불투명도 끌기 · 단면이 바뀔 때마다 고해상 계산이 쌓여 점점 느려졌다(사용자 신고 2026-10-11)
+        if (*runCancel) (*runCancel)->store(true);
+        auto cancel = std::make_shared<std::atomic<bool>>(false);
+        *runCancel = cancel;
         const int myGen = ++*previewGen;
         const SectionDoc docSnap = *docP;
         const bool needImg = docSnap.imgRes > 0.0016;   // 화면 영상이 1.5 mm/px 보다 거칠면 다시 계산
@@ -1169,17 +1194,19 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         const double h0 = planStripHalfWidth(docSnap.r.line.front, docSnap.r.line.back);
         const double planRes = groundResolution(std::max(10.0, G0.spec.denom), 150);
         const bool needPlan = G0.lenM > 0;
-        std::thread([src = src_, docSnap, needImg, needPlan, h0, planRes, screenImgP, screenGeoP, screenPlan, previewCancel, previewGen, myGen, pvp = QPointer<SheetPreview>(pv)] {
-            if (needPlan && !previewCancel->load()) {   // 위치도부터(가볍다) → 바로 보이게
+        ++g_pvStarted;
+        std::thread([src = src_, docSnap, needImg, needPlan, h0, planRes, screenImgP, screenGeoP, screenPlan, cancel, previewGen, myGen, pvp = QPointer<SheetPreview>(pv)] {
+            PreviewActive active;
+            if (needPlan && !cancel->load()) {   // 위치도부터(가볍다) → 바로 보이게
                 PlanStrip ps;
-                if (renderPlanStrip(*src, docSnap.r.line, h0, planRes, 6e6, ps, previewCancel.get()) && !previewCancel->load())
+                if (renderPlanStrip(*src, docSnap.r.line, h0, planRes, 6e6, ps, cancel.get()) && !cancel->load())
                     QMetaObject::invokeMethod(qApp, [screenPlan, ps, pvp, previewGen, myGen] { if (previewGen->load() != myGen) return; *screenPlan = ps; if (pvp) pvp->update(); }, Qt::QueuedConnection);
             }
-            if (needImg && !previewCancel->load()) {
+            if (needImg && !cancel->load()) {
                 SectionRequest rq; rq.line = docSnap.r.line; rq.depthFade = docSnap.st.depthFade ? kDepthFadeStrength : 0.0;
                 rq.imageRes = 0.0015; rq.maxImagePixels = size_t(60) << 20;
                 SectionOutput out; std::string e;
-                if (computeSection(*src, rq, out, &e, previewCancel.get()) && !previewCancel->load()) {
+                if (computeSection(*src, rq, out, &e, cancel.get()) && !cancel->load()) {
                     QImage im = toQImageS(out.image.img);
                     const SectionImgGeo g{out.image.s0, out.image.z1, out.image.res};
                     QMetaObject::invokeMethod(qApp, [screenImgP, screenGeoP, im, g, pvp, previewGen, myGen] { if (previewGen->load() != myGen) return; *screenImgP = im; *screenGeoP = g; if (pvp) pvp->update(); }, Qt::QueuedConnection);
@@ -1188,6 +1215,12 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         }).detach();
     };
     (*startPreview)();
+    // 단면이 바뀌면(뒤·앞 깊이 · 깊이 음영 · 단면선) 0.3 s 모아서 한 번, 도면 탭이 보일 때만 다시 계산 — 안 보이면 표시만 해 두고 보일 때(paintFn)
+    auto previewDirty = std::make_shared<bool>(false);
+    auto* previewTimer = new QTimer(d); previewTimer->setSingleShot(true); previewTimer->setInterval(300);
+    QObject::connect(previewTimer, &QTimer::timeout, d, [pv, startPreview, previewDirty] {
+        if (pv->isVisible()) { *previewDirty = false; (*startPreview)(); } else *previewDirty = true;
+    });
     bindImageDrag(pv, &st->imgDxMm, &st->imgDyMm);
     outer->addWidget(pv, 1);
     // ---- 오른쪽 판 320: 머리 · 도면 항목 · 도면 정보 · 선 글자 · 형식 · 도면 점검 | 바닥
@@ -1333,15 +1366,25 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         pv->update();
     };
     // 도면 탭에서 입면(뒤·앞 깊이, 불투명도, 선 굵기, 평활)을 바꾸면 단면이 다시 계산되고, 끝나면 여기로 새 단면이 들어온다(사용자 요청 2026-10-11)
-    sheetRefresh_ = [this, docP, screenImgP, screenGeoP, startPreview, refresh] {
+    // 이 조판은 지금 단면(secIdx) 것 — 작업 탭에서 다른 단면을 고르면 건드리지 않는다(그 단면의 조판은 도면을 다시 열 때 새로 만든다)
+    const int secIdx = current_;
+    const std::string secName = (current_ >= 0 && current_ < int(sections_.size())) ? sections_[size_t(current_)].name : std::string();
+    sheetRefresh_ = [this, docP, screenImgP, screenGeoP, previewTimer, refresh, secIdx, secName] {
         if (!section_ || !section_->hasResult()) return;
-        *docP = section_->doc();
-        *screenImgP = docP->img; *screenGeoP = SectionImgGeo{docP->imgS0, docP->imgZ1, docP->imgRes};
-        (*startPreview)();
+        if (current_ != secIdx || (secIdx >= 0 && (secIdx >= int(sections_.size()) || sections_[size_t(secIdx)].name != secName))) return;
+        SectionDoc nd = section_->doc();
+        const bool imageChanged = !sameElevation(*docP, nd);
+        *docP = std::move(nd);
+        if (imageChanged) {   // 화면 영상으로 바로 바꿔 보여 주고, 고해상 입면은 0.3 s 뒤 한 번(끌기 · 연타는 합쳐짐)
+            *screenImgP = docP->img; *screenGeoP = SectionImgGeo{docP->imgS0, docP->imgZ1, docP->imgRes};
+            previewTimer->start();
+        }
         (*refresh)();
     };
-    QObject::connect(d, &QObject::destroyed, this, [this] { sheetRefresh_ = nullptr; });
+    const quint64 refreshGen = ++sheetRefreshGen_;
+    QObject::connect(d, &QObject::destroyed, this, [this, refreshGen] { if (sheetRefreshGen_ == refreshGen) sheetRefresh_ = nullptr; });   // 옛 조판이 늦게 지워져도 새 조판의 훅은 남긴다
     pv->paintFn = [=](QPainter& p, const QRect& rc) {
+        if (*previewDirty) { *previewDirty = false; QTimer::singleShot(0, d, [startPreview] { (*startPreview)(); }); }   // 안 보일 때 미뤄 둔 계산
         p.fillRect(rc, theme::Desk);
         SheetGeom G = sheetGeom((*docP), *st);
         double sc = std::min((rc.width() - 48.0) / G.L.paperW, (rc.height() - 110.0) / G.L.paperH);   // 위 안내 칩 · 아래 도구 줄 자리
