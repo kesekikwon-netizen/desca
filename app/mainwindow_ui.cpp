@@ -2377,6 +2377,7 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
         motion::setForcedOff(false); st.setValue(QStringLiteral("ui/animations"), true);
         const bool onNow = motion::animationsOn();
         bool tabFade = false, chipFade = false, xFade = false, offClean = false;
+        qint64 xFadeEndMs = -1;
         if (body_ && body_->count() >= 2) {
             const int cur = body_->currentIndex();
             body_->setCurrentIndex(cur == 0 ? 1 : 0);
@@ -2397,15 +2398,20 @@ bool MainWindow::uiAudit(const QString& dir, QString* out) {
             const SectionDoc d0 = section_->doc();
             section_->setResult(d0.r, d0.img, d0.imgS0, d0.imgZ1, d0.imgRes, true, true);
             xFade = section_->crossfadeActive();
-            pump(motion::kCrossfade + 150);
+            // 끝나는지를 본다(최대 2 s). 끝나는 시각은 큰 화면에서 그리기 시간에 좌우된다 — 4K ×2 에서 150 ms 페이드가 이 PC 288 ms(2코어 429 ms)에
+            // 끝나고, CI 에서는 「kCrossfade + 150 ms」를 넘겨 이전 커밋(d6dce8c)을 다시 돌려도 같은 판정에서 떨어졌다(2026-10-11).
+            // 전환 길이 규칙(≤ 300 ms)은 위 tableOk 가 motion 표에서 본다
+            QElapsedTimer xt; xt.start();
+            while (section_->crossfadeActive() && xt.elapsed() < 2000) QApplication::processEvents(QEventLoop::AllEvents, 10);
+            xFadeEndMs = xt.elapsed();
             xFade = xFade && !section_->crossfadeActive();
         } else xFade = true;   // 결과가 없으면 판정할 것이 없다
         motion::setForcedOff(true);   // 꺼짐 = 즉시: 같은 전환이 겹침 없이 끝나야 한다
         if (body_ && body_->count() >= 2) { const int cur = body_->currentIndex(); body_->setCurrentIndex(cur == 0 ? 1 : 0); offClean = !body_->fading() && motion::ms(motion::kTab) == 0; body_->setCurrentIndex(cur); }
         if (keepAnim.isValid()) st.setValue(QStringLiteral("ui/animations"), keepAnim); else st.remove(QStringLiteral("ui/animations"));
         const bool motionOk = tableOk && onNow && tabFade && chipFade && xFade && offClean;
-        L << QStringLiteral("ui-audit motion durations-from-one-place=%1 max-ms=%2 ui-entries=%3 easing=OutCubic splash=%4 tab-fade=%5 chip-fade=%6 crossfade=%7 off-immediate=%8%9")
-                 .arg(tableOk ? 1 : 0).arg(maxUi).arg(nUi).arg(motion::kSplash).arg(tabFade ? 1 : 0).arg(chipFade ? 1 : 0).arg(xFade ? 1 : 0).arg(offClean ? 1 : 0).arg(motionOk ? QString() : QStringLiteral("  FAIL"));
+        L << QStringLiteral("ui-audit motion durations-from-one-place=%1 max-ms=%2 ui-entries=%3 easing=OutCubic splash=%4 tab-fade=%5 chip-fade=%6 crossfade=%7 crossfade-end-ms=%8 off-immediate=%9%10")
+                 .arg(tableOk ? 1 : 0).arg(maxUi).arg(nUi).arg(motion::kSplash).arg(tabFade ? 1 : 0).arg(chipFade ? 1 : 0).arg(xFade ? 1 : 0).arg(xFadeEndMs).arg(offClean ? 1 : 0).arg(motionOk ? QString() : QStringLiteral("  FAIL"));
         ok &= motionOk;
     }
 
