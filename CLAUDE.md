@@ -65,6 +65,9 @@ Remove-Item C:\dev\tmp\kerf-check -Recurse -Force -ErrorAction SilentlyContinue;
 - **앱 빌드 분기 둘**(`app/CMakeLists.txt`). ① `find_package(Qt6)`: 지금 개발 · CI가 쓰는 길, Svg 포함. ② `ASEC_QT_WIN_DIR`(MinGW 교차, `build-win.sh`): Qt를 손으로 링크하고 Svg가 없다. .3sm 읽기는 코어(`core/src/sm3.cpp`, SQLite 아말감 `third_party/sqlite`)가 하므로 두 분기 모두 Qt Sql 이 필요 없다. `icons.cpp`(QSvgRenderer)와 `sheetexport.cpp`(QSvgGenerator)가 Qt Svg를 조건 없이 쓰는데 ②의 include · 링크 목록에 QtSvg가 없어, ②는 지금 빌드되지 않는다(코드로 확인, 실행은 안 함). 새 Qt 모듈을 쓰면 두 분기를 모두 본다.
 
 ## 함정
+- **MSVC(ninja) 빌드가 헤더 변경을 놓친 사례(2026-10-11)**: `core/include/asec/{tmx,lod,geom}.hpp` 의 구조체(TmxTile·TileCache·Texture)를 바꾼 뒤
+  일부 .obj(lod.cpp·engine.cpp·planview.cpp 등)가 다시 컴파일되지 않은 채 링크돼 앱이 파일을 열자마자 0xC0000005 로 꺼졌다(Windows 오류 기록).
+  코어 헤더의 구조체를 바꾸면 `cmake --build build-msvc --target clean` 뒤 다시 빌드하거나 `core/src/*.cpp app/*.cpp tools/*.cpp` 를 touch 한다.
 - **Linux · WSL git으로 보면 줄바꿈 탓에 거의 모든 파일이 수정됨(M)으로 보인다.** 이 PC의 Windows git(`core.autocrlf=true`)으로는 깨끗하다. 실제 변경은 `git diff HEAD --ignore-cr-at-eol --stat`로 본다. `git add -A` · `git add .`은 어디서든 금지 — 바꾼 파일만 이름으로 더한다(다른 세션의 미커밋 변경이 섞여 있음, R5.2). 푸시 명령은 DEV_PROGRESS §4 「푸시 해결」.
 - offscreen 실행에는 앱 옆 `platforms\qoffscreen.dll`이 있어야 한다. windeployqt는 넣지 않는다(`C:\dev\kerf-v4c\app\platforms`에는 이미 있음).
 - 저장소는 **공개**다. 실좌표가 보이는 캡처 · 실제 모델 · 다른 앱(Strata) 캡처를 커밋하지 않는다.
