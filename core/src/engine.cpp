@@ -18,6 +18,25 @@ bool TmxSource::open(const fs::path& p, std::string* err) {
     return true;
 }
 
+bool SmSource::openSm(const fs::path& p, std::string* err) {
+    file = SmFile::open(p, err);
+    if (!file) return false;
+    scene = TmxScene();
+    scene.name = p.stem().u8string();
+    scene.srs = SrsInfo();
+    scene.srs.srs = file->gcs();           // SMMasterHeader.GCS(WKT1 COMPD_CS) 원문 그대로 — 값 변환 없음
+    scene.srs.origin = file->origin();     // 뿌리 Extent 중심(xy 1 m 반올림), z = 0
+    scene.srs.hasOrigin = true;
+    TmxLayer L;
+    L.id = "0"; L.name = scene.name; L.srs = scene.srs; L.rootFile = file->virtualTilePath(file->rootId());
+    scene.layers = {L};
+    scene.rootFile = L.rootFile;
+    if (file->gcs().empty()) scene.warnings.push_back("3SM 에 좌표계(GCS) 정보가 없습니다.");
+    srs = scene.srs;
+    bounds = file->boundsLocal();
+    return bounds.valid();
+}
+
 static void addStats(LeafStats& a, const LeafStats& b) {
     a.tilesVisited += b.tilesVisited; a.leafNodes += b.leafNodes; a.meshes += b.meshes; a.triangles += b.triangles;
     a.maxDepth = std::max(a.maxDepth, b.maxDepth); a.fallbackNodes += b.fallbackNodes;

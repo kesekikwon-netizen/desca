@@ -4,6 +4,7 @@
 #include "asec/export.hpp"
 #include "asec/lod.hpp"
 #include "asec/raster.hpp"
+#include "asec/sm3.hpp"
 
 namespace asec {
 
@@ -36,6 +37,14 @@ public:
     bool cutMeshes(const BandQuad& band, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel) override;
     /// XY 상자 + 해상도(정사영상용, 모든 레이어)
     bool areaMeshes(const Box3& areaXY, double res, std::vector<MeshPtr>& out, LeafStats* st, std::string* err, const std::atomic<bool>* cancel = nullptr);
+};
+
+/// 3SM(Bentley ScalableMesh, SQLite): 노드마다 가상 타일(`<x.3sm>/n<id>`) — 읽기·캐시·스트리밍은 TmxSource 와 같은 코드
+class SmSource : public TmxSource {
+public:
+    std::shared_ptr<SmFile> file;
+    /// 읽기 전용으로 열고 노드 색인만 읽는다(기하는 타일 요청 때). scene(SRS = 파일 WKT 원문, origin, 가상 뿌리)·bounds 를 채운다
+    bool openSm(const fs::path& p, std::string* err);
 };
 
 class StaticSource : public MeshSource {

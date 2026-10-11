@@ -1,5 +1,6 @@
 #include "asec/tmx.hpp"
 #include "asec/obj.hpp"
+#include "asec/sm3.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -157,6 +158,10 @@ bool readTmxScene(const fs::path& file3mx, TmxScene& out, std::string* err) {
 }
 
 bool readTmxTile(const fs::path& p, TmxTile& t, std::string* err) {
+    {   // 3SM 가상 타일(`<x.3sm>/n<id>`): SQLite 에서 그 노드만 읽는다(asec/sm3.hpp)
+        fs::path f3sm; int64_t id = 0;
+        if (parseSmVirtualPath(p, &f3sm, &id)) return readSmVirtualTile(p, t, err);
+    }
     t = TmxTile();
     t.path = p;
     if (!readFileBytes(p, t.bytes)) { setErr(err, "타일을 읽을 수 없습니다: " + p.u8string()); return false; }

@@ -306,3 +306,27 @@ TEST_CASE("SRS: horizontalLabelKo — 수평만의 한 줄(높이 글 없음)") 
     CHECK(describeSrs(kRealWkt).horizontalLabelKo().find("높이") == std::string::npos);
     CHECK(describeSrs("EPSG:5186+5193").horizontalLabelKo() == "수평 EPSG:5186 · 중부원점(GRS80)");   // 복합 좌표계도 수평만
 }
+
+// H:sm 의 세 파일(화원 성산리 석곽·북문지·1차발굴최종) 공통 SMMasterHeader.GCS 원문 — 동경 129°(동부원점), 가산 북 600000.
+// 이름은 "Korea 2000 / East Belt"(5183 과 같은 이름) 이지만 매개변수는 East Belt 2010 = EPSG:5187 → 값이 이긴다(research/3sm-format.md)
+static const char* kBentley3smWktEast = R"WKT(COMPD_CS["Korea 2000 / East Belt ",PROJCS["Korea 2000 / East Belt ",GEOGCS["Korean2000.LL",DATUM["Korean2000",SPHEROID["GRS1980",6378137.000,298.25722210],TOWGS84[0.0000,0.0000,0.0000,-0.000000,-0.000000,-0.000000,0.00000000]],PRIMEM["Greenwich",0],UNIT["Degree",0.017453292519943295]],PROJECTION["Transverse Mercator"],PARAMETER["False Easting",200000.000],PARAMETER["False Northing",600000.000],PARAMETER["Scale Reduction",1.000000000000],PARAMETER["Central Meridian",129.00000000000003],PARAMETER["Origin Latitude",38.00000000000001],UNIT["Meter",1.00000000000000]],VERT_CS["Ellipsoid Height",VERT_DATUM["Ellipsoid",2002],UNIT["Meter",1.000000]]])WKT";
+
+TEST_CASE("SRS: 3SM Bentley WKT1 동부원점(중앙경선 129, 가산 북 600000) → EPSG:5187 + 타원체고, 값 변환 없음") {
+    SrsDesc d = describeSrs(kBentley3smWktEast);
+    CHECK(d.horizontalEpsg == 5187);
+    CHECK(d.hasTm);
+    CHECK(d.tmLat0 == Approx(38)); CHECK(d.tmLon0 == Approx(129)); CHECK(d.tmK0 == 1); CHECK(d.tmFE == 200000); CHECK(d.tmFN == 600000);
+    CHECK(d.vertKind == VertKind::Ellipsoidal);
+    CHECK(d.vdatum == VDatum::Ellipsoidal);
+    CHECK(d.shortAscii() == "EPSG:5187 h=ellipsoidal(GRS80)");
+    SrsInfo s; s.srs = kBentley3smWktEast;
+    CHECK(s.epsg() == 5187);
+    CHECK(s.verticalEpsg() == 0);
+    // 3SM 실좌표(예 153534, 356975) 를 double 원점으로 빼서 float32 로컬에 두면 정밀도 경고가 없다
+    s.origin = Vec3(153534, 356975, 0); s.hasOrigin = true;
+    Box3 lb; lb.add(Vec3(-7, -6, 32)); lb.add(Vec3(8, 6, 35.2));
+    SrsReport r = analyzeSrs(s, lb);
+    CHECK_FALSE(r.precisionWarning);
+    CHECK(r.maxLocalXY < 10);
+    CHECK(r.hasLatLon); CHECK(r.lat == Approx(35.81).margin(0.05)); CHECK(r.lon == Approx(128.49).margin(0.05));
+}
