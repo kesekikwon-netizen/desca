@@ -16,6 +16,7 @@ struct SectionStyle {
     bool showBaseline = false;  // 기준선 EL(점선 + 「기준선 EL. 57.00 m」)
     double baselineEl = 0;      // 절대 표고(m)
     bool plotScaleBar = true;   // 그림 칸 안 축척 막대(도면은 표제란 띠에 따로 그림)
+    QString nameA = QStringLiteral("A"), nameB = QStringLiteral("A′");   // 단면 이름의 끝 글자(B–B′ 면 B · B′) — 축 글자·거리 축 이름에(2026-10-11)
 };
 
 /// 단면 도면 한 장을 그리는 데 필요한 모든 것(스레드 사이 복사용 스냅숏)

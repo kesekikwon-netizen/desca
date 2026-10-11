@@ -1096,6 +1096,7 @@ void MainWindow::refreshSectionList() {
         plan_->setOtherSections(std::move(others));
         plan_->setLineName(current_ >= 0 && current_ < int(sections_.size()) ? qs8(sections_[size_t(current_)].name) : QString());
     }
+    if (section_) section_->setStyle(secStyle());   // 단면 보기 축 글자도 이름대로
     refreshSheetList();
 }
 

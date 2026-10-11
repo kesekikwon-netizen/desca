@@ -328,7 +328,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     }
     p.setFont(small);
     p.setPen(theme::Idle);
-    p.drawText(QRectF(pr.right() - 160 * ui, pr.bottom() + 6 * ui + fm.height(), 160 * ui, fm.height()), Qt::AlignRight, QStringLiteral("A로부터 거리 (m)"));
+    p.drawText(QRectF(pr.right() - 160 * ui, pr.bottom() + 6 * ui + fm.height(), 160 * ui, fm.height()), Qt::AlignRight, QStringLiteral("%1로부터 거리 (m)").arg(st_.nameA));
     p.restore();
     // 9) A / A′ 는 그림 칸 위 여백에서만 가로로 움직인다
     p.save();
@@ -339,7 +339,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         if (xs < pr.left() - 20 || xs > pr.right() + 20) continue;
         QRectF tr(xs - 18 * ui, pr.top() - 24 * ui, 36 * ui, 20 * ui);
         p.setPen(theme::SectionRed);
-        p.drawText(tr, Qt::AlignCenter, k ? QStringLiteral("A′") : QStringLiteral("A"));
+        p.drawText(tr, Qt::AlignCenter, k ? st_.nameB : st_.nameA);
     }
     p.restore();
     // 11) 제목(내보내기 영상만 — 화면은 보기 머리·정보 띠가 대신, 도면은 표제란이 대신)

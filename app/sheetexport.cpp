@@ -892,6 +892,7 @@ public:
     // 위치도 선 ↔ 단면 연동(사용자 결정 2026-10-11): 위 선 근처(자석)·아래 단면 칸 위에서 마우스가 가리키는 A 로부터의 거리 s(m). paintFn 이 geom 을 채운다
     SheetPaintProbe geom; bool geomValid = false;
     bool hasHover = false; double hoverS = 0; bool hoverOnStrip = false;
+    QString letterA = QStringLiteral("A");   // 거리 글자의 기준 글자(단면 이름 앞 글자)
     static constexpr double kSnapPx = 14;   // 위치도 선에서 이만큼 안이면 선에 붙는다
     SheetPreview() { setMouseTracking(true); setFocusPolicy(Qt::WheelFocus); setObjectName(QStringLiteral("sheetPreview")); }
     /// 위젯 좌표 → 거리 s. 띠 선 근처면 선에 붙고, 단면 칸 위면 그 x 의 거리. 둘 다 아니면 false
@@ -918,7 +919,7 @@ public:
             p.setPen(QPen(theme::SectionRed, 1.5)); p.setBrush(Qt::white);
             p.drawEllipse(QPointF(x, geom.stripLineY), 4.5, 4.5);
         }
-        const QString t = QStringLiteral("A 에서 %1 m").arg(hoverS, 0, 'f', 2);
+        const QString t = QStringLiteral("%1 에서 %2 m").arg(letterA).arg(hoverS, 0, 'f', 2);
         QFont f = theme::monoFont(11); p.setFont(f);
         const QRectF tb = QFontMetricsF(f).boundingRect(t).adjusted(-5, -2, 5, 2);
         QRectF box(QPointF(x + 8, geom.plot.top() + 6), tb.size());
@@ -1338,6 +1339,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         pv->fitPxPerMm = sc;
         pv->zoomCenter = o + QPointF((G.L.plotX + G.L.plotW / 2) * sc, (G.L.plotY + G.L.plotH / 2) * sc);
         pv->geom = SheetPaintProbe();
+        pv->letterA = doc.st.nameA;
         paintSheet(p, doc, *st, sc, 0, *screenImgP, *screenGeoP, pv->zoom, 0, 0, &pv->geom, screenPlan.get());
         pv->geomValid = true;
         pv->paintHover(p);

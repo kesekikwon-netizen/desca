@@ -229,6 +229,7 @@ SectionStyle MainWindow::secStyle() const {
     s.imageOpacity = opacity_->value() / 100.0;
     s.depthFade = action("fade")->isChecked();
     s.lineWidthPx = QSettings().value("view/sectionLineWidth", 2.0).toDouble() * (highContrast_ ? 1.5 : 1.0);
+    if (current_ >= 0 && current_ < int(sections_.size())) PlanView::splitLetters(QString::fromUtf8(sections_[size_t(current_)].name.c_str()), s.nameA, s.nameB);   // B–B′ → B · B′
     return s;
 }
 
