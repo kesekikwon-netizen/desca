@@ -752,12 +752,34 @@ void PlanView::paintOverlay(QPainter& p) {
         QRectF lr(sb.right() + 6, sb.y() - 6, 80, 18);
         p.drawText(lr, Qt::AlignLeft | Qt::AlignVCenter, lab);
     }
+    double z = refZ() + center_.z;
+    auto S = [&](const Vec2& q) { return localToScreen(q.x, q.y, z); };
+    // 다른 단면들: 가는 빨간 선 + 끝 글자(두께 띠·눈금 없음). 지금 단면 밑에 깔린다
+    if (!others_.empty()) {
+        p.save();
+        p.setFont(theme::uiFont(11, true));
+        for (const OtherSection& o : others_) {
+            const QPointF a = S(o.line.a), b = S(o.line.b);
+            const QPointF d = b - a; const double dl = std::hypot(d.x(), d.y()); const QPointF du = dl > 0 ? d / dl : QPointF(1, 0);
+            p.setPen(QPen(QColor(255, 255, 255, 200), 4.5, Qt::SolidLine, Qt::RoundCap)); p.drawLine(a, b);
+            p.setPen(QPen(QColor(255, 0, 0, 190), 1.8, Qt::SolidLine, Qt::RoundCap)); p.drawLine(a, b);
+            QString la, lb; splitLetters(o.name, la, lb);
+            auto chip = [&](QPointF c, const QString& name, QPointF away) {
+                p.setPen(QPen(Qt::white, 4)); p.setBrush(Qt::NoBrush); p.drawEllipse(c, 4.5, 4.5);
+                p.setPen(QPen(theme::SectionRed, 1.5)); p.setBrush(Qt::white); p.drawEllipse(c, 4.5, 4.5);
+                const double tw = std::max(22.0, QFontMetricsF(p.font()).horizontalAdvance(name) + 10.0);
+                QRectF tr(0, 0, tw, 17); tr.moveCenter(c + away * (4 + tw / 2));
+                p.setPen(QPen(theme::Edge, 1)); p.setBrush(QColor(255, 255, 255, 235)); p.drawRoundedRect(tr, 3, 3);
+                p.setPen(theme::SectionRed); p.drawText(tr, Qt::AlignCenter, name);
+            };
+            chip(a, la, -du); chip(b, lb, du);
+        }
+        p.restore();
+    }
     if (!hasLine_ && drawStage_ < 1) {
         return;   // 안내는 리본 아래 「지금 도구 줄」이 맡음
     }
     SectionFrame f(line_);
-    double z = refZ() + center_.z;
-    auto S = [&](const Vec2& q) { return localToScreen(q.x, q.y, z); };
     QPointF A = S(line_.a), B = S(line_.b);
     // 두께 띠: 빨간 괄호선(Descartes 와 같은 표시)
     if (f.L > 1e-6) {
@@ -858,9 +880,20 @@ void PlanView::paintOverlay(QPainter& p) {
         p.setPen(QPen(theme::Edge, 1)); p.setBrush(Qt::white); p.drawRoundedRect(tr, 4, 4);
         p.setPen(theme::SectionRed); p.drawText(tr, Qt::AlignCenter, name);
     };
-    handle(A, "A", -du);
-    if (hasLine_ || drawStage_ == 1) handle(B, drawStage_ == 1 && f.L > 0.05 ? QStringLiteral("A′ · %1 m").arg(f.L, 0, 'f', 2) : QStringLiteral("A′"), du);   // 길이는 여기(안내 칩 문장은 스펙 §5 고정)
+    QString la, lb; splitLetters(lineName_, la, lb);   // 지금 단면의 글자(B–B′ 면 B · B′)
+    handle(A, la, -du);
+    if (hasLine_ || drawStage_ == 1) handle(B, drawStage_ == 1 && f.L > 0.05 ? QStringLiteral("%1 · %2 m").arg(lb).arg(f.L, 0, 'f', 2) : lb, du);   // 길이는 여기(안내 칩 문장은 스펙 §5 고정)
     if (hasLine_) { p.setPen(QPen(theme::SectionRed, 1.5)); p.setBrush(theme::SectionRed); p.drawEllipse((A + B) / 2, 3.5, 3.5); }
+}
+
+void PlanView::splitLetters(const QString& name, QString& a, QString& b) {
+    a = QStringLiteral("A"); b = QStringLiteral("A′");
+    int cut = name.indexOf(QChar(0x2013));   // –
+    if (cut < 0) cut = name.indexOf(QLatin1Char('-'));
+    if (cut <= 0 || cut >= name.size() - 1) return;
+    const QString l = name.left(cut).trimmed(), r = name.mid(cut + 1).trimmed();
+    if (l.isEmpty() || r.isEmpty() || l.size() > 4 || r.size() > 5) return;
+    a = l; b = r;
 }
 
 // Shift: 동서·남북 고정(A 에서 더 긴 축으로)

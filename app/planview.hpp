@@ -68,6 +68,13 @@ public:
     void setLine(const asec::SectionLine& l, bool has);
     const asec::SectionLine& line() const { return line_; }
     bool hasLine() const { return hasLine_; }
+    /// 지금 단면선의 이름(「B–B′」) — 끝 글자 칩에 쓴다. 비면 A–A′
+    void setLineName(const QString& n) { lineName_ = n; update(); }
+    /// 다른 단면들(목록의 나머지): 평면에 가늘게 함께 그린다(사용자 결정 2026-10-11 — 새 단면을 그려도 A 는 남는다)
+    struct OtherSection { asec::SectionLine line; QString name; };
+    void setOtherSections(std::vector<OtherSection> v) { others_ = std::move(v); update(); }
+    /// 「B–B′」 → "B", "B′". 모양이 다르면 A, A′
+    static void splitLetters(const QString& name, QString& a, QString& b);
     void setBand(double front, double back);
     /// 단면 커서가 가리키는 거리(A 에서 m). 켜지면 단면선 위에 고리를 그린다.
     void setSyncMark(bool on, double s);
@@ -180,6 +187,8 @@ private:
     // 단면선(로컬 XY)
     asec::SectionLine line_;
     bool hasLine_ = false;
+    QString lineName_;
+    std::vector<OtherSection> others_;
     bool syncOn_ = false;
     double syncS_ = 0;
     QImage planeImg_;

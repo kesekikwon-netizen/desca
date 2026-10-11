@@ -1081,6 +1081,21 @@ void MainWindow::refreshSectionList() {
         }
         if (secCount_) secCount_->setText(QString::number(sections_.size()));
     }
+    // 평면: 지금 단면의 글자 + 나머지 단면들을 가늘게 함께(새 단면을 그려도 앞 단면이 남는다 — 사용자 결정 2026-10-11)
+    if (plan_) {
+        const Vec3 o = srs().origin;
+        std::vector<PlanView::OtherSection> others;
+        for (size_t i = 0; i < sections_.size(); ++i) {
+            if (int(i) == current_) continue;
+            const SavedSection& s = sections_[i];
+            PlanView::OtherSection os;
+            os.line.a = {s.ax - o.x, s.ay - o.y}; os.line.b = {s.bx - o.x, s.by - o.y}; os.line.front = s.front; os.line.back = s.back;
+            os.name = qs8(s.name);
+            others.push_back(std::move(os));
+        }
+        plan_->setOtherSections(std::move(others));
+        plan_->setLineName(current_ >= 0 && current_ < int(sections_.size()) ? qs8(sections_[size_t(current_)].name) : QString());
+    }
     refreshSheetList();
 }
 
