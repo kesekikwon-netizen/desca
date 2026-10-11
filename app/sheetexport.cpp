@@ -1160,7 +1160,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     // 고해상 입면·위치도 영상을 작업 스레드로(열 때 한 번, 그리고 도면 탭에서 입면을 바꿔 단면이 다시 계산될 때마다)
     auto previewGen = std::make_shared<std::atomic<int>>(0);   // 늦게 끝난 옛 미리보기 스레드 결과는 버린다
     auto startPreview = std::make_shared<std::function<void()>>();
-    *startPreview = [=, this] {
+    *startPreview = [this, docP, st, screenImgP, screenGeoP, screenPlan, previewCancel, previewGen, pv] {   // CI 는 MSVC C++17: [=, this] 는 C++20(C3791)
         if (!src_) return;
         const int myGen = ++*previewGen;
         const SectionDoc docSnap = *docP;
@@ -1333,7 +1333,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         pv->update();
     };
     // 도면 탭에서 입면(뒤·앞 깊이, 불투명도, 선 굵기, 평활)을 바꾸면 단면이 다시 계산되고, 끝나면 여기로 새 단면이 들어온다(사용자 요청 2026-10-11)
-    sheetRefresh_ = [=, this] {
+    sheetRefresh_ = [this, docP, screenImgP, screenGeoP, startPreview, refresh] {
         if (!section_ || !section_->hasResult()) return;
         *docP = section_->doc();
         *screenImgP = docP->img; *screenGeoP = SectionImgGeo{docP->imgS0, docP->imgZ1, docP->imgRes};
