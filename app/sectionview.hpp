@@ -1,5 +1,6 @@
 // 단면 보기(Quick Section): 입면 영상 + 빨간 단면선 + 10 cm 레벨선·표고 라벨 + 거리축·축척 막대. 흰 바탕 보고서 도면 형식.
 #pragma once
+#include <algorithm>
 #include <QImage>
 #include <QWidget>
 #include <functional>
@@ -20,6 +21,9 @@ struct SectionStyle {
 /// 단면 도면 한 장을 그리는 데 필요한 모든 것(스레드 사이 복사용 스냅숏)
 // 화면 단면선 그리기 허용 오차(px): 꼭짓점이 그려진 선 중심에서 이만큼 안(눈에 안 보임). 내보내기는 솎지 않음
 constexpr double kScreenProfileTolPx = 0.1;
+
+/// 인쇄·조판 단면선 굵기(mm): 화면 선 굵기 2 px 가 0.35 mm. 1.5 → 0.26, 3 → 0.53 mm(사용자 요청 2026-10-11 「조판에서도 적용」)
+inline double exportLineMm(double lineWidthPx) { return 0.35 * std::clamp(lineWidthPx, 1.0, 4.0) / 2.0; }
 
 struct SectionDoc {
     asec::SectionResult r;

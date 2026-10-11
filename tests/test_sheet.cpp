@@ -1,6 +1,7 @@
 #include "catch_amalgamated.hpp"
 #include "asec/orbit.hpp"
 #include "asec/sheet.hpp"
+#include <cmath>
 #include <limits>
 
 using namespace asec;
@@ -214,4 +215,40 @@ TEST_CASE("sheet: pt to DXF lineweight snaps to allowed values", "[sheet][pt][dx
     CHECK(dxfLineWeight(3.0) == 106);    // 1.058 mm
     CHECK(dxfLineWeight(0.05) == 0);     // 0.018 mm → 가장 가까운 허용값 0
     CHECK(dxfLineWeight(99.0) == 106);   // 3.0 pt 로 잘림
+}
+
+// ---- 단면도 조판의 위치도(평면 띠) — 사용자 결정 2026-10-11: 단면선이 가로가 되게 돌린 평면, 앞·뒤 각 3 m(뒤 깊이가 크면 그 값)
+TEST_CASE("sheet: plan strip half width = max(3 m, front, back)", "[sheet]") {
+    CHECK(planStripHalfWidth(0, 3) == 3);
+    CHECK(planStripHalfWidth(0, 5) == 5);
+    CHECK(planStripHalfWidth(4, 1) == 4);
+    CHECK(planStripHalfWidth(0.5, 0.5) == 3);
+}
+
+TEST_CASE("sheet: plan strip area is the bounding box of the rotated band", "[sheet]") {
+    PlanStripArea a = planStripArea(0, 0, 10, 0, 3, 1);   // 동서 선
+    CHECK(a.x0 == Approx(-1)); CHECK(a.x1 == Approx(11)); CHECK(a.y0 == Approx(-3)); CHECK(a.y1 == Approx(3));
+    PlanStripArea d = planStripArea(0, 0, 10, 10, 3, 1);  // 대각선: u=(1,1)/√2, n=(−1,1)/√2
+    const double r2 = std::sqrt(2.0), L = 10 * r2;
+    CHECK(d.x0 == Approx((-1 - 3) / r2)); CHECK(d.x1 == Approx((L + 1 + 3) / r2));
+    CHECK(d.y0 == Approx((-1 - 3) / r2)); CHECK(d.y1 == Approx((L + 1 + 3) / r2));
+    PlanStripArea z = planStripArea(2, 2, 2, 2, 3, 0);   // 길이 0 → u=(1,0)
+    CHECK(z.x0 == Approx(2)); CHECK(z.x1 == Approx(2)); CHECK(z.y0 == Approx(-1)); CHECK(z.y1 == Approx(5));
+}
+
+TEST_CASE("sheet: plan strip pixel→paper transform puts A at (s0,t0), A′ to the right, the back side up", "[sheet]") {
+    // 선 A(5,5)→B(15,5): u=(1,0), n=(0,1). 영상 왼쪽 위 (0, 20), 0.5 m/px. 종이: s=0 → x 100 mm, t=0 → y 50 mm, 1:40 → 25 mm/m
+    PlanStripXf T = planStripTransform(5, 5, 15, 5, 0, 20, 0.5, 100, 50, 25);
+    auto X = [&](double i, double j) { return T.m11 * i + T.m21 * j + T.dx; };
+    auto Y = [&](double i, double j) { return T.m12 * i + T.m22 * j + T.dy; };
+    CHECK(X(10, 30) == Approx(100)); CHECK(Y(10, 30) == Approx(50));      // A = 픽셀 (10, 30)
+    CHECK(X(30, 30) == Approx(350)); CHECK(Y(30, 30) == Approx(50));      // B: 10 m 오른쪽
+    CHECK(X(10, 26) == Approx(100)); CHECK(Y(10, 26) == Approx(0));       // A + n·2 m(뒤) → 위로 50 mm
+    // 남북 선 A(5,5)→B(5,15): u=(0,1), n=(−1,0) → 서쪽이 '뒤'(위)
+    PlanStripXf S = planStripTransform(5, 5, 5, 15, 0, 20, 0.5, 100, 50, 25);
+    auto Xs = [&](double i, double j) { return S.m11 * i + S.m21 * j + S.dx; };
+    auto Ys = [&](double i, double j) { return S.m12 * i + S.m22 * j + S.dy; };
+    CHECK(Xs(10, 30) == Approx(100)); CHECK(Ys(10, 30) == Approx(50));
+    CHECK(Xs(10, 10) == Approx(350)); CHECK(Ys(10, 10) == Approx(50));     // B = (5,15) = 픽셀 (10, 10)
+    CHECK(Xs(6, 30) == Approx(100)); CHECK(Ys(6, 30) == Approx(0));        // (3,5) = A + n·2 → 위
 }

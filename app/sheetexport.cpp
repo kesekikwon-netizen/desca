@@ -75,16 +75,38 @@ RgbaImage fromQImageS(const QImage& q0) {
 }
 
 /// 단면 → 용지 배치(높이는 위아래 4% 여유)
-struct SheetGeom { SheetLayout L; double lenM = 0, heightM = 0, zTopAbs = 0; };
-SheetGeom sheetGeom(const SectionDoc& doc, const SheetSpec& spec) {
+/// 단면도 조판 배치. 위치도(strip)가 있으면 그림 칸 = [평면 띠 stripM][틈 gapMm = A/A′ 글자 띠][단면 heightM] 세로로.
+struct SheetGeom {
+    SheetLayout L; SheetSpec spec; double lenM = 0, heightM = 0, zTopAbs = 0;
+    bool strip = false; double halfM = 0, stripM = 0, gapMm = 0;
+    double contentM() const { return heightM + stripM; }                                  // 맞춤·넘침 판정에 쓰는 세로 길이(m, 틈 제외)
+    SheetSpec fitSpec() const { SheetSpec t = spec; t.gutterTopMm += gapMm; return t; }    // 틈은 위 여백에 더해 계산
+    /// 맞춤(축척 고르기)용: 띠가 그림 칸의 1/3 까지 올 수 있으므로 그만큼을 위 여백으로 잡고 단면만 맞춘다
+    SheetSpec fitSpecMax() const { if (!strip) return spec; SheetSpec t = spec; SheetLayout L0 = layoutSheet(spec, lenM, heightM); t.gutterTopMm += gapMm + std::max(10.0, (L0.plotH - gapMm) / 3.0); return t; }
+    double stripMm() const { return stripM * 1000.0 / std::max(1e-9, spec.denom); }
+};
+SheetGeom sheetGeom(const SectionDoc& doc, const SheetParams& sp) {
     SheetGeom g;
+    g.spec = sp.spec;
     const double oz = doc.r.srs.origin.z;
     double zr = std::max(0.2, doc.r.zMax - doc.r.zMin);
     double pad = std::max(0.05, zr * 0.04);
     g.lenM = SectionFrame(doc.r.line).L;
     g.heightM = zr + 2 * pad;
     g.zTopAbs = doc.r.zMax + oz + pad;
-    g.L = layoutSheet(spec, g.lenM, g.heightM);
+    g.strip = sp.withPlan && sp.format != 1 && g.lenM > 0;   // DXF(모델 공간)에는 위치도 없음
+    if (g.strip) {
+        // 띠 높이 = 앞·뒤 각 max(3 m, 앞, 뒤) 를 같은 축척으로 — 단, 그림 칸의 1/3 까지만(남은 2/3 는 단면). 넘치면 반폭을 줄인다
+        g.gapMm = sp.spec.gutterTopMm;
+        const SheetLayout L0 = layoutSheet(sp.spec, g.lenM, g.heightM);
+        const double capMm = std::max(10.0, (L0.plotH - g.gapMm) / 3.0);
+        const double wantMm = 2 * planStripHalfWidth(doc.r.line.front, doc.r.line.back) * 1000.0 / std::max(1e-9, sp.spec.denom);
+        const double useMm = std::min(wantMm, capMm);
+        g.stripM = useMm * sp.spec.denom / 1000.0;
+        g.halfM = g.stripM * 0.5;
+    }
+    g.L = layoutSheet(g.fitSpec(), g.lenM, g.contentM());
+    if (g.strip) { g.L.plotY -= g.gapMm; g.L.plotH += g.gapMm; }   // 그림 칸은 띠 위부터(틈 포함) — 맞춤 계산만 틈을 뺐다
     return g;
 }
 
@@ -251,6 +273,66 @@ bool renderPlanOrtho(MeshSource& src, const Box3& areaIn, double res, QImage& ou
     out = toQImageS(img);
     return true;
 }
+/// 위치도 영상: 단면선 주변 띠(반폭 halfM, 양끝 여유 1 m)의 평면 정사영상. res 는 요청값과 maxPixels 상한 중 거친 쪽
+bool renderPlanStrip(MeshSource& src, const SectionLine& ln, double halfM, double res, double maxPixels, PlanStrip& out, const std::atomic<bool>* cancel) {
+    const PlanStripArea a = planStripArea(ln.a.x, ln.a.y, ln.b.x, ln.b.y, halfM, 1.0);
+    Box3 box; box.mn = Vec3(a.x0, a.y0, src.bounds.mn.z); box.mx = Vec3(a.x1, a.y1, src.bounds.mx.z);
+    const double w = std::max(1e-6, a.x1 - a.x0), h = std::max(1e-6, a.y1 - a.y0);
+    res = std::max({1e-4, res, std::sqrt(w * h / std::max(1.0, maxPixels))});
+    QString em;
+    if (!renderPlanOrtho(src, box, res, out.img, out.x0, out.y1, &em, cancel)) { out = PlanStrip(); return false; }
+    out.res = res;
+    return true;
+}
+
+/// 위치도 띠 그리기: 단면선이 가로(A 왼쪽), 단면의 '뒤' 쪽이 위. 영상 → 두께 띠(앞/뒤) → 단면선(빨강) → 테두리·설명
+void paintPlanStrip(QPainter& p, const SectionDoc& doc, const SheetGeom& G, const SectionPaperWindow& W, const SectionXf& xf, double k, double ui, const PlanStrip* plan) {
+    const SectionLine& ln = doc.r.line;
+    const SheetLayout& L = G.L;
+    const double mmPerM = 1.0 / W.mPerMm;              // 확대 포함
+    const double stripMm0 = G.stripMm();                // 예약한 띠 높이(확대 없음)
+    const double yT0 = L.plotY + stripMm0 * 0.5;        // t = 0(단면선)의 종이 y(mm): 띠 가운데
+    const double lenM = SectionFrame(ln).L;
+    auto X = [&](double sM) { return xf.plot.left() + (sM - xf.s0) * xf.ppm; };
+    auto Y = [&](double tM) { return (yT0 - tM * mmPerM) * k; };
+    const QRectF strip(L.plotX * k, Y(G.halfM), L.plotW * k, Y(-G.halfM) - Y(G.halfM));
+    const QRectF room(L.plotX * k, L.frameY * k, L.plotW * k, (L.plotY + stripMm0 - L.frameY) * k);   // 확대해도 틈·단면 쪽으로 넘치지 않게
+    const QRectF clip = strip.intersected(room);
+    if (clip.isEmpty()) return;
+    p.save();
+    p.setClipRect(clip);
+    p.fillRect(strip, Qt::white);
+    if (plan && !plan->img.isNull() && plan->res > 0) {
+        const PlanStripXf T = planStripTransform(ln.a.x, ln.a.y, ln.b.x, ln.b.y, plan->x0, plan->y1, plan->res, X(0) / k, yT0, mmPerM);
+        p.save();
+        p.setRenderHint(QPainter::SmoothPixmapTransform);
+        p.setTransform(QTransform(T.m11 * k, T.m12 * k, T.m21 * k, T.m22 * k, T.dx * k, T.dy * k), true);
+        p.drawImage(QPointF(0, 0), plan->img);
+        p.restore();
+    }
+    // 두께 띠: 앞(front, 아래)·뒤(back, 위) — 평면 보기의 분홍 띠와 같은 뜻
+    QColor wash = theme::SectionRed; wash.setAlpha(30);
+    p.setPen(Qt::NoPen); p.setBrush(wash);
+    p.drawRect(QRectF(X(0), Y(ln.back), X(lenM) - X(0), Y(-ln.front) - Y(ln.back)));
+    // 단면선(빨강 0.35 mm) + 양끝 동그라미
+    p.setPen(QPen(theme::SectionRed, exportLineMm(doc.st.lineWidthPx) * k, Qt::SolidLine, Qt::RoundCap));
+    p.setBrush(Qt::NoBrush);
+    p.drawLine(QPointF(X(0), Y(0)), QPointF(X(lenM), Y(0)));
+    p.setBrush(Qt::white);
+    for (double sM : {0.0, lenM}) p.drawEllipse(QPointF(X(sM), Y(0)), 1.2 * k, 1.2 * k);
+    // 테두리 · 설명
+    p.setPen(QPen(theme::Ink, 0.25 * k)); p.setBrush(Qt::NoBrush);
+    p.drawRect(clip);
+    QFont fSmall = theme::uiFont(std::max(5, int(std::lround(9 * ui))));
+    p.setFont(fSmall);
+    const QString cap = QStringLiteral("위치도 · 평면 %1 · 위 = 단면의 뒤쪽(%2) · 앞 %3 m / 뒤 %4 m").arg(denomText(G.spec.denom), QString::fromUtf8(facingKo(sectionAzimuthDeg(ln)).c_str())).arg(G.halfM, 0, 'g', 3).arg(G.halfM, 0, 'g', 3);
+    QFontMetricsF fm(fSmall);
+    QRectF cr(clip.left() + 1.5 * k, clip.top() + 1.0 * k, std::min(clip.width() - 3 * k, fm.horizontalAdvance(cap) + 3 * k), fm.height() + 1.0 * k);
+    p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 220)); p.drawRect(cr);
+    p.setPen(theme::Muted); p.drawText(cr.adjusted(1.5 * k, 0, -1.5 * k, 0), Qt::AlignLeft | Qt::AlignVCenter, cap);
+    p.restore();
+}
+
 /// 조판 미리보기 영상: 지금 보이는 범위(주변 30 % 포함)만, 가장 촘촘하게(긴 변 6000 px, 최소 1 mm/px)
 bool renderPlanPreview(MeshSource& src, const SheetSpec& spec, const Box3& area, double zoom, double dxMm, double dyMm,
                        QImage& out, double& x0, double& y1, double& res) {
@@ -267,9 +349,12 @@ bool renderPlanPreview(MeshSource& src, const SheetSpec& spec, const Box3& area,
 }  // namespace
 
 void MainWindow::paintSheet(QPainter& p, const SectionDoc& doc0, const SheetParams& sp, double pxPerMm, int page, const QImage& img0, const SectionImgGeo& geo0,
-                            double viewZoom, double viewPanX, double viewPanY, SheetPaintProbe* probe) {
-    const SheetGeom G = sheetGeom(doc0, sp.spec);
+                            double viewZoom, double viewPanX, double viewPanY, SheetPaintProbe* probe, const PlanStrip* plan) {
+    const SheetGeom G = sheetGeom(doc0, sp);
     const SheetLayout& L = G.L;
+    // 위치도가 있으면 그림 칸 위쪽을 띠(stripMm)+틈(gapMm = A/A′ 글자 띠) 만큼 비우고 그 아래가 단면 칸
+    const double secY = L.plotY + (G.strip ? G.stripMm() + G.gapMm : 0.0);
+    const double secH = std::max(1.0, L.plotH - (secY - L.plotY));
     const double k = pxPerMm;                         // mm → 장치 픽셀
     const double ui = pxPerMm * 25.4 / 96.0;          // 96 dpi 기준 글자·선 배율 → 실제 mm. 휠과 무관
     (void)viewPanX; (void)viewPanY;                   // 왼쪽 끌기는 종이 전체를 옮긴다. 그림 좌표는 imgDx/imgDy
@@ -279,16 +364,16 @@ void MainWindow::paintSheet(QPainter& p, const SectionDoc& doc0, const SheetPara
     p.fillRect(QRectF(0, 0, L.paperW * k, L.paperH * k), Qt::white);
     const int cols = sp.split ? L.cols : 1;
     const int col = sp.split ? page % cols : 0, row = sp.split ? page / cols : 0;
-    const SectionPaperWindow W = sectionPaperWindow(G.lenM, G.heightM, G.zTopAbs, L.plotW, L.plotH, sp.spec.denom, viewZoom, sp.imgDxMm, sp.imgDyMm, col, row, sp.split);
+    const SectionPaperWindow W = sectionPaperWindow(G.lenM, G.heightM, G.zTopAbs, L.plotW, secH, sp.spec.denom, viewZoom, sp.imgDxMm, sp.imgDyMm, col, row, sp.split);
     SectionXf xf;
     xf.ppm = k / W.mPerMm;
-    xf.plot = QRectF(L.plotX * k, L.plotY * k, L.plotW * k, L.plotH * k);
+    xf.plot = QRectF(L.plotX * k, secY * k, L.plotW * k, secH * k);
     xf.s0 = W.s0;
     xf.zTop = W.zTop;
     // 문서 스타일: 넣을 것 선택 그대로(그리는 순서 레벨선 → 영상 → 단면선은 paintSectionDoc 이 지킴)
     SectionDoc doc = doc0;
     doc.st.showImage = sp.withImage; doc.st.showLine = sp.withLine; doc.st.showLevels = sp.withLevels; doc.st.showTicks = sp.withTicks;
-    doc.st.imageOpacity = 1.0; doc.st.showBaseline = sp.showBaseline; doc.st.baselineEl = sp.baselineEl;
+    doc.st.imageOpacity = doc0.st.imageOpacity; doc.st.showBaseline = sp.showBaseline; doc.st.baselineEl = sp.baselineEl;   // 불투명도·선 굵기(st.lineWidthPx)는 화면 설정 그대로(2026-10-11)
     doc.st.plotScaleBar = !sp.withTitle;
     doc.st.levelMinorPt = clampLineWeightPt(sp.levelMinorPt); doc.st.levelMajorPt = clampLineWeightPt(sp.levelMajorPt);
     // 영상: 이 쪽에 보이는 거리 범위만 잘라서(PDF 에 쪽마다 전체 영상이 들어가지 않게)
@@ -300,8 +385,10 @@ void MainWindow::paintSheet(QPainter& p, const SectionDoc& doc0, const SheetPara
         else if (x1 <= x0) img = QImage();
     }
     const QRectF frame(L.frameX * k, L.frameY * k, L.frameW * k, L.frameH * k);
-    const QRectF area(frame.left(), frame.top(), frame.width(), (L.titleY - L.frameY) * k);
+    const double areaTop = G.strip ? (secY - G.gapMm) * k : frame.top();   // 위치도가 있으면 A/A′ 글자 띠부터
+    const QRectF area(frame.left(), areaTop, frame.width(), L.titleY * k - areaTop);
     paintSectionDoc(p, doc, area, xf, ui, img, true, QString(), &geo, false, false, 0, 0, 1, 0, 0, probe);
+    if (G.strip) paintPlanStrip(p, doc0, G, W, xf, k, ui, plan);
     SheetChrome ch;
     ch.title = sp.title; ch.srs = sp.srsLabel; ch.date = sp.date; ch.facing = sp.facing;
     ch.kind = QStringLiteral("단면도"); ch.paper = paperLabel(sp.spec); ch.denom = sp.spec.denom; ch.showTitle = sp.withTitle;
@@ -329,6 +416,7 @@ SheetParams MainWindow::defaultSheetParams() const {
     sp.withLevels = st.value("sheet/withLevels", true).toBool();
     sp.withTicks = st.value("sheet/withTicks", true).toBool();   // 거리 눈금(T10) — 끄는 칸은 도면 판의 「그릴 것」(T16)
     sp.withTitle = st.value("sheet/withTitle", true).toBool();
+    sp.withPlan = st.value("sheet/withPlan", true).toBool();   // 위치도(평면 띠) — 사용자 결정 2026-10-11
     sp.levelMinorPt = clampLineWeightPt(st.value("sheet/levelMinorPt", 0.2).toDouble());
     sp.levelMajorPt = clampLineWeightPt(st.value("sheet/levelMajorPt", 0.5).toDouble());
     sp.hatchKind = std::clamp(st.value("sheet/hatchKind", 0).toInt(), 0, 2); sp.hatchMm = std::clamp(st.value("sheet/hatchMm", 1.0).toDouble(), 0.2, 5.0);
@@ -341,8 +429,8 @@ SheetParams MainWindow::defaultSheetParams() const {
         sp.facing = qs8(facingKo(sectionAzimuthDeg(section_->doc().r.line)));
         SectionDoc doc = section_->doc();
         sp.baselineEl = std::round((0.5 * (doc.r.zMin + doc.r.zMax) + doc.r.srs.origin.z) * 2.0) / 2.0;   // 가운데쯤 0.5 m 단위
-        const SheetGeom G0 = sheetGeom(doc, sp.spec);   // 열 때는 단면이 그림 칸에 다 들어가는 가장 작은 10 단위(맞춤)
-        if (G0.lenM > 0 && G0.heightM > 0) sp.spec.denom = fitDenomStep10(sp.spec, G0.lenM, G0.heightM);
+        const SheetGeom G0 = sheetGeom(doc, sp);   // 열 때는 단면이 그림 칸에 다 들어가는 가장 작은 10 단위(맞춤)
+        if (G0.lenM > 0 && G0.heightM > 0) sp.spec.denom = fitDenomStep10(G0.fitSpecMax(), G0.lenM, G0.heightM);
     }
     sp.date = QDate::currentDate().toString("yyyy-MM-dd");
     return sp;
@@ -651,7 +739,7 @@ bool MainWindow::exportPlanSheet(MeshSource& src, const PlanSheetParams& p, cons
 bool MainWindow::exportSectionSvg(const SectionDoc& doc0, MeshSource& src, const SheetParams& p, const QString& path, QString* msg) {
     SheetParams sp = p;
     sp.withImage = true;
-    const SheetGeom G = sheetGeom(doc0, sp.spec);
+    const SheetGeom G = sheetGeom(doc0, sp);
     QImage img; SectionImgGeo geo{doc0.imgS0, doc0.imgZ1, doc0.imgRes};
     if (sp.withImage && (img.isNull() || geo.res <= 0)) {
         SectionRequest rq;
@@ -664,6 +752,8 @@ bool MainWindow::exportSectionSvg(const SectionDoc& doc0, MeshSource& src, const
         img = toQImageS(out.image.img);
         geo = SectionImgGeo{out.image.s0, out.image.z1, out.image.res};
     }
+    PlanStrip strip; const PlanStrip* stripPtr = nullptr;
+    if (G.strip && renderPlanStrip(src, doc0.r.line, G.halfM, groundResolution(sp.spec.denom, 300), 30e6, strip, nullptr)) stripPtr = &strip;
     const double dpi = 96.0;
     const double k = dpi / 25.4;
     QSvgGenerator gen(QSvgGenerator::SvgVersion::Svg11);
@@ -675,7 +765,7 @@ bool MainWindow::exportSectionSvg(const SectionDoc& doc0, MeshSource& src, const
     gen.setViewBox(QRectF(0, 0, G.L.paperW * k, G.L.paperH * k));
     QPainter pt;
     if (!pt.begin(&gen)) { if (msg) *msg = QStringLiteral("SVG 를 만들 수 없습니다: %1").arg(path); return false; }
-    paintSheet(pt, doc0, sp, k, 0, img, geo);
+    paintSheet(pt, doc0, sp, k, 0, img, geo, 1, 0, 0, nullptr, stripPtr);
     pt.end();
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly)) { if (msg) *msg = QStringLiteral("SVG 를 읽을 수 없습니다"); return false; }
@@ -693,7 +783,7 @@ bool MainWindow::exportSectionSvg(const SectionDoc& doc0, MeshSource& src, const
 
 bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const SheetParams& p, const QString& path, QString* msg,
                              const std::atomic<bool>* cancel, const std::function<void(double)>& progress) {
-    const SheetGeom G = sheetGeom(doc0, p.spec);
+    const SheetGeom G = sheetGeom(doc0, p);
     const int pages = p.split ? G.L.cols * G.L.rows : 1;
     if (p.format == 1) {   // DXF: 모델 공간 1:N(용지 배치 없음)
         DxfParams dp; dp.world3d = false; dp.denom = p.spec.denom; dp.image = p.withImage; dp.imageDpi = std::min(p.dpi, 200.0);
@@ -719,6 +809,12 @@ bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const Shee
         usedRes = out.image.res;
     }
     if (cancel && cancel->load()) { if (msg) *msg = QStringLiteral("취소됨"); return false; }
+    PlanStrip strip; const PlanStrip* stripPtr = nullptr;
+    if (G.strip) {
+        if (progress) progress(0.2);
+        if (renderPlanStrip(src, doc0.r.line, G.halfM, groundResolution(p.spec.denom, p.dpi), 40e6, strip, cancel)) stripPtr = &strip;
+        if (cancel && cancel->load()) { if (msg) *msg = QStringLiteral("취소됨"); return false; }
+    }
     QStringList files;
     if (p.format == 0) {
         QPdfWriter w(path);
@@ -732,7 +828,7 @@ bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const Shee
         const double pxPerMm = w.resolution() / 25.4;
         for (int i = 0; i < pages; ++i) {
             if (i > 0) w.newPage();
-            paintSheet(pt, doc0, p, pxPerMm, i, img, geo);
+            paintSheet(pt, doc0, p, pxPerMm, i, img, geo, 1, 0, 0, nullptr, stripPtr);
             if (progress) progress(0.3 + 0.7 * (i + 1) / pages);
             if (cancel && cancel->load()) break;
         }
@@ -745,7 +841,7 @@ bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const Shee
         for (int i = 0; i < pages; ++i) {
             QImage canvas(sz, QImage::Format_RGB32);
             canvas.fill(Qt::white);
-            { QPainter pt(&canvas); paintSheet(pt, doc0, p, pxPerMm, i, img, geo); }
+            { QPainter pt(&canvas); paintSheet(pt, doc0, p, pxPerMm, i, img, geo, 1, 0, 0, nullptr, stripPtr); }
             const int dpm = int(std::lround(p.dpi / 0.0254));
             canvas.setDotsPerMeterX(dpm); canvas.setDotsPerMeterY(dpm);
             QString f = pages > 1 ? fi.absolutePath() + "/" + fi.completeBaseName() + QStringLiteral("_%1.").arg(i + 1) + fi.suffix() : path;
@@ -768,6 +864,7 @@ bool MainWindow::exportSheet(const SectionDoc& doc0, MeshSource& src, const Shee
                    .arg(!G.L.fits && !p.split ? QStringLiteral(" (넘친 부분은 잘림)") : QString())
                    .arg(p.srsLabel);
         if (usedRes > 0) *msg += QStringLiteral("\n입면 영상 %1 mm/px").arg(usedRes * 1000, 0, 'f', 2);
+        if (G.strip) *msg += stripPtr ? QStringLiteral("\n위치도(평면 띠, 앞·뒤 %1 m) %2 mm/px").arg(G.halfM, 0, 'g', 3).arg(strip.res * 1000, 0, 'f', 2) : QStringLiteral("\n위치도 영상을 만들지 못해 띠만 그렸습니다");
     }
     return true;
 }
@@ -1011,6 +1108,13 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     }
     auto* outer = new QHBoxLayout(d); outer->setContentsMargins(0, 0, 0, 0); outer->setSpacing(0);
     // ---- 책상(Desk): 종이 가운데, 떠 있는 안내 · 도구 줄은 아래에서
+    // 위치도 미리보기 영상(화면용: 최대 6 Mpx). 조판 저장 때는 출력 해상도로 다시 만든다
+    auto screenPlan = std::make_shared<PlanStrip>();
+    if (src_) {
+        const SheetGeom G0 = sheetGeom(doc, *st);
+        const double h0 = planStripHalfWidth(doc.r.line.front, doc.r.line.back);
+        if (G0.lenM > 0) renderPlanStrip(*src_, doc.r.line, h0, groundResolution(std::max(10.0, G0.spec.denom), 150), 6e6, *screenPlan, nullptr);
+    }
     auto* pv = new SheetPreview; pv->setMinimumSize(470, 330);
     bindImageDrag(pv, &st->imgDxMm, &st->imgDyMm);
     outer->addWidget(pv, 1);
@@ -1024,14 +1128,15 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     v->addWidget(lbl(nSec > 1 ? QStringLiteral("고른 도면 · 단면 %1 / %2").arg(kSec).arg(nSec) : QStringLiteral("고른 도면 · 단면"), "cap"));
     auto* nameLab = lbl(st->title, "sheetName"); nameLab->setWordWrap(true); v->addWidget(nameLab);
     auto* subLab = lbl(QString(), "hint"); subLab->setWordWrap(true); v->addWidget(subLab);
-    // 도면 항목(단면도의 층): 입면 영상 · 단면선 · 레벨선 · 표제란(자 포함). 진북 · 범례는 평면도에만
+    // 도면 항목(단면도의 층): 입면 영상 · 단면선 · 레벨선 · 표제란(자 포함) · 위치도(단면 위 평면 띠). 진북 · 범례는 평면도에만
     v->addWidget(sideCaption(QStringLiteral("도면 항목")));
     auto* tImg = sheetTile(QStringLiteral("image-layer"), QStringLiteral("입면 영상"), QStringLiteral("입면 영상 (뒤 %1 m) — 레벨선 위, 단면선 아래").arg(doc.r.line.back, 0, 'g', 3));
     auto* tLine = sheetTile(QStringLiteral("pen-line"), QStringLiteral("단면선"), QStringLiteral("잘린 선 — 맨 위 · 빨강 0.35 mm"));
     auto* tLev = sheetTile(QStringLiteral("levels"), QStringLiteral("레벨선"), QStringLiteral("레벨선과 표고 숫자 — 맨 뒤"));
     auto* tTitle = sheetTile(QStringLiteral("title-block"), QStringLiteral("표제란"), QStringLiteral("표제란 · 축척 막대(끄면 그림 칸 안에 작은 축척 막대)"));
+    auto* tPlan = sheetTile(QStringLiteral("image-layer"), QStringLiteral("위치도"), QStringLiteral("단면선 주변 평면(같은 축척, 단면선이 가로) — 단면 위. 앞·뒤 각 3 m(뒤 깊이가 크면 그 값). DXF 에는 없음"));
     { auto* row = new QWidget; auto* h = new QHBoxLayout(row); h->setContentsMargins(0, 0, 0, 0); h->setSpacing(0);
-        h->setSpacing(8); for (auto* tb : {tImg, tLine, tLev, tTitle}) h->addWidget(tb);
+        h->setSpacing(8); for (auto* tb : {tImg, tLine, tLev, tTitle, tPlan}) h->addWidget(tb);
         h->addStretch(); v->addWidget(row); }
     // 도면 정보: 도면명 · 용지 · 축척 1 : [칸] 맞춤 · 격자
     v->addWidget(sideCaption(QStringLiteral("도면 정보")));
@@ -1100,15 +1205,15 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         st->spec.denom = snapScaleDenom10(st->spec.denom);
         if (scale->value() != int(std::lround(st->spec.denom))) { QSignalBlocker bl(scale); scale->setValue(int(std::lround(st->spec.denom))); }
         syncPaperChips(pc, st->spec);
-        SheetGeom G = sheetGeom(doc, st->spec);
-        SheetAdvice a = adviseSheet(st->spec, G.lenM, G.heightM);
+        SheetGeom G = sheetGeom(doc, *st);
+        SheetAdvice a = adviseSheet(G.fitSpec(), G.lenM, G.contentM());
         if (auto* b = fmtG->button(st->format)) { QSignalBlocker bl(b); b->setChecked(true); }
         if (auto* b = hatchG->button(st->hatchKind)) { QSignalBlocker bl(b); b->setChecked(true); }
-        for (auto& pr : {std::make_pair(tImg, st->withImage), std::make_pair(tLine, st->withLine), std::make_pair(tLev, st->withLevels), std::make_pair(tTitle, st->withTitle)}) { QSignalBlocker bl(pr.first); pr.first->setChecked(pr.second); }
+        for (auto& pr : {std::make_pair(tImg, st->withImage), std::make_pair(tLine, st->withLine), std::make_pair(tLev, st->withLevels), std::make_pair(tTitle, st->withTitle), std::make_pair(tPlan, st->withPlan)}) { QSignalBlocker bl(pr.first); pr.first->setChecked(pr.second); }
         const double pxPerMm = 300 / 25.4, ui = pxPerMm * 25.4 / 96.0;
         LevelPlan lp = sectionLevelPlan(pxPerMm * 1000.0 / st->spec.denom, ui, true);
         numLab->setText(QStringLiteral("%1 cm마다 · 해발 EL. · 선 %2 cm").arg(lp.labelCm).arg(lp.lineCm));
-        const double fitD = G.lenM > 0 && G.heightM > 0 ? fitDenomStep10(st->spec, G.lenM, G.heightM) : st->spec.denom;
+        const double fitD = G.lenM > 0 && G.heightM > 0 ? fitDenomStep10(G.fitSpecMax(), G.lenM, G.heightM) : st->spec.denom;
         fitLink->setText(QStringLiteral("맞춤 %1").arg(denomText(fitD)));
         nameLab->setText(st->title);
         const int pages = st->split ? G.L.cols * G.L.rows : 1;
@@ -1155,7 +1260,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     };
     pv->paintFn = [=](QPainter& p, const QRect& rc) {
         p.fillRect(rc, theme::Desk);
-        SheetGeom G = sheetGeom(doc, st->spec);
+        SheetGeom G = sheetGeom(doc, *st);
         double sc = std::min((rc.width() - 48.0) / G.L.paperW, (rc.height() - 110.0) / G.L.paperH);   // 위 안내 칩 · 아래 도구 줄 자리
         if (sc <= 0.05) return;
         sc *= pv->pageZoom;
@@ -1166,7 +1271,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         p.setClipRect(QRectF(QPointF(0, 0), pz));
         pv->fitPxPerMm = sc;
         pv->zoomCenter = o + QPointF((G.L.plotX + G.L.plotW / 2) * sc, (G.L.plotY + G.L.plotH / 2) * sc);
-        paintSheet(p, doc, *st, sc, 0, screenImg, screenGeo, pv->zoom, 0, 0);
+        paintSheet(p, doc, *st, sc, 0, screenImg, screenGeo, pv->zoom, 0, 0, nullptr, screenPlan.get());
         p.restore();
         paintPaperFrame(p, o, pz);
     };
@@ -1180,11 +1285,12 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
     QObject::connect(pc.size, &QButtonGroup::idClicked, d, [=](int id) { st->spec.paper = id == 1 ? Paper::A3 : Paper::A4; (*refresh)(); });
     QObject::connect(pc.orient, &QButtonGroup::idClicked, d, [=](int id) { st->spec.landscape = id == 0; (*refresh)(); });
     QObject::connect(scale, &QSpinBox::valueChanged, d, [=](int) { st->spec.denom = snapScaleDenom10(scale->value()); (*refresh)(); });
-    QObject::connect(fitLink, &QPushButton::clicked, d, [=] { SheetGeom G = sheetGeom(doc, st->spec); if (G.lenM > 0 && G.heightM > 0) scale->setValue(int(std::lround(fitDenomStep10(st->spec, G.lenM, G.heightM)))); });
+    QObject::connect(fitLink, &QPushButton::clicked, d, [=] { SheetGeom G = sheetGeom(doc, *st); if (G.lenM > 0 && G.heightM > 0) scale->setValue(int(std::lround(fitDenomStep10(G.fitSpecMax(), G.lenM, G.heightM)))); });
     QObject::connect(tImg, &QToolButton::toggled, d, [=](bool on) { st->withImage = on; pv->update(); });
     QObject::connect(tLine, &QToolButton::toggled, d, [=](bool on) { st->withLine = on; pv->update(); });
     QObject::connect(tLev, &QToolButton::toggled, d, [=](bool on) { st->withLevels = on; pv->update(); });
     QObject::connect(tTitle, &QToolButton::toggled, d, [=](bool on) { st->withTitle = on; pv->update(); });
+    QObject::connect(tPlan, &QToolButton::toggled, d, [=](bool on) { st->withPlan = on; (*refresh)(); });   // 띠 높이만큼 배치가 바뀜
     QObject::connect(ptMinor, &QDoubleSpinBox::valueChanged, d, [=](double vv) { st->levelMinorPt = clampLineWeightPt(vv); pv->update(); });
     QObject::connect(ptMajor, &QDoubleSpinBox::valueChanged, d, [=](double vv) { st->levelMajorPt = clampLineWeightPt(vv); pv->update(); });
     QObject::connect(hatchG, &QButtonGroup::idClicked, d, [=](int id) { st->hatchKind = id; });
@@ -1197,7 +1303,7 @@ QDialog* MainWindow::buildSheetDialog(SheetParams& io, bool& accepted) {
         s.setValue("sheet/paper", st->spec.paper == Paper::A3 ? 1 : 0); s.setValue("sheet/landscape", st->spec.landscape);
         s.setValue("sheet/denom", st->spec.denom); s.setValue("sheet/format", st->format); s.setValue("sheet/dpi", st->dpi);
         s.setValue("sheet/withImage", st->withImage); s.setValue("sheet/withLine", st->withLine);
-        s.setValue("sheet/withLevels", st->withLevels); s.setValue("sheet/withTitle", st->withTitle);
+        s.setValue("sheet/withLevels", st->withLevels); s.setValue("sheet/withTitle", st->withTitle); s.setValue("sheet/withPlan", st->withPlan);
         s.setValue("sheet/levelMinorPt", st->levelMinorPt); s.setValue("sheet/levelMajorPt", st->levelMajorPt);
         s.setValue("sheet/hatchKind", st->hatchKind); s.setValue("sheet/hatchMm", st->hatchMm);
         bDefault->setText(QStringLiteral("★ 저장함"));
@@ -1413,8 +1519,8 @@ int MainWindow::saveCheckedSheets(const QString& dir, const SheetParams& base, Q
             const SectionDoc doc = section_->doc();
             if (!(i == keepCur && !keepPlan)) {   // 지금 연 도면은 판의 축척 그대로, 나머지는 저장된 값 → 없으면 맞춤(스펙 §8 「축척은 도면마다 자기 값」)
                 const double saved0 = st.value(mk + QStringLiteral("sheet/%1/denom").arg(nm), 0.0).toDouble();
-                const SheetGeom G = sheetGeom(doc, sp.spec);
-                sp.spec.denom = saved0 > 0 ? saved0 : (G.lenM > 0 && G.heightM > 0 ? fitDenomStep10(sp.spec, G.lenM, G.heightM) : sp.spec.denom);
+                const SheetGeom G = sheetGeom(doc, sp);
+                sp.spec.denom = saved0 > 0 ? saved0 : (G.lenM > 0 && G.heightM > 0 ? fitDenomStep10(G.fitSpecMax(), G.lenM, G.heightM) : sp.spec.denom);
             }
             f = nameFor(nm, sp.spec.denom);
             ok = base.format == 4 ? exportSectionSvg(doc, *src_, sp, f, &msg) : exportSheet(doc, *src_, sp, f, &msg, nullptr, {});
@@ -1500,8 +1606,8 @@ void MainWindow::dlgSheet() {
         sp.showBaseline = o.showBaseline;
         sp.levelMinorPt = o.levelMinorPt; sp.levelMajorPt = o.levelMajorPt; sp.hatchKind = o.hatchKind; sp.hatchMm = o.hatchMm;
         if (section_->hasResult()) {
-            const SheetGeom G0 = sheetGeom(section_->doc(), sp.spec);
-            if (G0.lenM > 0 && G0.heightM > 0) sp.spec.denom = fitDenomStep10(sp.spec, G0.lenM, G0.heightM);
+            const SheetGeom G0 = sheetGeom(section_->doc(), sp);
+            if (G0.lenM > 0 && G0.heightM > 0) sp.spec.denom = fitDenomStep10(G0.fitSpecMax(), G0.lenM, G0.heightM);
         }
     }
     auto params = std::make_shared<SheetParams>(sp);
@@ -1919,7 +2025,7 @@ bool MainWindow::runSheetCheck(const QString& outDir, QString* log) {
         SheetParams sec = defaultSheetParams(); sec.withLevels = true;   // 판정은 레벨선이 있어야 함(검토 M2)
         SectionDoc doc = section_->doc();
         auto paintSec = [&](double zoom, QImage& canvas, SheetPaintProbe& probe) {
-            SheetGeom G = sheetGeom(doc, sec.spec);
+            SheetGeom G = sheetGeom(doc, sec);
             canvas = QImage(std::max(1, int(std::ceil(G.L.paperW * k))), std::max(1, int(std::ceil(G.L.paperH * k))), QImage::Format_RGB32);
             canvas.fill(Qt::white);
             QPainter p(&canvas);

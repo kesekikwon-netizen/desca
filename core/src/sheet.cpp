@@ -191,6 +191,51 @@ OutsideTicks outsideTicks(double lo, double hi, int maxCount) {
     return t;
 }
 
+// ---- 위치도(평면 띠)
+double planStripHalfWidth(double frontM, double backM) {
+    double h = kPlanStripMinHalfM;
+    if (std::isfinite(frontM)) h = std::max(h, frontM);
+    if (std::isfinite(backM)) h = std::max(h, backM);
+    return h;
+}
+
+namespace {
+struct LineFrame { double ax, ay, ux, uy, nx, ny, L; };
+LineFrame lineFrame(double ax, double ay, double bx, double by) {
+    LineFrame f{ax, ay, 1, 0, 0, 1, 0};
+    const double dx = bx - ax, dy = by - ay;
+    f.L = std::sqrt(dx * dx + dy * dy);
+    if (f.L > 0) { f.ux = dx / f.L; f.uy = dy / f.L; }
+    f.nx = -f.uy; f.ny = f.ux;   // A→A′ 왼쪽 법선 = 단면의 '뒤' 쪽(facingKo 와 같은 규약)
+    return f;
+}
+}  // namespace
+
+PlanStripArea planStripArea(double ax, double ay, double bx, double by, double halfM, double marginM) {
+    const LineFrame f = lineFrame(ax, ay, bx, by);
+    PlanStripArea a;
+    bool first = true;
+    for (double s : {-marginM, f.L + marginM})
+        for (double t : {-halfM, halfM}) {
+            const double x = f.ax + f.ux * s + f.nx * t, y = f.ay + f.uy * s + f.ny * t;
+            if (first) { a.x0 = a.x1 = x; a.y0 = a.y1 = y; first = false; }
+            a.x0 = std::min(a.x0, x); a.x1 = std::max(a.x1, x); a.y0 = std::min(a.y0, y); a.y1 = std::max(a.y1, y);
+        }
+    return a;
+}
+
+PlanStripXf planStripTransform(double ax, double ay, double bx, double by, double imgX0, double imgY1, double res, double pageXAtS0, double pageYAtT0, double mmPerM) {
+    // 픽셀 (i, j) → 로컬 (imgX0 + i·res, imgY1 − j·res) → s = (p−A)·u, t = (p−A)·n → x' = X0 + S·s, y' = Y0 − S·t (t 는 위로)
+    const LineFrame f = lineFrame(ax, ay, bx, by);
+    const double S = mmPerM;
+    const double sC = (imgX0 - f.ax) * f.ux + (imgY1 - f.ay) * f.uy;
+    const double tC = (imgX0 - f.ax) * f.nx + (imgY1 - f.ay) * f.ny;
+    PlanStripXf T;
+    T.m11 = S * res * f.ux;  T.m21 = -S * res * f.uy;  T.dx = pageXAtS0 + S * sC;
+    T.m12 = -S * res * f.nx; T.m22 = S * res * f.ny;   T.dy = pageYAtT0 - S * tC;
+    return T;
+}
+
 std::string formatAzimuth(double az) {
     az = std::fmod(az, 360.0); if (az < 0) az += 360.0;
     char b[48];

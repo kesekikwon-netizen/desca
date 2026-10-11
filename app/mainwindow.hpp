@@ -71,6 +71,7 @@ struct SheetParams {
     bool split = false;          // 넘치면 여러 장으로 나눠(PDF 여러 쪽 / 영상 여러 파일)
     QString title;               // 도면명
     bool withImage = true, withLine = true, withLevels = true, withTicks = true, withTitle = true;
+    bool withPlan = true;        // 위치도: 단면선 주변 평면(같은 축척, 단면선이 가로)을 단면 위에(사용자 결정 2026-10-11). DXF(모델 공간)에는 없음
     bool showBaseline = false; double baselineEl = 0;
     double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기 pt(10 cm · 50 cm) — 디자인 v5 결정 L
     int hatchKind = 0; double hatchMm = 1.0;         // 잘린 돌 빗금: 0 45° · 1 검은 칠 · 2 점묘, 간격 mm(스펙 §8 — F 단계가 씀)
@@ -88,6 +89,8 @@ struct PlanSheetParams {
     QString title, srsLabel, date;
     double imgDxMm = 0, imgDyMm = 0;   // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
 };
+/// 위치도용 평면 정사영상: 왼쪽 위 픽셀 모서리 = (x0, y1) 로컬 m, res m/px
+struct PlanStrip { QImage img; double x0 = 0, y1 = 0, res = 0; };
 struct PointParams { asec::PointFormat format = asec::PointFormat::XYZ; int area = 0; double spacing = 0; bool rgb = true; asec::Box3 box; };
 
 class MainWindow : public QMainWindow {
@@ -119,7 +122,7 @@ public:
                             const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
     /// 용지 한 장 그리기(미리보기·내보내기 공용). pxPerMm = 장치 픽셀/mm, page = 나눠 붙이기 쪽 번호(0..)
     static void paintSheet(QPainter& p, const SectionDoc& doc, const SheetParams& sp, double pxPerMm, int page, const QImage& img, const SectionImgGeo& geo,
-                           double viewZoom = 1, double viewPanX = 0, double viewPanY = 0, SheetPaintProbe* probe = nullptr);
+                           double viewZoom = 1, double viewPanX = 0, double viewPanY = 0, SheetPaintProbe* probe = nullptr, const PlanStrip* plan = nullptr);
     static bool exportPlanSheet(asec::MeshSource& src, const PlanSheetParams& p, const QString& path, QString* msg,
                                 const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
     static void paintPlanSheet(QPainter& p, const PlanSheetParams& sp, double pxPerMm, int page, const QImage& img,

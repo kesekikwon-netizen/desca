@@ -252,7 +252,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         if (probe) probe->drewCutLine = true;
         p.setBrush(Qt::NoBrush);
         // 화면: 설정 굵기(기본 2 px) / 인쇄: 0.35 mm
-        const double lw = forExport ? 0.35 / 25.4 * 96.0 * ui : std::clamp(st_.lineWidthPx, 1.0, 4.0) * ui;
+        const double lw = forExport ? exportLineMm(st_.lineWidthPx) / 25.4 * 96.0 * ui : std::clamp(st_.lineWidthPx, 1.0, 4.0) * ui;
         p.setPen(QPen(theme::ProfileRed, lw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         // 화면만: 0.1 px 보다 작은 굴곡은 그려도 보이지 않으므로 화면 좌표 0.1 px 허용으로 점을 솎아 그림(모든 꼭짓점이 선 중심에서 0.1 px 안 —
         // 화소 단위로 같은 그림, 끌기 중 다시 그리기가 빨라짐). 내보내기(PDF·DXF·영상)는 꼭짓점 전부 그대로

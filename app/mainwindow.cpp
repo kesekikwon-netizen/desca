@@ -373,8 +373,9 @@ static SectionRequest makeRequest(const SectionLine& line, bool smooth, bool fin
     rq.depthFade = fade ? kDepthFade : 0.0;
     rq.cleanup.smooth = smooth;
     double L = SectionFrame(line).L;
-    rq.imageRes = final ? std::max(0.003, L / 4000.0) : std::max(0.008, L / 700.0);
-    rq.maxImagePixels = final ? size_t(24) << 20 : size_t(3) << 20;
+    // 최종 화면 영상: 최대 12,000 px 폭·1.5 mm/px(이전 4,000 px·3 mm) — 조판(600 dpi)과 비슷하게 또렷하게(사용자 요청 2026-10-11)
+    rq.imageRes = final ? std::max(0.0015, L / 12000.0) : std::max(0.008, L / 700.0);
+    rq.maxImagePixels = final ? size_t(96) << 20 : size_t(3) << 20;
     // 미리보기: 영상 해상도에 충분한 거친 LOD(빠름). 최종: 최고 해상도 잎
     rq.meshRes = final ? 0.0 : rq.imageRes;
     // 잘린 면은 미리보기에서도 잎(정확). 성능 비교용으로만 끔: SECTIONVIEWER_COARSE_PREVIEW_CUT=1

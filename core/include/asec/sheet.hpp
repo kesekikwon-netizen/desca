@@ -110,6 +110,19 @@ struct OutsideTicks {
 };
 OutsideTicks outsideTicks(double lo, double hi, int maxCount = 6);
 
+// ---- 단면도 조판의 「위치도」(평면 띠): 단면선이 가로로 놓이게 돌린 평면 정사영상을 같은 축척으로 단면 위에 둔다(사용자 결정 2026-10-11).
+//      띠 반폭 = max(3 m, 앞 깊이, 뒤 깊이). 띠 안에서 가로 = 거리 s(A 가 0, 오른쪽 +), 세로 = 법선 t(단면의 '뒤' 쪽이 위).
+constexpr double kPlanStripMinHalfM = 3.0;
+/// 띠 반폭(m)
+double planStripHalfWidth(double frontM, double backM);
+/// 띠가 덮는 로컬 XY 외접 상자: s ∈ [−marginM, L+marginM], t ∈ [−halfM, halfM] 인 사각형을 돌린 것
+struct PlanStripArea { double x0 = 0, x1 = 0, y0 = 0, y1 = 0; };
+PlanStripArea planStripArea(double ax, double ay, double bx, double by, double halfM, double marginM);
+/// 영상 픽셀(열 i, 행 j; 왼쪽 위 픽셀 모서리 = (imgX0, imgY1), res m/px, 행은 아래로 = 남쪽) → 종이(mm) 아핀 변환.
+/// Qt QTransform 순서: x' = m11·i + m21·j + dx, y' = m12·i + m22·j + dy. pageXAtS0·pageYAtT0 = s=0, t=0 이 놓일 종이 mm, mmPerM = 종이 mm / 실제 m
+struct PlanStripXf { double m11 = 1, m12 = 0, m21 = 0, m22 = 1, dx = 0, dy = 0; };
+PlanStripXf planStripTransform(double ax, double ay, double bx, double by, double imgX0, double imgY1, double res, double pageXAtS0, double pageYAtT0, double mmPerM);
+
 /// 방위각(북 0°, 시계 방향) → "N 90.4° E" (180° 넘으면 "N 45.0° W")
 std::string formatAzimuth(double azDeg);
 /// 단면 보기가 바라보는 쪽(A→A′ 왼쪽 법선 = 두께 '뒤' 쪽): A→A′ 방위각 → "북쪽을 봄" 등 8방위
