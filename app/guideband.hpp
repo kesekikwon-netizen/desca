@@ -4,6 +4,7 @@
 #pragma once
 #include <QFrame>
 #include <QList>
+#include <QPoint>
 #include <QPointer>
 #include <QString>
 #include <QStringList>
@@ -13,6 +14,7 @@ class QBoxLayout;
 class QEvent;
 class QHBoxLayout;
 class QLabel;
+class QMouseEvent;
 class QToolButton;
 
 class GuideBand : public QFrame {
@@ -32,9 +34,18 @@ public:
     QString debugWidths() const;   // 감사용: 문장 라벨 폭/권장 · 칩 폭/권장
     qint64 iconCacheKey() const;   // 감사용: 지금 아이콘 장의 cacheKey(dpr 바뀌어 다시 구우면 달라진다 — B5)
 
+    bool isUserMoved() const { return userMoved_; }
+    QPoint customPos() const { return customPos_; }
+    void setUserMoved(bool moved, const QPoint& pt) { userMoved_ = moved; customPos_ = pt; place(); }
+    int userWidth() const { return userWidth_; }
+    void setUserWidth(int w) { userWidth_ = w; place(); }
+
 protected:
     bool eventFilter(QObject* watched, QEvent* e) override;
     bool event(QEvent* e) override;   // QEvent::DevicePixelRatioChange(화면을 옮겨 배율이 바뀜) → 아이콘을 새 배율로 다시 굽는다(B5)
+    void mousePressEvent(QMouseEvent* e) override;
+    void mouseMoveEvent(QMouseEvent* e) override;
+    void mouseReleaseEvent(QMouseEvent* e) override;
 
 private:
     void bakeIcon();                  // iconName_ 을 지금 devicePixelRatioF() 로 굽고 iconDpr_ 에 기억
@@ -52,6 +63,15 @@ private:
     qreal iconDpr_ = 0;      // 아이콘을 구운 배율(place() 안전판: 지금 배율과 다르면 다시 굽는다 — Qt 가 자식에 사건을 안 보내는 경우)
     QStringList keys_;       // 지금 키 캡(같으면 라벨을 다시 만들지 않음 — 검토 I3)
     int reserveRight_ = 85;   // 되돌리기 · 다시(73) + 사이 12
+
+    bool userMoved_ = false;
+    QPoint customPos_;
+    int userWidth_ = -1;
+    bool dragging_ = false;
+    bool resizing_ = false;
+    QPoint dragStartMouse_;
+    QPoint dragStartPos_;
+    int dragStartWidth_ = 0;
 };
 
 class FloatButtons : public QFrame {
@@ -64,8 +84,15 @@ public:
     void followRightOf(QWidget* w, int gap = 12);
     void place();
 
+    bool isUserMoved() const { return userMoved_; }
+    QPoint customPos() const { return customPos_; }
+    void setUserMoved(bool moved, const QPoint& pt) { userMoved_ = moved; customPos_ = pt; place(); }
+
 protected:
     bool eventFilter(QObject* watched, QEvent* e) override;
+    void mousePressEvent(QMouseEvent* e) override;
+    void mouseMoveEvent(QMouseEvent* e) override;
+    void mouseReleaseEvent(QMouseEvent* e) override;
 
 private:
     QWidget* host_ = nullptr;
@@ -75,4 +102,11 @@ private:
     Qt::Orientation orient_;
     QBoxLayout* lay_ = nullptr;
     QList<QToolButton*> buttons_;
+
+    bool userMoved_ = false;
+    QPoint customPos_;
+    bool dragging_ = false;
+    bool dragCandidate_ = false;
+    QPoint dragStartMouse_;
+    QPoint dragStartPos_;
 };

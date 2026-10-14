@@ -10,6 +10,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QResizeEvent>
 #include <QSignalBlocker>
 #include <QToolButton>
@@ -26,6 +27,7 @@ GuideBand::GuideBand(QWidget* host) : QFrame(host), host_(host) {
     setObjectName(QStringLiteral("guideBand"));
     setAttribute(Qt::WA_StyledBackground);
     setFixedHeight(kBandHeight);
+    setMouseTracking(true);
     auto* h = new QHBoxLayout(this);
     h->setContentsMargins(12, 0, 12, 0);
     h->setSpacing(8);
@@ -34,6 +36,11 @@ GuideBand::GuideBand(QWidget* host) : QFrame(host), host_(host) {
     auto* rule = new QFrame; rule->setObjectName(QStringLiteral("guideRule")); rule->setFixedSize(1, 16); rule_ = rule;
     hint_ = new QLabel; hint_->setObjectName(QStringLiteral("guideHint"));
     keysBox_ = new QWidget; keysLay_ = new QHBoxLayout(keysBox_); keysLay_->setContentsMargins(0, 0, 0, 0); keysLay_->setSpacing(4);
+    icon_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    title_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    rule_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    hint_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    keysBox_->setAttribute(Qt::WA_TransparentForMouseEvents);
     h->addWidget(icon_); h->addWidget(title_); h->addWidget(rule); h->addWidget(hint_); h->addWidget(keysBox_);
     host_->installEventFilter(this);
     hide();
@@ -82,6 +89,65 @@ void GuideBand::setKeys(const QStringList& keys) {
     adjustSize(); place();
 }
 
+void GuideBand::mousePressEvent(QMouseEvent* e) {
+    if (e->button() == Qt::LeftButton) {
+        if (e->pos().x() >= width() - 8) {
+            resizing_ = true;
+            dragStartMouse_ = e->globalPosition().toPoint();
+            dragStartWidth_ = width();
+        } else {
+            dragging_ = true;
+            dragStartMouse_ = e->globalPosition().toPoint();
+            dragStartPos_ = pos();
+        }
+        e->accept();
+        return;
+    }
+    QFrame::mousePressEvent(e);
+}
+
+void GuideBand::mouseMoveEvent(QMouseEvent* e) {
+    if (resizing_) {
+        const int dx = e->globalPosition().toPoint().x() - dragStartMouse_.x();
+        int newW = std::max(120, dragStartWidth_ + dx);
+        if (host_) newW = std::min(newW, host_->width() - x() - kMargin);
+        userWidth_ = newW;
+        place();
+        e->accept();
+        return;
+    }
+    if (dragging_) {
+        const QPoint delta = e->globalPosition().toPoint() - dragStartMouse_;
+        QPoint newPos = dragStartPos_ + delta;
+        if (host_) {
+            newPos.setX(std::clamp(newPos.x(), 0, std::max(0, host_->width() - width())));
+            newPos.setY(std::clamp(newPos.y(), 0, std::max(0, host_->height() - height())));
+        }
+        userMoved_ = true;
+        customPos_ = newPos;
+        move(newPos);
+        e->accept();
+        return;
+    }
+    if (e->pos().x() >= width() - 8) {
+        setCursor(Qt::SizeHorCursor);
+    } else {
+        unsetCursor();
+    }
+    QFrame::mouseMoveEvent(e);
+}
+
+void GuideBand::mouseReleaseEvent(QMouseEvent* e) {
+    if (e->button() == Qt::LeftButton) {
+        dragging_ = false;
+        resizing_ = false;
+        unsetCursor();
+        e->accept();
+        return;
+    }
+    QFrame::mouseReleaseEvent(e);
+}
+
 // 칩은 호스트 폭 안에 들어간다. 좁으면 ① 도구 이름을 단계만(「A′ 찾는 중」) ② 도구 이름 숨김(아이콘이 도구를 말한다) ③ 문장 줄임표 순서로 줄인다.
 // 되돌리기 · 다시는 오른쪽에 자리(reserveRight_)가 있으면 거기, 없으면 칩 아래로 간다(FloatButtons::place). 문장은 되도록 그대로 보인다(스펙 §5 · 검토 UI 3)
 void GuideBand::place() {
@@ -97,7 +163,10 @@ void GuideBand::place() {
     }
     // 되돌리기 칸이 아래로 가면(FloatButtons::place) 칩은 호스트 폭을 다 쓸 수 있다: 단계 이름이 그 폭에 들어가면 지키고, 아니면 이름 · 선을 숨긴다(검토 UI 5)
     if (width() > withBtns && width() > hostW) { title_->setVisible(false); rule_->setVisible(false); adjustSize(); }
-    const int maxW = width() <= withBtns ? withBtns : hostW;
+    int maxW = width() <= withBtns ? withBtns : hostW;
+    if (userWidth_ > 0) {
+        maxW = std::min(userWidth_, hostW);
+    }
     if (width() > maxW) {
         const int over = width() - maxW;
         const QFontMetrics fm(hint_->font());
@@ -105,8 +174,22 @@ void GuideBand::place() {
         hint_->setText(fm.elidedText(fullHint_, Qt::ElideRight, avail));
         adjustSize();
     }
-    if (width() != sizeHint().width()) adjustSize();   // 자식 시트가 늦게 입혀져 권장 폭이 바뀌었으면 한 번 더
-    move(kMargin, kMargin);
+    if (userWidth_ > 0 && width() > maxW) {
+        resize(maxW, kBandHeight);
+    } else if (width() != sizeHint().width()) {
+        adjustSize();   // 자식 시트가 늦게 입혀져 권장 폭이 바뀌었으면 한 번 더
+    }
+    if (userMoved_) {
+        int x = customPos_.x(), y = customPos_.y();
+        if (host_) {
+            x = std::clamp(x, 0, std::max(0, host_->width() - width()));
+            y = std::clamp(y, 0, std::max(0, host_->height() - height()));
+            customPos_ = QPoint(x, y);
+        }
+        move(x, y);
+    } else {
+        move(kMargin, kMargin);
+    }
     raise();
 }
 QString GuideBand::title() const { return title_->text(); }
@@ -131,6 +214,7 @@ FloatButtons::FloatButtons(QWidget* host, Qt::Orientation o, Qt::Alignment where
     : QFrame(host), host_(host), margin_(margin), where_(where), orient_(o) {
     setObjectName(QStringLiteral("floatButtons"));
     setAttribute(Qt::WA_StyledBackground);
+    setMouseTracking(true);
     lay_ = new QBoxLayout(o == Qt::Horizontal ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom, this);
     lay_->setContentsMargins(0, 0, 0, 0);
     lay_->setSpacing(0);
@@ -156,6 +240,7 @@ QToolButton* FloatButtons::add(const QString& iconName, const QString& tip, QAct
         QObject::connect(a, &QAction::toggled, b, sync);
         QObject::connect(b, &QToolButton::clicked, a, [b, a] { if (a->isCheckable()) { QSignalBlocker bl(b); b->setChecked(!b->isChecked()); } a->trigger(); });
     }
+    b->installEventFilter(this);
     lay_->addWidget(b);
     buttons_ << b;
     adjustSize(); place();
@@ -164,8 +249,56 @@ QToolButton* FloatButtons::add(const QString& iconName, const QString& tip, QAct
 
 void FloatButtons::followRightOf(QWidget* w, int gap) { follow_ = w; gap_ = gap; if (w) w->installEventFilter(this); place(); }
 
+void FloatButtons::mousePressEvent(QMouseEvent* e) {
+    if (e->button() == Qt::LeftButton) {
+        dragging_ = true;
+        dragStartMouse_ = e->globalPosition().toPoint();
+        dragStartPos_ = pos();
+        e->accept();
+        return;
+    }
+    QFrame::mousePressEvent(e);
+}
+
+void FloatButtons::mouseMoveEvent(QMouseEvent* e) {
+    if (dragging_) {
+        const QPoint delta = e->globalPosition().toPoint() - dragStartMouse_;
+        QPoint newPos = dragStartPos_ + delta;
+        if (host_) {
+            newPos.setX(std::clamp(newPos.x(), 0, std::max(0, host_->width() - width())));
+            newPos.setY(std::clamp(newPos.y(), 0, std::max(0, host_->height() - height())));
+        }
+        userMoved_ = true;
+        customPos_ = newPos;
+        move(newPos);
+        e->accept();
+        return;
+    }
+    QFrame::mouseMoveEvent(e);
+}
+
+void FloatButtons::mouseReleaseEvent(QMouseEvent* e) {
+    if (e->button() == Qt::LeftButton) {
+        dragging_ = false;
+        e->accept();
+        return;
+    }
+    QFrame::mouseReleaseEvent(e);
+}
+
 void FloatButtons::place() {
     adjustSize();
+    if (userMoved_) {
+        int x = customPos_.x(), y = customPos_.y();
+        if (host_) {
+            x = std::clamp(x, 0, std::max(0, host_->width() - width()));
+            y = std::clamp(y, 0, std::max(0, host_->height() - height()));
+            customPos_ = QPoint(x, y);
+        }
+        move(x, y);
+        raise();
+        return;
+    }
     int x = margin_, y = margin_;
     if (follow_) {
         x = follow_->x() + follow_->width() + gap_; y = follow_->y();
@@ -180,7 +313,49 @@ void FloatButtons::place() {
 }
 
 bool FloatButtons::eventFilter(QObject* watched, QEvent* e) {
-    if ((watched == host_ && e->type() == QEvent::Resize) || (watched == follow_ && (e->type() == QEvent::Resize || e->type() == QEvent::Move || e->type() == QEvent::Show)))
+    if ((watched == host_ && e->type() == QEvent::Resize) || (watched == follow_ && (e->type() == QEvent::Resize || e->type() == QEvent::Move || e->type() == QEvent::Show))) {
         place();
+        return QFrame::eventFilter(watched, e);
+    }
+    for (auto* b : buttons_) {
+        if (watched == b) {
+            if (e->type() == QEvent::MouseButtonPress) {
+                auto* me = static_cast<QMouseEvent*>(e);
+                if (me->button() == Qt::LeftButton) {
+                    dragCandidate_ = true;
+                    dragging_ = false;
+                    dragStartMouse_ = me->globalPosition().toPoint();
+                    dragStartPos_ = pos();
+                }
+            } else if (e->type() == QEvent::MouseMove) {
+                auto* me = static_cast<QMouseEvent*>(e);
+                if (dragCandidate_ || dragging_) {
+                    if (!dragging_ && (me->globalPosition().toPoint() - dragStartMouse_).manhattanLength() >= 4) {
+                        dragging_ = true;
+                    }
+                    if (dragging_) {
+                        const QPoint delta = me->globalPosition().toPoint() - dragStartMouse_;
+                        QPoint newPos = dragStartPos_ + delta;
+                        if (host_) {
+                            newPos.setX(std::clamp(newPos.x(), 0, std::max(0, host_->width() - width())));
+                            newPos.setY(std::clamp(newPos.y(), 0, std::max(0, host_->height() - height())));
+                        }
+                        userMoved_ = true;
+                        customPos_ = newPos;
+                        move(newPos);
+                        return true;
+                    }
+                }
+            } else if (e->type() == QEvent::MouseButtonRelease) {
+                if (dragging_) {
+                    dragging_ = false;
+                    dragCandidate_ = false;
+                    return true;
+                }
+                dragCandidate_ = false;
+            }
+            break;
+        }
+    }
     return QFrame::eventFilter(watched, e);
 }

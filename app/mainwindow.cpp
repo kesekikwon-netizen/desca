@@ -333,7 +333,7 @@ void MainWindow::applyScene(OpenedScene&& s) {
     showStart(false);
     addRecent(path_);
     restoreModelState();
-    showStatus(plan_->hasLine() ? QStringLiteral("마지막 단면선을 되살렸습니다 — 다음: 뒤 깊이(1–5) 또는 Ctrl+P 도면")
+    showStatus(plan_->hasLine() ? QStringLiteral("마지막 단면선을 되살렸습니다 — 다음: 뒤 깊이(1–6) 또는 Ctrl+P 도면")
                                 : QStringLiteral("열림. 다음: 「단면선」(S)으로 평면에서 시작점 A, 끝점 A′ 를 클릭하세요"));
     msg_->setToolTip(QStringLiteral("열림"));
     updateEnabled();

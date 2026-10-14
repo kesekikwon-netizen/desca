@@ -106,6 +106,12 @@ public:
     bool screenRayLocal(const QPointF& sp, asec::Vec3& o, asec::Vec3& d) const;
     QPointF lastMousePos() const { return QPointF(lastMouse_); }
 
+    QRectF lodCardRect() const;
+    void setLodCardRect(const QRectF& r);
+    bool isLodCardMoved() const { return lodCardMoved_; }
+    void setForceLodCard(bool force) { forceLodCardForTest_ = force; update(); }
+    bool isLodCardVisible() const;
+
     std::function<void(const asec::SectionLine&, bool final)> onLineChanged;
     std::function<void(double X, double Y, double Z, bool hasZ, bool valid)> onCursor;  // 실좌표
     std::function<void(bool)> onDrawModeChanged;
@@ -218,4 +224,12 @@ private:
     void paintLodCard(QPainter& p);
     asec::Vec2 lockAxis(const asec::Vec2& w, Qt::KeyboardModifiers m) const;
     void emitLine(bool final) { if (onLineChanged && hasLine_) onLineChanged(line_, final); }
+
+    QRectF lodCardRect_;
+    bool lodCardMoved_ = false;
+    bool lodCardDragging_ = false;
+    bool lodCardResizing_ = false;
+    bool forceLodCardForTest_ = false;
+    QPointF lodDragStartMouse_;
+    QRectF lodDragStartRect_;
 };

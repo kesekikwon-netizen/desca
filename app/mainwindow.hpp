@@ -43,7 +43,7 @@ class QTableWidget;
 class QLayout;
 
 inline constexpr double kDepthFadeStrength = 0.55;   // 깊이 음영 세기(가장 먼 면을 흰색 쪽으로 55%)
-inline constexpr double kMaxBandDepth = 5.0;         // 두께 띠 앞/뒤 최대(m) — 입면 영상 깊이 최대 5 m
+inline constexpr double kMaxBandDepth = 10.0;        // 두께 띠 앞/뒤 최대(m) — 입면 영상 깊이 최대 10 m
 class QDialog;
 class QPainter;
 
@@ -300,7 +300,7 @@ private:
     void setStripTexts(const QString& stateRich, const QString& cutFull, const QString& cutShort);   // 정보 줄 글은 이 길로만(updateHeader · 감사 1280p)
     QComboBox* scaleCombo_ = nullptr;
     QLabel *lvLine_ = nullptr, *lvLabel_ = nullptr;
-    QToolButton* depthChip_[5] = {};
+    QToolButton* depthChip_[6] = {};
     void refreshSteps();
     bool backUserSet_ = false;   // 뒤 깊이를 사용자가 직접 고름(아니면 기본 3 m 를 따름)
     QMenu* recentMenu_ = nullptr;
@@ -361,7 +361,7 @@ private:
     void selectSection(int i);
     void addSection();
     void renameSection(int i);
-    void deleteSection(int i);
+    void deleteSection(int i, bool confirm = true);
     bool exportSectionsJson(const QString& path, QString* msg);
     void importSectionsJson();
     QString sectionName() const;   // 지금 단면 이름("A–A′")

@@ -21,7 +21,9 @@ TEST_CASE("뒤 깊이 기본 3 m, 옛 기본값 0.5 는 사용자가 바꾼 표�
     CHECK(resolveBackDepth(true, 0.5, true) == 0.5);       // 1.2.1 에서 사용자가 0.5 를 고름
     CHECK(resolveBackDepth(true, 2.0, false) == 2.0);      // 옛 버전에서 사용자가 바꾼 값
     CHECK(resolveBackDepth(true, 1.0, true) == 1.0);
-    CHECK(resolveBackDepth(true, 9.0, true) == kMaxBackDepth);
+    CHECK(resolveBackDepth(true, 9.0, true) == 9.0);
+    CHECK(resolveBackDepth(true, 10.0, true) == 10.0);
+    CHECK(resolveBackDepth(true, 15.0, true) == kMaxBackDepth);
     CHECK(resolveBackDepth(true, -1.0, false) == 3.0);
 }
 
@@ -104,6 +106,35 @@ TEST_CASE("입면 배경 3 m: 뒤 2.8 m 기둥이 영상에 그려지고(0.5 m �
         worst = std::max(worst, std::fabs(pr.world.z - w.z));
     }
     CHECK(worst < 0.001);
+}
+
+std::shared_ptr<StaticSource> postScene10m() {
+    auto s = std::make_shared<StaticSource>();
+    auto g = std::make_shared<Mesh>();
+    const int nx = 100, ny = 120;
+    for (int j = 0; j <= ny; ++j) for (int i = 0; i <= nx; ++i) { double x = i * 0.1, y = j * 0.1; g->pos.insert(g->pos.end(), {float(x), float(y), float(0.03 * std::sin(1.3 * x) * std::cos(0.7 * y))}); }
+    for (int j = 0; j < ny; ++j) for (int i = 0; i < nx; ++i) { uint32_t a = uint32_t(j * (nx + 1) + i), b = a + 1, c = a + uint32_t(nx + 1), d = c + 1; g->idx.insert(g->idx.end(), {a, b, d, a, d, c}); }
+    g->computeBBox();
+    auto post = std::make_shared<Mesh>();
+    addBox(*post, 4.9, 8.4, -0.05, 5.1, 8.6, 1.5);   // 단면선 y=1 에서 뒤로 7.4–7.6 m (약 7.5 m)
+    post->computeBBox();
+    s->meshes = {g, post};
+    s->bounds = g->bbox; s->bounds.add(post->bbox);
+    s->srs.srs = "EPSG:5186"; s->srs.origin = Vec3(148093, 98119, 0); s->srs.hasOrigin = true;
+    return s;
+}
+
+TEST_CASE("입면 배경 10 m: 뒤 7.5 m 기둥이 영상에 그려지고(5.0 m 이면 안 보임), 10 m 가 5 m 로 잘리지 않음", "[backdepth]") {
+    auto s = postScene10m();
+    SectionRequest rq; rq.line.a = {1, 1}; rq.line.b = {9, 1}; rq.line.front = 0; rq.imageRes = 0.01; rq.depthFade = 0.6;
+    rq.line.back = 10.0;
+    SectionOutput far; std::string err; REQUIRE(computeSection(*s, rq, far, &err));
+    rq.line.back = 5.0;
+    SectionOutput nearO; REQUIRE(computeSection(*s, rq, nearO, &err));
+    CHECK(opaqueAt(far.image, 4.0, 1.0));      // s = 5−1 = 4 m, z = 1 m: 기둥
+    CHECK(opaqueAt(far.image, 4.0, 1.45));
+    CHECK_FALSE(opaqueAt(nearO.image, 4.0, 1.0));
+    CHECK(far.result.zMax >= 1.5);
 }
 
 TEST_CASE("미리보기(배경 거친 LOD, 뒤 3 m)에서도 단면선은 잎으로 잘라 최종과 똑같다; 잎 피킹과 1 mm 안", "[backdepth]") {

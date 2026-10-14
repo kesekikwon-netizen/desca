@@ -325,6 +325,10 @@ void PlanView::resizeGL(int, int) { updateMatrices(); }
 
 void PlanView::resizeEvent(QResizeEvent* e) {
     QOpenGLWidget::resizeEvent(e);   // 프레임버퍼 · resizeGL(GL 이 있을 때) — 문서: 파생 클래스는 반드시 부른다
+    if (lodCardMoved_ && !lodCardRect_.isEmpty()) {
+        if (lodCardRect_.right() > width() - 8) lodCardRect_.moveRight(std::max(8.0, width() - 8.0));
+        if (lodCardRect_.bottom() > height() - 8) lodCardRect_.moveBottom(std::max(8.0, height() - 8.0));
+    }
     if (fitted_) fitAll(); else updateMatrices();   // 맞춤 상태면 새 크기에 다시 맞춤, 사용자 보기는 가운데 · 축척 유지(B5)
 }
 
@@ -617,7 +621,7 @@ void PlanView::paintGL() {
     p.setRenderHint(QPainter::TextAntialiasing);
     if (!hasScene_) paintEmpty(p);
     else paintOverlay(p);
-    if (streamer_ && !lastFrame_.idle && lastFrame_.burstTotal > 0) paintLodCard(p);
+    if (isLodCardVisible()) paintLodCard(p);
     p.end();
     if (!streamer_) { lastFrame_ = FrameInfo(); lastFrame_.draw = gpu_.size(); lastFrame_.idle = !needUpload_; }
     lastFrame_.ms = ft.nsecsElapsed() / 1e6;
@@ -698,11 +702,26 @@ QVector<QRectF> PlanView::tickLabelRects() const {
     return rs;
 }
 
+QRectF PlanView::lodCardRect() const {
+    if (!lodCardRect_.isEmpty()) return lodCardRect_;
+    return QRectF(12, height() - 124, 236, 64);
+}
+
+void PlanView::setLodCardRect(const QRectF& r) {
+    lodCardRect_ = r;
+    lodCardMoved_ = !r.isEmpty();
+    update();
+}
+
+bool PlanView::isLodCardVisible() const {
+    return (streamer_ && !lastFrame_.idle && lastFrame_.burstTotal > 0) || forceLodCardForTest_;
+}
+
 // 왼쪽 아래 뜬 카드: 「디테일 불러오는 중 12 / 40」 + 먹색 4 px 막대(다 오면 사라짐). 그림자 대신 1 px 테(성능)
 void PlanView::paintLodCard(QPainter& p) {
     const auto& F = lastFrame_;
     const size_t total = std::max<size_t>(1, F.burstTotal), done = std::min(F.burstDone, total);
-    QRectF r(12, height() - 48 - 76, 236, 64);
+    QRectF r = lodCardRect();
     p.setPen(QPen(theme::Edge, 1)); p.setBrush(theme::Card); p.drawRoundedRect(r, 8, 8);
     p.setFont(theme::uiFont(12)); p.setPen(theme::Ink);
     p.drawText(r.adjusted(12, 8, -12, -40), Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("디테일 불러오는 중"));
@@ -1000,6 +1019,22 @@ bool PlanView::compassHit(const QPointF& p) const {
 
 void PlanView::mousePressEvent(QMouseEvent* e) {
     lastMouse_ = e->pos();
+    if (isLodCardVisible() && lodCardRect().contains(e->position())) {
+        QRectF cardR = lodCardRect();
+        if (std::abs(e->position().x() - cardR.right()) <= 8.0) {
+            lodCardResizing_ = true;
+            lodDragStartMouse_ = e->position();
+            lodDragStartRect_ = cardR;
+            useShape(Qt::SizeHorCursor);
+        } else {
+            lodCardDragging_ = true;
+            lodDragStartMouse_ = e->position();
+            lodDragStartRect_ = cardR;
+            useShape(Qt::ClosedHandCursor);
+        }
+        e->accept();
+        return;
+    }
     if (!hasScene_) { if (e->button() == Qt::LeftButton && onOpenRequest) onOpenRequest(); return; }
     if (e->button() == Qt::LeftButton && compassHit(e->position())) { homeView(); return; }
     Vec2 w;
@@ -1030,6 +1065,29 @@ void PlanView::mousePressEvent(QMouseEvent* e) {
 }
 
 void PlanView::mouseMoveEvent(QMouseEvent* e) {
+    if (lodCardResizing_) {
+        const double dx = e->position().x() - lodDragStartMouse_.x();
+        double newW = std::max(120.0, lodDragStartRect_.width() + dx);
+        newW = std::min(newW, double(width()) - lodDragStartRect_.left() - 8.0);
+        lodCardRect_ = QRectF(lodDragStartRect_.left(), lodDragStartRect_.top(), newW, lodDragStartRect_.height());
+        lodCardMoved_ = true;
+        update();
+        e->accept();
+        return;
+    }
+    if (lodCardDragging_) {
+        const QPointF delta = e->position() - lodDragStartMouse_;
+        QRectF newR = lodDragStartRect_.translated(delta);
+        if (newR.left() < 8.0) newR.moveLeft(8.0);
+        if (newR.top() < 8.0) newR.moveTop(8.0);
+        if (newR.right() > width() - 8.0) newR.moveRight(width() - 8.0);
+        if (newR.bottom() > height() - 8.0) newR.moveBottom(height() - 8.0);
+        lodCardRect_ = newR;
+        lodCardMoved_ = true;
+        update();
+        e->accept();
+        return;
+    }
     QPoint d = e->pos() - lastMouse_;
     lastMouse_ = e->pos();
     Vec2 w;
@@ -1075,6 +1133,15 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
     if (drawStage_ >= 0) { refreshCursor(e->modifiers()); return; }   // 도구를 든 동안: 단계(A · A′)와 Shift(축 맞춤)가 커서에 보인다
+    if (isLodCardVisible() && lodCardRect().contains(e->position())) {
+        QRectF cardR = lodCardRect();
+        if (std::abs(e->position().x() - cardR.right()) <= 8.0) {
+            useShape(Qt::SizeHorCursor);
+        } else {
+            useShape(Qt::OpenHandCursor);
+        }
+        return;
+    }
     if (hasLine_ && hasScene_) {
         double z = refZ() + center_.z;
         QPointF A = localToScreen(line_.a.x, line_.a.y, z), B = localToScreen(line_.b.x, line_.b.y, z);
@@ -1085,6 +1152,12 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
 }
 
 void PlanView::mouseReleaseEvent(QMouseEvent*) {
+    if (lodCardDragging_ || lodCardResizing_) {
+        lodCardDragging_ = false;
+        lodCardResizing_ = false;
+        useShape(Qt::ArrowCursor);
+        return;
+    }
     if (dragHandle_ >= 0) { dragHandle_ = -1; emitLine(true); }
     panning_ = orbiting_ = false;
     refreshCursor(Qt::NoModifier);

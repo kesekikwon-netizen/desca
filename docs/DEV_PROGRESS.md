@@ -22,14 +22,14 @@
 ## 1. 지금 상태 한눈에
 | 항목 | 값 |
 | --- | --- |
-| 마지막 갱신 | 2026-10-11 · Claude Code(Sonnet 5.5) — **Trench 최종 디자인 T1–T12 끝 · 다른 PC 로 이어받기 위해 중단(사용자 지시) · 푸시함**. 다음 T13. 이어받는 법은 §5 맨 위 「▶ 2026-10-11 중단」 |
-| 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-09-design-v5.md` |
-| 브랜치 | `feature/design-v2` (기준 커밋 `4422b4e` = `origin/kerf-portable-3sm`) |
-| 커밋 | 사용자 허락(2026-10-09 「추천순으로 진행」) — **단계마다 커밋하고 `origin/feature/design-v2`에 푸시**한다(푸시 명령은 §4 「푸시 해결」). 해시는 `git log --oneline`으로 확인 |
-| 바뀐 파일(내용) | 모두 커밋 · 푸시됨(2026-10-11 사용자 지시 「커밋 푸시」) — `origin/feature/design-v2` 에 T1–T12 · 인수 문서 · 병합까지 올라가 있다. 새 PC 에서는 `git pull` 만 하면 된다(올릴 것 없음). 이 PC 에만 있는 것: 장부 `.superpowers/` · 실제 모델 · 캡처 · `.claude/settings.local.json`(권한 설정)
-| 빌드 | 성공 — `C:\dev\kerf-v4c` (§2), T12 뒤 마지막 빌드 exit 0 · MSVC(VS 2022 생성기) C2026 은 R0(`5331124`)에서 고침 — 병합 커밋 `6111378` 의 GitHub Actions 결과는 `factory ci 6111378` 로 확인 |
-| 시험 | T12 뒤 `asec_tests "~CoalescingWorker*"` 51408 통과 · `--ui-audit` 합성 모델 1280 · 1920 · 2560 · 3440 · 3840 × 배율 1 · 2 + 1920 × 1.25 · 1.75 + 실제 모델 `Production_1.3sm` + 실제 Windows 창 모두 RESULT ok · `--sheet-check` · `--icon-sheet` · `--undo-test` · `--cursor-sheet` · `--app-icon` EXIT 0 |
-| 최근 캡처 | 이 PC 의 `C:/dev/tmp/elev-bug/` 아래 t1 … t10 폴더 등(실좌표 · 이 PC 에만, 저장소에 없음). 새 PC 에서는 `shot.ps1` 로 다시 찍는다 |
+| 마지막 갱신 | 2026-10-14 · Antigravity (Teamwork) — **사용자 요청 R1–R4(도면 하단 1줄 최소화·여백 축소, 입면 10 m 확장, 마지막 단면 완전 삭제, 목록·설정·카드창 마우스 크기 조절·이동) 완료 및 검증** |
+| 디자인 상태 | ▶ v5 확정(2026-10-09, C1–C7 추천대로) · 구현 중 — 스펙 `docs/design/DESIGN_SPEC.md` · 계획 `docs/superpowers/plans/2026-10-11-trench-final.md` |
+| 브랜치 | `continue_github_actions_dev` (기준 커밋 `cc9be5b` = `feature/3sm-stream` 이후 이어서 개발) |
+| 커밋 | 사용자 허락 — **단계마다 커밋하고 원격에 푸시 후 GitHub Actions CI 확인** |
+| 바뀐 파일(내용) | `core/include/asec/sheet.hpp`, `app/sheetexport.cpp`, `app/mainwindow.{hpp,cpp}`, `app/mainwindow_ui.cpp`, `app/guideband.{hpp,cpp}`, `app/planview.{hpp,cpp}`, `tests/test_{sheet,backdepth,project}.cpp` |
+| 빌드 | 성공 — `.\build-msvc` (MSVC 2022 + Ninja + Qt 6), 에러 0건 (exit 0) |
+| 시험 | `asec_tests "~CoalescingWorker*"` 168 케이스(193,868 assertions) 통과 · `--sheet-check` (`a4-plot-ratio=0.8379`, `RESULT ok`) · `--ui-audit` (1080p · 4K ×2 모두 `RESULT ok`, exit 0) |
+| 최근 캡처 | `--ui-audit` 및 `--sheet-check` 자동 검증 산출물 확인 |
 
 ## 2. 이 PC에서 빌드 · 실행 (검증된 명령)
 - **한글 경로 함정:** 저장소가 `C:\Users\권을\…`에 있으면 CMake가 부르는 `rc.exe` · `llvm-rc`가 멈춘다(실측 2회). 그래서 **정션 `C:\dev\desca` → 저장소**를 만들어 그 경로로 빌드한다(이미 있음: `New-Item -ItemType Junction -Path C:\dev\desca -Target <저장소>`).
@@ -382,6 +382,20 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** 감사 합성 10조합 + 1920 ×1.25 · ×1.75 + 실제 모델 + 실제 Windows 창 `RESULT ok`(아래 줄) · 단위 시험 · `--sheet-check` · `--icon-sheet` · `--undo-test` EXIT 0.
 - **판정(Ruling):** ① 구현한 것은 캔버스 표의 세 가지(탭 · 안내 칩 · 최종 교체)이고 나머지 전환은 대기 목록 「모션 2」로 미룸 — 상수는 이미 한 곳에 있어 붙이기만 하면 됨 — 틀리면: 마우스 위 · 토글 · 확대 보간 등이 아직 즉시. ② 휠 확대의 기존 부드러운 보간(설정 `view/smoothZoom`)은 그대로 둠(캔버스는 「휠 · 끌기는 즉시」지만 사용자가 지금 쓰는 동작을 이번에 바꾸지 않음) — 틀리면 휠이 약간 늦게 따라옴. ③ 자동화는 늘 움직임 꺼짐 — 감사 · 캡처가 시각에 흔들리지 않게(움직임 시험만 임시로 켬).
 - **남은 문제:** 「모션 2」(위 ①)만 — 대기 목록에 넣음. 다음 T13(G10) 제거 · 숨김 25.
+
+### 2026-10-14 · Antigravity (Teamwork) — 사용자 요청 R1–R4: 도면 하단 1줄 최소화·여백 축소, 입면 10 m 확장, 마지막 단면 삭제 허용, 목록·설정·카드창 마우스 크기 조절·이동 지원
+- **사용자 요청(2026-10-14 캡처 5장 + `/teamwork-preview`):**
+  1. **R1(도면 여백 축소 및 하단 1줄 표시):** 이미지 조판에서 하단 표제란·범례가 차지하는 비중이 너무 크고 여백이 많음 → 제일 하단에 최소한으로 한 줄만 표시하고 여백을 줄여 이미지를 최대한 크게 볼 수 있게 수정.
+  2. **R2(입면 가시 거리 10 m 확장):** 입면 볼 수 있는 거리(뒤 깊이)를 기존 5 m에서 **10 m**까지 볼 수 있게 확장.
+  3. **R3(단면 목록 1개 남았을 때도 삭제 허용):** 단면 목록에 2개가 있을 때는 삭제되지만 1개만 남으면 지우기 메뉴가 떠도 삭제되지 않음 → 1개 남았을 때도 완전히 삭제(0개 상태)할 수 있게 수정.
+  4. **R4(모든 카드창·목록창 마우스 이동 및 크기 축소 지원):** 모든 카드창·목록창·설정창을 마우스로 이동하고 창 크기를 줄일 수 있게 수정.
+- **무엇을:**
+  - **R1 (`core/include/asec/sheet.hpp`, `app/sheetexport.cpp`, `tests/test_sheet.cpp`):** `SheetSpec` 여백 축소(`marginMm = 5.0`, `gutterLeftMm = 11.0`, `gutterRightMm = 9.0`, `gutterTopMm = 5.0`, `gutterBottomMm = 6.0`, `titleHmm = 8.0`). 기존의 3줄짜리 하단 박스 2개(범례 상자 + 표제란 상자)를 제거하고 하단 단일 줄(축척 막대 + 도면명 · 축척 · 수평 좌표계 · 날짜)로 통합하여 A4 가로 기준 그림 칸 면적 비율을 기존 약 60%에서 **77.48%**(공식 계산) / **83.79%**(`--sheet-check` 실측)로 극대화(미리보기 · SVG · PDF · PNG · TIFF · 인쇄 모두 동일 적용).
+  - **R2 (`core/include/asec/sheet.hpp`, `app/mainwindow_ui.cpp`, `tests/test_backdepth.cpp`):** `kMaxBandDepth` 및 `kMaxBackDepth`를 `10.0 m`로 확장, 빠른 선택 칩을 `0.5 / 1 / 2 / 3 / 5 / 10` m(단축키 `1–6`) 6개로 확장, `뒤`·`앞` 스핀박스 폭을 68 px로 넓혀 `10.00 m` 표시 시 잘림·겹침 방지.
+  - **R3 (`app/mainwindow.{hpp,cpp}`, `app/mainwindow_ui.cpp`, `tests/test_project.cpp`):** `MainWindow::deleteSection(int)`에서 마지막 단면 삭제 시 `sections_`가 비면 `current_ = -1`, `plan_->setLine(SectionLine(), false)`, `section_->clear()`, `hasResult_ = false`로 즉시 초기화한 뒤 `saveModelState()` · `updateHeader()`를 호출하도록 수정하여 `captureProject()`가 평면 뷰에 남은 선으로 `"A–A′"`를 다시 살려내던 버그를 근본 해결.
+  - **R4 (`app/mainwindow_ui.cpp`, `app/sheetexport.cpp`, `app/guideband.{hpp,cpp}`, `app/planview.{hpp,cpp}`):** 단면 탭 왼쪽 패널(`min 160 px, max 600 px`)과 상·하단 수직 스플리터(`sidePanelVSplit`), 도면 탭 및 도면 대화상자 좌우 패널 수평 스플리터를 적용하고, 캔버스 위 플로팅 카드(`GuideBand`, `FloatButtons`, `PlanView`의 `디테일 불러오는 중` 카드)에 마우스 드래그 이동 및 가장자리 리사이즈를 구현.
+- **확인:** `cmake --build build-msvc` 에러 0건(exit 0) · `asec_tests.exe "~CoalescingWorker*"` 168 케이스(193,868 assertions) 통과 · `--sheet-check` `a4-plot-ratio=0.8379 RESULT ok`(exit 0) · `--ui-audit` 1080p 및 4K(배율 2) `r4-sheet-splitters`, `r4-side-panel`, `r4-floating-cards` 포함 모두 `RESULT ok`(exit 0).
+- **판정(Ruling):** `Q_OBJECT` 0건 및 C++17 호환성 유지.
 
 ## 5. 다음 할 일 (위에서부터)
 > ### ▶ 2026-10-11 중단 · 다른 PC 에서 이어받기 (Trench 최종 디자인 구현, 계획 T1–T22 중 **T1–T12 끝**)

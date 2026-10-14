@@ -124,3 +124,58 @@ TEST_CASE("프로젝트 파일 이름: 모델 이름 + .trench.json, 경로 구�
     CHECK_FALSE(isProjectFileName("x.sections.json"));
     CHECK_FALSE(isProjectFileName("x.3mx"));
 }
+
+TEST_CASE("프로젝트 파일: 0개 단면 저장 및 복원 시 빈 목록 유지", "[project]") {
+    ProjectDoc p;
+    p.modelPath = "D:/x/test.3mx";
+    p.modelName = "test.3mx";
+    p.sections.clear();
+    p.current = -1;
+    p.hasLine = false;
+    const std::string text = projectToJson(p);
+    ProjectDoc q; std::string err;
+    REQUIRE(projectFromJson(text, q, &err));
+    CHECK(q.sections.empty());
+    CHECK(q.current == -1);
+    CHECK(q.hasLine == false);
+}
+
+TEST_CASE("프로젝트 파일: 10 m 입면 깊이 및 단면별 10 m 뒤 깊이 보존", "[project]") {
+    ProjectDoc p;
+    p.modelPath = "D:/x/test.3mx";
+    p.modelName = "test.3mx";
+    p.front = 10.0;
+    p.back = 10.0;
+    p.backUserSet = true;
+    SavedSection s;
+    s.name = "A–A′";
+    s.ax = 1.0; s.ay = 2.0; s.bx = 3.0; s.by = 4.0;
+    s.front = 10.0;
+    s.back = 10.0;
+    s.backUserSet = true;
+    p.sections.push_back(s);
+    p.current = 0;
+    p.hasLine = true;
+    p.ax = 1.0; p.ay = 2.0; p.bx = 3.0; p.by = 4.0;
+    const std::string text = projectToJson(p);
+    ProjectDoc q; std::string err;
+    REQUIRE(projectFromJson(text, q, &err));
+    CHECK(q.front == Catch::Approx(10.0));
+    CHECK(q.back == Catch::Approx(10.0));
+    CHECK(q.backUserSet == true);
+    REQUIRE(q.sections.size() == 1);
+    CHECK(q.sections[0].front == Catch::Approx(10.0));
+    CHECK(q.sections[0].back == Catch::Approx(10.0));
+    CHECK(q.sections[0].backUserSet == true);
+}
+
+TEST_CASE("프로젝트 파일: 0개 단면일 때 current가 0 이상으로 기록되어 있어도 -1로 강제", "[project]") {
+    const std::string text =
+        "{\"format\":\"Trench.project\",\"version\":1,\"model\":{\"path\":\"D:/x/test.3mx\"},"
+        "\"current\":5,"
+        "\"sections\":[]}";
+    ProjectDoc q; std::string err;
+    REQUIRE(projectFromJson(text, q, &err));
+    CHECK(q.sections.empty());
+    CHECK(q.current == -1);
+}
