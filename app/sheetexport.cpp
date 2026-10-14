@@ -471,11 +471,12 @@ void paintPlanStrip(QPainter &p, const SectionDoc &doc, const SheetGeom &G,
   p.restore();
 }
 
-/// 조판 미리보기 영상: 지금 보이는 범위(주변 30 % 포함)만, 가장 촘촘하게(긴 변
-/// 6000 px, 최소 1 mm/px)
+/// 조판 미리보기 영상: 지금 보이는 범위(주변 30 % 포함)만 화면 미리보기에
+/// 충분한 해상도(긴 변 2000 px)로 빠르게 생성
 bool renderPlanPreview(MeshSource &src, const SheetSpec &spec, const Box3 &area,
                        double zoom, double dxMm, double dyMm, QImage &out,
-                       double &x0, double &y1, double &res) {
+                       double &x0, double &y1, double &res,
+                       const std::atomic<bool> *cancel = nullptr) {
   PlanPlace v = placePlan(spec, area.mn.x, area.mx.x, area.mn.y, area.mx.y,
                           zoom, dxMm, dyMm);
   const double mx = (v.visX1 - v.visX0) * 0.3,
@@ -487,11 +488,17 @@ bool renderPlanPreview(MeshSource &src, const SheetSpec &spec, const Box3 &area,
   box.mx.y = v.visYTop + my;
   box.mn.z = src.bounds.mn.z;
   box.mx.z = src.bounds.mx.z;
+  if (src.bounds.valid()) {
+    box.mn.x = std::max(box.mn.x, src.bounds.mn.x);
+    box.mn.y = std::max(box.mn.y, src.bounds.mn.y);
+    box.mx.x = std::min(box.mx.x, src.bounds.mx.x);
+    box.mx.y = std::min(box.mx.y, src.bounds.mx.y);
+  }
   const double w = std::max(0.0, box.mx.x - box.mn.x),
                h = std::max(0.0, box.mx.y - box.mn.y);
-  res = std::max({1e-4, 0.001, std::max(w, h) / 6000.0});
+  res = std::max({1e-4, 0.002, std::max(w, h) / 2000.0});
   QString em;
-  return renderPlanOrtho(src, box, res, out, x0, y1, &em, nullptr);
+  return renderPlanOrtho(src, box, res, out, x0, y1, &em, cancel);
 }
 } // namespace
 
@@ -539,11 +546,11 @@ void MainWindow::paintSheet(QPainter &p, const SectionDoc &doc0,
   doc.st.plotScaleBar = !sp.withTitle;
   doc.st.levelMinorPt = clampLineWeightPt(sp.levelMinorPt);
   doc.st.levelMajorPt = clampLineWeightPt(sp.levelMajorPt);
-  // 영상: 이 쪽에 보이는 거리 범위만 잘라서(PDF 에 쪽마다 전체 영상이 들어가지
-  // 않게)
+  // 영상: 여러 쪽 분할 인쇄/PDF 일 때만 쪽별 거리 범위로 자른다(화면
+  // 미리보기에서 매 프레임 대용량 QImage::copy 방지)
   QImage img = img0;
   SectionImgGeo geo = geo0;
-  if (!img.isNull() && geo.res > 0) {
+  if (sp.split && (L.cols * L.rows > 1) && !img.isNull() && geo.res > 0) {
     double sa = xf.s0, sb = xf.s0 + W.visLen;
     int x0 = std::max(0, int(std::floor((sa - geo.s0) / geo.res)) - 2),
         x1 = std::min(img.width(), int(std::ceil((sb - geo.s0) / geo.res)) + 2);
@@ -930,7 +937,7 @@ bool MainWindow::preparePlanAssets(
     const std::atomic<bool> *cancel,
     const std::function<void(double)> &progress) {
   sp = p;
-  sp.spec.denom = snapScaleDenom10(sp.spec.denom);
+  sp.spec.denom = std::max(10.0, std::round(sp.spec.denom));
   Box3 area = sp.wholeModel ? src.bounds : sp.area;
   if (src.bounds.valid()) {
     area.mn.x = std::max(area.mn.x, src.bounds.mn.x);
@@ -1383,8 +1390,8 @@ public:
   std::function<void()> onSettled; // 확대·그림 이동이 멈춘 0.25 초 뒤(보이는
                                    // 범위를 더 촘촘히 다시 그리는 데 씀)
   bool editing = false;
-  double zoom = 1; // 조판편집 중 휠로 바꾸는 칸 안 배율(멈추면 축척 값으로
-                   // 바뀌고 1 로 돌아감)
+  double zoom = 1;     // 조판편집 중 휠로 바꾸는 칸 안 배율(멈추면 축척 값으로
+                       // 바뀌고 1 로 돌아감)
   double pageZoom = 1; // 편집 아닐 때 휠: 종이 전체를 크게·작게 보기만(도면
                        // 내용·축척은 그대로)
   double fitPxPerMm = 1;
@@ -1588,11 +1595,28 @@ QSpinBox *scaleSpin(double denom) {
   auto *scale = new QSpinBox;
   scale->setRange(10, 2000000000);
   scale->setSingleStep(10);
+  scale->setKeyboardTracking(false);
   scale->setPrefix(QStringLiteral("1:"));
   scale->setButtonSymbols(QAbstractSpinBox::UpDownArrows);
-  scale->setValue(int(std::lround(snapScaleDenom10(denom))));
-  scale->setToolTip(QStringLiteral("10 단위. 위·아래 화살표로 바꿉니다"));
+  scale->setValue(std::max(10, int(std::lround(denom))));
+  scale->setToolTip(
+      QStringLiteral("위·아래 화살표는 10 단위, 키보드로 직접 입력 가능"));
   return scale;
+}
+void bindScaleTyping(QSpinBox *scale, std::function<void(int)> onTyped) {
+  auto *le = scale->findChild<QLineEdit *>();
+  if (!le)
+    return;
+  auto *tm = new QTimer(scale);
+  tm->setSingleShot(true);
+  tm->setInterval(350);
+  QObject::connect(le, &QLineEdit::textEdited, tm, [tm] { tm->start(); });
+  QObject::connect(tm, &QTimer::timeout, scale, [scale, onTyped] {
+    bool ok = false;
+    const int v = scale->cleanText().trimmed().toInt(&ok);
+    if (ok && v >= scale->minimum() && v <= scale->maximum())
+      onTyped(v);
+  });
 }
 QWidget *scaleWithArrows(QSpinBox *spin) {
   auto *w = new QWidget;
@@ -1618,10 +1642,11 @@ QWidget *scaleWithArrows(QSpinBox *spin) {
                        "3D3D3A}QToolButton:hover{background:#F5F4ED}"
                        "QToolButton:pressed{background:#E8E6DC}"));
     QObject::connect(b, &QToolButton::clicked, spin, [spin, up] {
-      if (up)
-        spin->stepUp();
-      else
-        spin->stepDown();
+      spin->interpretText();
+      const int cur = spin->value();
+      const int next = up ? ((cur / 10) * 10 + 10)
+                          : std::max(10, ((cur + 9) / 10) * 10 - 10);
+      spin->setValue(next);
     });
     col->addWidget(b);
   }
@@ -2024,20 +2049,23 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
     const int myGen = ++*previewGen;
     const SectionDoc docSnap = *docP;
     const bool needImg =
-        docSnap.imgRes > 0.0016; // 화면 영상이 1.5 mm/px 보다 거칠면 다시 계산
+        docSnap.img.width() < 2400 &&
+        docSnap.imgRes > 0.0025; // 화면 미리보기용: 이미 2400 px 이상이면
+                                 // 충분(출력 시에는 600 dpi 로 따로 그림)
     const SheetGeom G0 = sheetGeom(docSnap, *st);
     const double h0 =
         planStripHalfWidth(docSnap.r.line.front, docSnap.r.line.back);
-    const double planRes = groundResolution(std::max(10.0, G0.spec.denom), 150);
-    const bool needPlan = G0.lenM > 0;
+    const double planRes = groundResolution(std::max(10.0, G0.spec.denom), 96);
+    const double imgRes = std::max(0.002, G0.lenM / 4000.0);
+    const bool needPlan = G0.lenM > 0 && st->withPlan;
     ++g_pvStarted;
-    std::thread([src = src_, docSnap, needImg, needPlan, h0, planRes,
+    std::thread([src = src_, docSnap, needImg, needPlan, h0, planRes, imgRes,
                  screenImgP, screenGeoP, screenPlan, cancel, previewGen, myGen,
                  pvp = QPointer<SheetPreview>(pv)] {
       PreviewActive active;
       if (needPlan && !cancel->load()) { // 위치도부터(가볍다) → 바로 보이게
         PlanStrip ps;
-        if (renderPlanStrip(*src, docSnap.r.line, h0, planRes, 6e6, ps,
+        if (renderPlanStrip(*src, docSnap.r.line, h0, planRes, 1.5e6, ps,
                             cancel.get()) &&
             !cancel->load())
           QMetaObject::invokeMethod(
@@ -2055,8 +2083,8 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
         SectionRequest rq;
         rq.line = docSnap.r.line;
         rq.depthFade = docSnap.st.depthFade ? kDepthFadeStrength : 0.0;
-        rq.imageRes = 0.0015;
-        rq.maxImagePixels = size_t(60) << 20;
+        rq.imageRes = imgRes;
+        rq.maxImagePixels = size_t(20) << 20;
         SectionOutput out;
         std::string e;
         if (computeSection(*src, rq, out, &e, cancel.get()) &&
@@ -2094,7 +2122,8 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
                        *previewDirty = true;
                    });
   bindImageDrag(pv, &st->imgDxMm, &st->imgDyMm);
-  // ---- 오른쪽 판: 머리 · 도면 항목 · 도면 정보 · 선 글자 · 형식 · 도면 점검 | 바닥
+  // ---- 오른쪽 판: 머리 · 도면 항목 · 도면 정보 · 선 글자 · 형식 · 도면 점검 |
+  // 바닥
   auto *side = new QWidget;
   side->setObjectName("dialogSide");
   side->setAttribute(Qt::WA_StyledBackground);
@@ -2344,8 +2373,9 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
   const QString modelName = QFileInfo(path_).completeBaseName();
   auto refresh = std::make_shared<std::function<void()>>();
   *refresh = [=] {
-    st->spec.denom = snapScaleDenom10(st->spec.denom);
-    if (scale->value() != int(std::lround(st->spec.denom))) {
+    st->spec.denom = std::max(10.0, std::round(st->spec.denom));
+    if (!scale->hasFocus() &&
+        scale->value() != int(std::lround(st->spec.denom))) {
       QSignalBlocker bl(scale);
       scale->setValue(int(std::lround(st->spec.denom)));
     }
@@ -2529,6 +2559,9 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
       *screenImgP = docP->img;
       *screenGeoP = SectionImgGeo{docP->imgS0, docP->imgZ1, docP->imgRes};
       previewTimer->start();
+    } else if (docP->img.width() > screenImgP->width()) {
+      *screenImgP = docP->img;
+      *screenGeoP = SectionImgGeo{docP->imgS0, docP->imgZ1, docP->imgRes};
     }
     (*refresh)();
   };
@@ -2603,8 +2636,12 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
     st->spec.landscape = id == 0;
     (*refresh)();
   });
-  QObject::connect(scale, &QSpinBox::valueChanged, d, [=](int) {
-    st->spec.denom = snapScaleDenom10(scale->value());
+  QObject::connect(scale, &QSpinBox::valueChanged, d, [=](int v) {
+    st->spec.denom = std::max(10, v);
+    (*refresh)();
+  });
+  bindScaleTyping(scale, [=](int v) {
+    st->spec.denom = std::max(10, v);
     (*refresh)();
   });
   QObject::connect(fitLink, &QPushButton::clicked, d, [=] {
@@ -2631,6 +2668,8 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
   });
   QObject::connect(tPlan, &QToolButton::toggled, d, [=](bool on) {
     st->withPlan = on;
+    if (on && screenPlan->img.isNull())
+      (*startPreview)();
     (*refresh)();
   }); // 띠 높이만큼 배치가 바뀜
   QObject::connect(ptMinor, &QDoubleSpinBox::valueChanged, d, [=](double vv) {
@@ -3182,8 +3221,6 @@ void MainWindow::dlgSheet() {
       return;
     }
   }
-  if (!ensureFinalSection())
-    return;
   syncCurrentSection();
   SheetParams sp = defaultSheetParams();
   if (lastSheet_) { // 조판 목록에서 다른 단면으로: 용지·넣을 것·형식은 그대로,
@@ -3217,6 +3254,8 @@ void MainWindow::dlgSheet() {
   QDialog *d = buildSheetDialog(*params, acc);
   auto src = src_;
   showSheetTab(d, [this, params, src] {
+    if (!ensureFinalSection())
+      return;
     const SectionDoc doc =
         section_
             ->doc(); // 저장 시점의 단면(도면 탭에서 입면을 바꿨으면 그 결과)
@@ -3290,7 +3329,7 @@ PlanSheetParams MainWindow::defaultPlanSheetParams() const {
           : Paper::A4;
   sp.spec.landscape = st.value("plansheet/landscape", true).toBool();
   sp.spec.denom =
-      snapScaleDenom10(st.value("plansheet/denom", 100.0).toDouble());
+      std::max(10.0, std::round(st.value("plansheet/denom", 100.0).toDouble()));
   sp.format = std::clamp(st.value("plansheet/format", 0).toInt(), 0, 3);
   sp.dpi = std::max(600.0, st.value("plansheet/dpi", 600.0).toDouble());
   sp.wholeModel = false;
@@ -3510,26 +3549,104 @@ QDialog *MainWindow::buildPlanSheetDialog(PlanSheetParams &io,
   dlgSplit->setSizes({700, 320});
   outer->addWidget(dlgSplit, 1);
 
-  auto reloadImage = [=] {
-    if (!src_)
-      return;
+  auto baseImg = std::make_shared<QImage>(preview0);
+  auto baseX0 = std::make_shared<double>(prevX0);
+  auto baseY1 = std::make_shared<double>(prevY1);
+  auto baseRes = std::make_shared<double>(prevRes);
+  if (baseImg->isNull() && src_) {
     QImage q;
     double x0 = 0, y1 = 0, res = 0;
     if (renderPlanPreview(*src_, st->spec, st->area, pv->zoom, st->imgDxMm,
                           st->imgDyMm, q, x0, y1, res)) {
+      *baseImg = q;
+      *baseX0 = x0;
+      *baseY1 = y1;
+      *baseRes = res;
       *img = q;
       *gx0 = x0;
       *gy1 = y1;
       *gres = res;
     }
+  }
+  auto planCancel = std::make_shared<std::shared_ptr<std::atomic<bool>>>();
+  auto planGen = std::make_shared<std::atomic<int>>(0);
+  QObject::connect(d, &QObject::destroyed, [planCancel] {
+    if (*planCancel)
+      (*planCancel)->store(true);
+  });
+  auto *planTimer = new QTimer(d);
+  planTimer->setSingleShot(true);
+  planTimer->setInterval(200);
+  auto schedulePlanReload = [this, st, pv, img, gx0, gy1, gres, baseImg, baseX0,
+                             baseY1, baseRes, planCancel, planGen, planTimer] {
+    if (!src_)
+      return;
+    const PlanPlace cover =
+        placePlan(st->spec, st->area.mn.x, st->area.mx.x, st->area.mn.y,
+                  st->area.mx.y, pv->zoom, st->imgDxMm, st->imgDyMm);
+    const double visSpan = std::max(cover.worldX1 - cover.worldX0,
+                                    cover.worldYTop - cover.worldYBot);
+    if (!baseImg->isNull() && *baseRes > 0 &&
+        visSpan / *baseRes >=
+            900.0) { // 기본 영상 해상도로 충분하면 즉시 재사용
+      if (*planCancel)
+        (*planCancel)->store(true);
+      planTimer->stop();
+      *img = *baseImg;
+      *gx0 = *baseX0;
+      *gy1 = *baseY1;
+      *gres = *baseRes;
+      pv->update();
+      return;
+    }
+    planTimer->start();
   };
+  QObject::connect(
+      planTimer, &QTimer::timeout, d,
+      [this, st, pv, img, gx0, gy1, gres, planCancel, planGen] {
+        if (!src_)
+          return;
+        if (*planCancel)
+          (*planCancel)->store(true);
+        auto cancel = std::make_shared<std::atomic<bool>>(false);
+        *planCancel = cancel;
+        const int myGen = ++*planGen;
+        const SheetSpec specSnap = st->spec;
+        const Box3 areaSnap = st->area;
+        const double zoomSnap = pv->zoom;
+        const double dxSnap = st->imgDxMm, dySnap = st->imgDyMm;
+        std::thread([src = src_, specSnap, areaSnap, zoomSnap, dxSnap, dySnap,
+                     img, gx0, gy1, gres, cancel, planGen, myGen,
+                     pvp = QPointer<SheetPreview>(pv)] {
+          QImage q;
+          double x0 = 0, y1 = 0, res = 0;
+          if (renderPlanPreview(*src, specSnap, areaSnap, zoomSnap, dxSnap,
+                                dySnap, q, x0, y1, res, cancel.get()) &&
+              !cancel->load()) {
+            QMetaObject::invokeMethod(
+                qApp,
+                [img, gx0, gy1, gres, q, x0, y1, res, pvp, planGen, myGen] {
+                  if (planGen->load() != myGen)
+                    return;
+                  *img = q;
+                  *gx0 = x0;
+                  *gy1 = y1;
+                  *gres = res;
+                  if (pvp)
+                    pvp->update();
+                },
+                Qt::QueuedConnection);
+          }
+        }).detach();
+      });
   const QString modelName = QFileInfo(path_).completeBaseName();
   auto refresh = std::make_shared<std::function<void()>>();
   *refresh = [=] {
-    st->spec.denom = snapScaleDenom10(scale->value());
-    if (int(st->spec.denom) != scale->value()) {
+    st->spec.denom = std::max(10.0, std::round(st->spec.denom));
+    if (!scale->hasFocus() &&
+        int(std::lround(st->spec.denom)) != scale->value()) {
       QSignalBlocker bl(scale);
-      scale->setValue(int(st->spec.denom));
+      scale->setValue(int(std::lround(st->spec.denom)));
     }
     syncPaperChips(pc, st->spec);
     st->wholeModel = area->currentIndex() == 1 || !hasView;
@@ -3622,7 +3739,7 @@ QDialog *MainWindow::buildPlanSheetDialog(PlanSheetParams &io,
       } // valueChanged → 새로 그림
       (*refresh)();
     }
-    reloadImage();
+    schedulePlanReload();
     pv->update();
   };
   pv->paintFn = [=](QPainter &p, const QRect &rc) {
@@ -3665,8 +3782,7 @@ QDialog *MainWindow::buildPlanSheetDialog(PlanSheetParams &io,
         st->spec.paper = idx >= 2 ? Paper::A3 : Paper::A4;
         st->spec.landscape = (idx % 2) == 0;
         (*refresh)();
-        reloadImage();
-        pv->update();
+        schedulePlanReload();
       },
       [this] {
         if (sheetSide_)
@@ -3680,19 +3796,22 @@ QDialog *MainWindow::buildPlanSheetDialog(PlanSheetParams &io,
   QObject::connect(pc.size, &QButtonGroup::idClicked, d, [=](int id) {
     st->spec.paper = id == 1 ? Paper::A3 : Paper::A4;
     (*refresh)();
-    reloadImage();
-    pv->update();
+    schedulePlanReload();
   });
   QObject::connect(pc.orient, &QButtonGroup::idClicked, d, [=](int id) {
     st->spec.landscape = id == 0;
     (*refresh)();
-    reloadImage();
-    pv->update();
+    schedulePlanReload();
   });
-  QObject::connect(scale, &QSpinBox::valueChanged, d, [=](int) {
+  QObject::connect(scale, &QSpinBox::valueChanged, d, [=](int v) {
+    st->spec.denom = std::max(10, v);
     (*refresh)();
-    reloadImage();
-    pv->update();
+    schedulePlanReload();
+  });
+  bindScaleTyping(scale, [=](int v) {
+    st->spec.denom = std::max(10, v);
+    (*refresh)();
+    schedulePlanReload();
   });
   QObject::connect(fitLink, &QPushButton::clicked, d, [=] {
     double rw = std::max(0.0, st->area.mx.x - st->area.mn.x),
@@ -3701,13 +3820,11 @@ QDialog *MainWindow::buildPlanSheetDialog(PlanSheetParams &io,
     QSignalBlocker bl(scale);
     scale->setValue(int(std::lround(st->spec.denom)));
     (*refresh)();
-    reloadImage();
-    pv->update();
+    schedulePlanReload();
   });
   QObject::connect(area, &QComboBox::currentIndexChanged, d, [=](int) {
     (*refresh)();
-    reloadImage();
-    pv->update();
+    schedulePlanReload();
   });
   QObject::connect(fmtG, &QButtonGroup::idClicked, d, [=](int id) {
     st->format = id;
@@ -3742,7 +3859,6 @@ QDialog *MainWindow::buildPlanSheetDialog(PlanSheetParams &io,
     doSave();
   });
   (*refresh)();
-  reloadImage();
   pv->update();
   d->resize(1000, 690);
   return d;
@@ -3757,20 +3873,30 @@ void MainWindow::dlgPlanSheet() {
                            ? *lastPlanSheet_
                            : defaultPlanSheetParams();
   reusePlanSheet_ = false;
-  Box3 box = sp.wholeModel ? src_->bounds : sp.area;
-  double w = std::max(0.0, box.mx.x - box.mn.x),
-         h = std::max(0.0, box.mx.y - box.mn.y);
-  double res = std::max(
-      {1e-4, groundResolution(sp.spec.denom, 400.0), std::max(w, h) / 8000.0});
-  QImage prev;
-  double x0 = 0, y1 = 0;
-  QString em;
-  renderPlanOrtho(*src_, box, res, prev, x0, y1, &em, nullptr);
+  static const MeshSource *s_cachedSrc = nullptr;
+  static QImage s_cachedImg;
+  static double s_cachedX0 = 0, s_cachedY1 = 0, s_cachedRes = 0;
+  if (s_cachedSrc != src_.get() || s_cachedImg.isNull()) {
+    Box3 box = src_->bounds;
+    double w = std::max(0.0, box.mx.x - box.mn.x),
+           h = std::max(0.0, box.mx.y - box.mn.y);
+    double res = std::max({1e-4, 0.002, std::max(w, h) / 1600.0});
+    QImage prev;
+    double x0 = 0, y1 = 0;
+    QString em;
+    renderPlanOrtho(*src_, box, res, prev, x0, y1, &em, nullptr);
+    s_cachedSrc = src_.get();
+    s_cachedImg = prev;
+    s_cachedX0 = x0;
+    s_cachedY1 = y1;
+    s_cachedRes = res;
+  }
   auto params = std::make_shared<PlanSheetParams>(sp);
   lastPlanSheet_ = params;
   sheetIsPlan_ = true;
   bool acc = false;
-  QDialog *d = buildPlanSheetDialog(*params, prev, x0, y1, res, acc);
+  QDialog *d = buildPlanSheetDialog(*params, s_cachedImg, s_cachedX0,
+                                    s_cachedY1, s_cachedRes, acc);
   auto src = src_;
   showSheetTab(d, [this, params, src] {
     PlanSheetParams sp = *params;
@@ -3834,11 +3960,6 @@ void MainWindow::dlgChooseSheet() {
                              QStringLiteral("모델을 연 뒤에 도면을 만드세요"));
     return;
   }
-  auto *hold = new QLabel(QStringLiteral("조판 탭을 여는 중…"));
-  hold->setAlignment(Qt::AlignCenter);
-  hold->setObjectName("dialogMain");
-  showSheetTab(hold);
-  QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 50);
   if (section_->hasResult() || plan_->hasLine())
     dlgSheet();
   else
@@ -4121,6 +4242,38 @@ bool MainWindow::runSheetCheck(const QString &outDir, QString *log) {
                .arg(ps)
                .arg(ss);
   flag(ps == 10 && ss == 10);
+  { // 키보드로 120 을 한 글자씩('1', '2', '0') 입력할 때 중간값 12 가 10 으로
+    // 덮어써져 100 이 되지 않고 120 이 그대로 유지되는지 점검
+    int typedVal = 0;
+    if (hasSection() && src_) {
+      SheetParams tp = defaultSheetParams();
+      bool acc = false;
+      std::unique_ptr<QDialog> dlg(buildSheetDialog(tp, acc));
+      QSpinBox *sb = nullptr;
+      for (QSpinBox *s : dlg->findChildren<QSpinBox *>())
+        if (s->prefix() == QStringLiteral("1:")) {
+          sb = s;
+          break;
+        }
+      if (sb) {
+        if (auto *le = sb->findChild<QLineEdit *>()) {
+          le->setFocus();
+          le->setText(QStringLiteral("1:1"));
+          emit le->textEdited(le->text());
+          le->setText(QStringLiteral("1:12"));
+          emit le->textEdited(le->text());
+          if (le->text() == QStringLiteral("1:12")) {
+            le->setText(QStringLiteral("1:120"));
+            emit le->textEdited(le->text());
+          }
+          sb->interpretText();
+          typedVal = sb->value();
+        }
+      }
+    }
+    lines << QStringLiteral("sheet-check scale-type-120=%1").arg(typedVal);
+    flag(typedVal == 120);
+  }
   { // 도면 어디에도 높이 글이 없다(T8): 단면 SVG 의 표제란 · 범례에서 「높이」
     // 글을 센다
     int heightLines = -1;
