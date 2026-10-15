@@ -1,27 +1,29 @@
-// 주 창(1.2 Strata): 리본(파일/홈/보기/측정/내보내기) + 지금 도구 줄 + 알림 띠 + [단면 목록 | 평면 | 단면] + 상태줄, 시작 화면.
-// moc 없이(람다·std::function) 작성. 화면 구성 코드는 mainwindow_ui.cpp, 도면(용지) 내보내기는 sheetexport.cpp.
+// 주 창(1.2 Strata): 리본(파일/홈/보기/측정/내보내기) + 지금 도구 줄 + 알림 띠
+// + [단면 목록 | 평면 | 단면] + 상태줄, 시작 화면. moc 없이(람다·std::function)
+// 작성. 화면 구성 코드는 mainwindow_ui.cpp, 도면(용지) 내보내기는
+// sheetexport.cpp.
 #pragma once
+#include "asec/engine.hpp"
+#include "asec/pick.hpp"
+#include "asec/pointcloud.hpp"
+#include "asec/project.hpp"
+#include "asec/schedule.hpp"
+#include "asec/sheet.hpp"
+#include "asec/tiff.hpp"
+#include "motion.hpp"
+#include "planview.hpp"
+#include "sectionview.hpp"
+#include "theme.hpp"
 #include <QAction>
 #include <QMainWindow>
 #include <QPointer>
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <thread>
-#include "motion.hpp"
-#include "asec/engine.hpp"
-#include "asec/pointcloud.hpp"
-#include "asec/schedule.hpp"
-#include "asec/pick.hpp"
-#include "asec/tiff.hpp"
-#include "asec/sheet.hpp"
-#include "asec/project.hpp"
-#include "planview.hpp"
-#include "theme.hpp"
-#include <map>
-#include "sectionview.hpp"
 
 class QLabel;
 class QLineEdit;
@@ -30,7 +32,9 @@ class QDoubleSpinBox;
 class QSlider;
 class QTabBar;
 class QStackedWidget;
-namespace motion { class FadeStack; }
+namespace motion {
+class FadeStack;
+}
 class QToolButton;
 class QSplitter;
 class QCheckBox;
@@ -42,399 +46,631 @@ class QMenu;
 class QTableWidget;
 class QLayout;
 
-inline constexpr double kDepthFadeStrength = 0.55;   // 깊이 음영 세기(가장 먼 면을 흰색 쪽으로 55%)
-inline constexpr double kMaxBandDepth = 10.0;        // 두께 띠 앞/뒤 최대(m) — 입면 영상 깊이 최대 10 m
+inline constexpr double kDepthFadeStrength =
+    0.55; // 깊이 음영 세기(가장 먼 면을 흰색 쪽으로 55%)
+inline constexpr double kMaxBandDepth =
+    10.0; // 두께 띠 앞/뒤 최대(m) — 입면 영상 깊이 최대 10 m
 class QDialog;
 class QPainter;
 
 /// 열기 결과(작업 스레드에서 만들고 GUI 스레드에서 적용)
 struct OpenedScene {
-    QString path;
-    std::shared_ptr<asec::MeshSource> src;
-    std::vector<std::shared_ptr<DisplayMesh>> display;  // OBJ: 화면 메시 전체 / 3MX: 커서 Z 용 거친 메시(텍스처 없음)
-    std::vector<asec::fs::path> streamRoots;            // 3MX: LOD 스트리밍 루트(비면 정적 표시)
-    asec::Vec3 center;
-    asec::Box3 bounds;
-    size_t displayTris = 0, displayMeshes = 0;
-    QString kind;  // "3MX" / "OBJ"
-    size_t layers = 1;                   // 3MX meshPyramid 레이어 수(병합 3MX > 1)
-    std::vector<std::string> warnings;   // 열기 경고(레이어 제외 등)
+  QString path;
+  std::shared_ptr<asec::MeshSource> src;
+  std::vector<std::shared_ptr<DisplayMesh>>
+      display; // OBJ: 화면 메시 전체 / 3MX: 커서 Z 용 거친 메시(텍스처 없음)
+  std::vector<asec::fs::path>
+      streamRoots; // 3MX: LOD 스트리밍 루트(비면 정적 표시)
+  asec::Vec3 center;
+  asec::Box3 bounds;
+  size_t displayTris = 0, displayMeshes = 0;
+  QString kind;                      // "3MX" / "OBJ"
+  size_t layers = 1;                 // 3MX meshPyramid 레이어 수(병합 3MX > 1)
+  std::vector<std::string> warnings; // 열기 경고(레이어 제외 등)
 };
 
-struct SectionExportParams { int format = 0; double denom = 20, dpi = 300; };  // format 0 PNG 1 TIFF 2 GeoTIFF
-struct DxfParams { bool world3d = false; double denom = 20; bool image = true; double imageDpi = 200; double levelMinorPt = 0.2, levelMajorPt = 0.5; };   // 레벨선 pt — 디자인 v5 결정 L
-struct PlanParams { bool wholeModel = true; double denom = 100, dpi = 200; bool overlayLine = true; asec::Box3 area; };
+struct SectionExportParams {
+  int format = 0;
+  double denom = 20, dpi = 300;
+}; // format 0 PNG 1 TIFF 2 GeoTIFF
+struct DxfParams {
+  bool world3d = false;
+  double denom = 20;
+  bool image = true;
+  double imageDpi = 200;
+  double levelMinorPt = 0.2, levelMajorPt = 0.5;
+}; // 레벨선 pt — 디자인 v5 결정 L
+struct PlanParams {
+  bool wholeModel = true;
+  double denom = 100, dpi = 200;
+  bool overlayLine = true;
+  asec::Box3 area;
+};
 /// 도면(용지) 내보내기: 형식 0 PDF 1 DXF 2 PNG 3 TIFF
 struct SheetParams {
-    asec::SheetSpec spec;
-    int format = 0;
-    double dpi = 300;            // PNG/TIFF(및 PDF 영상) 해상도
-    bool split = false;          // 넘치면 여러 장으로 나눠(PDF 여러 쪽 / 영상 여러 파일)
-    QString title;               // 도면명
-    bool withImage = true, withLine = true, withLevels = true, withTicks = true, withTitle = true;
-    bool withPlan = true;        // 위치도: 단면선 주변 평면(같은 축척, 단면선이 가로)을 단면 위에(사용자 결정 2026-10-11). DXF(모델 공간)에는 없음
-    bool showBaseline = false; double baselineEl = 0;
-    double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기 pt(10 cm · 50 cm) — 디자인 v5 결정 L
-    int hatchKind = 0; double hatchMm = 1.0;         // 잘린 돌 빗금: 0 45° · 1 검은 칠 · 2 점묘, 간격 mm(스펙 §8 — F 단계가 씀)
-    QString srsLabel, facing, date;
-    double imgDxMm = 0, imgDyMm = 0;   // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
+  asec::SheetSpec spec;
+  int format = 0;
+  double dpi = 300;   // PNG/TIFF(및 PDF 영상) 해상도
+  bool split = false; // 넘치면 여러 장으로 나눠(PDF 여러 쪽 / 영상 여러 파일)
+  QString title;      // 도면명
+  bool withImage = true, withLine = true, withLevels = true, withTicks = true,
+       withTitle = true;
+  bool withPlan =
+      true; // 위치도: 단면선 주변 평면(같은 축척, 단면선이 가로)을 단면
+            // 위에(사용자 결정 2026-10-11). DXF(모델 공간)에는 없음
+  bool showBaseline = false;
+  double baselineEl = 0;
+  double levelMinorPt = 0.2,
+         levelMajorPt = 0.5; // 레벨선 굵기 pt(10 cm · 50 cm) — 디자인 v5 결정 L
+  int hatchKind = 0;
+  double hatchMm = 1.0; // 잘린 돌 빗금: 0 45° · 1 검은 칠 · 2 점묘, 간격
+                        // mm(스펙 §8 — F 단계가 씀)
+  QString srsLabel, facing, date;
+  double imgDxMm = 0,
+         imgDyMm =
+             0; // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
 };
-/// 평면도 조판. 그림 칸은 정사영상만(단면선 없음). 바깥 좌표·나침반·범례·자는 단면도 조판과 같은 자리.
+/// 평면도 조판. 그림 칸은 정사영상만(단면선 없음). 바깥 좌표·나침반·범례·자는
+/// 단면도 조판과 같은 자리.
 struct PlanSheetParams {
-    asec::SheetSpec spec;
-    int format = 0;
-    double dpi = 300;
-    bool split = false;
-    bool wholeModel = false;    // false = 지금 왼쪽 화면
-    asec::Box3 area;             // 로컬 XY
-    QString title, srsLabel, date;
-    double imgDxMm = 0, imgDyMm = 0;   // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
+  asec::SheetSpec spec;
+  int format = 0;
+  double dpi = 300;
+  bool split = false;
+  bool wholeModel = false; // false = 지금 왼쪽 화면
+  asec::Box3 area;         // 로컬 XY
+  QString title, srsLabel, date;
+  double imgDxMm = 0,
+         imgDyMm =
+             0; // 조판 안 그림만 이동(mm, x 오른쪽, y 아래). 도곽은 그대로
 };
 /// 위치도용 평면 정사영상: 왼쪽 위 픽셀 모서리 = (x0, y1) 로컬 m, res m/px
-struct PlanStrip { QImage img; double x0 = 0, y1 = 0, res = 0; };
-struct PointParams { asec::PointFormat format = asec::PointFormat::XYZ; int area = 0; double spacing = 0; bool rgb = true; asec::Box3 box; };
+struct PlanStrip {
+  QImage img;
+  double x0 = 0, y1 = 0, res = 0;
+};
+struct PointParams {
+  asec::PointFormat format = asec::PointFormat::XYZ;
+  int area = 0;
+  double spacing = 0;
+  bool rgb = true;
+  asec::Box3 box;
+};
 
 class MainWindow : public QMainWindow {
 public:
-    MainWindow();
-    ~MainWindow() override;
+  MainWindow();
+  ~MainWindow() override;
 
-    // ---- 작업(동기). 대화상자는 작업 스레드에서, 명령줄 자동화는 GUI 스레드에서 직접 호출 ----
-    static constexpr int kOpeningSplashMs = motion::kSplash;   // 여는 화면 전체 길이(ms) — 한 곳. OpeningSplash::run · --splash-live · --splash-shot 판정이 같은 값을 쓴다 (T3: 1000)
-    static QImage renderOpeningSplash(const QSize& size, double t = 1.0);   // t 0~1: 선 그림이 그려지는 정도(1 = 완성)
-    static void paintOpeningSplash(QPainter& p, const QSize& size, double t);   // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs, 1 초)
-    static bool loadScene(const QString& path, OpenedScene& out, QString* err, const std::function<void(double)>& progress = {});
-    /// .trench.json → 적용 대기에 올리고 모델 경로를 돌려줌(ask=false 면 묻지 않음 — 명령줄). applyScene 뒤 restoreModelState 가 적용
-    bool stageProject(const QString& path, QString* modelPath, QString* msg, bool ask);
-    void applyScene(OpenedScene&& s);
-    bool computeNow(const asec::SectionLine& l, QString* err);  // 동기 단면(자동화용)
-    bool ensureFinalSection();  // 화면 결과가 미리보기면 최종(잎) 계산
-    // 내보내기: 입력을 모두 인자로 받음(스레드 안전). src 는 공유 포인터 사본, doc 은 GUI 스레드에서 뜬 스냅숏
-    static bool exportSectionImage(const SectionDoc& doc, asec::MeshSource& src, const SectionExportParams& p, const QString& path, QString* msg,
-                                   const std::atomic<bool>* cancel = nullptr);
-    static bool exportSectionDxf(const SectionDoc& doc, asec::MeshSource& src, const DxfParams& p, const QString& path, QString* msg,
-                                 const std::atomic<bool>* cancel = nullptr);
-    static bool exportPlan(asec::MeshSource& src, const PlanParams& p, const asec::SectionLine* line, const QString& path, QString* msg,
-                           const std::atomic<bool>* cancel = nullptr);
-    static bool exportPointCloud(asec::MeshSource& src, const PointParams& p, const asec::SectionLine& line, const QString& path, QString* msg,
-                                 const std::atomic<bool>* cancel = nullptr, const std::function<void(size_t)>& progress = {});
-    static bool exportProfileCsv(const SectionDoc& doc, const QString& path, QString* msg);
-    /// 도면(용지): PDF(벡터 선 + 영상) / PNG / TIFF 는 용지 그대로, DXF 는 모델 공간 1:N. progress(0..1)
-    static bool exportSectionSvg(const SectionDoc& doc, asec::MeshSource& src, const SheetParams& p, const QString& path, QString* msg);
-    static bool exportSheet(const SectionDoc& doc, asec::MeshSource& src, const SheetParams& p, const QString& path, QString* msg,
-                            const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
-    /// 용지 한 장 그리기(미리보기·내보내기 공용). pxPerMm = 장치 픽셀/mm, page = 나눠 붙이기 쪽 번호(0..)
-    static void paintSheet(QPainter& p, const SectionDoc& doc, const SheetParams& sp, double pxPerMm, int page, const QImage& img, const SectionImgGeo& geo,
-                           double viewZoom = 1, double viewPanX = 0, double viewPanY = 0, SheetPaintProbe* probe = nullptr, const PlanStrip* plan = nullptr);
-    /// 단면도 출력에 쓰는 영상(PDF · 인쇄 공용): 출력 dpi 입면 영상 + 위치도 띠
-    struct SheetAssets { QImage img; SectionImgGeo geo; PlanStrip strip; bool hasStrip = false; double usedRes = 0; };
-    static bool prepareSheetAssets(const SectionDoc& doc, asec::MeshSource& src, const SheetParams& p, SheetAssets& out, QString* msg,
-                                   const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
-    /// 평면도 출력에 쓰는 정사영상(PDF · 인쇄 공용). spOut = 축척 · 범위를 정리한 설정
-    static bool preparePlanAssets(asec::MeshSource& src, const PlanSheetParams& p, PlanSheetParams& spOut, QImage& img, double& x0, double& y1, double& res,
-                                  QString* msg, const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
-    /// 인쇄(2026-10-12): 도면 탭의 「인쇄…」 · Ctrl+P. 출력 영상을 작업 스레드로 만든 뒤 인쇄 미리보기(프린터 · 쪽 설정 포함)
-    void printSectionSheet(const SectionDoc& doc, const SheetParams& sp);
-    void printPlanSheet(const PlanSheetParams& sp);
-    void printCurrentSheet();                          // 열린 도면 탭의 「인쇄…」 단추를 누름(Ctrl+P · 명령줄)
-    /// 명령줄 점검용: printer 가 있으면 대화상자 없이 그 프린터로(outFile 이면 파일로) 찍고, previewShot 이면 미리보기 창을 캡처해 닫는다
-    struct PrintTest { QString printer, outFile, previewShot; bool done = false; QString log; };
-    static PrintTest printTest;
-    static bool exportPlanSheet(asec::MeshSource& src, const PlanSheetParams& p, const QString& path, QString* msg,
-                                const std::atomic<bool>* cancel = nullptr, const std::function<void(double)>& progress = {});
-    static void paintPlanSheet(QPainter& p, const PlanSheetParams& sp, double pxPerMm, int page, const QImage& img,
-                               double imgX0, double imgY1, double imgRes, const asec::Vec3& origin,
-                               double viewZoom = 1, double viewPanX = 0, double viewPanY = 0, SheetPaintProbe* probe = nullptr);
-    bool runSheetCheck(const QString& outDir, QString* log);
-    SheetParams defaultSheetParams() const;
-    PlanSheetParams defaultPlanSheetParams() const;
-    void dlgChooseSheet();                            // 평면 / 단면 조판 고르기
-    void dlgSheet();                                   // 단면도 조판
-    /// 조판 미리보기(고해상 입면 · 위치도) 작업 스레드 셈 — 명령줄 점검 --sheet-stress 용(2026-10-11 「포터블이 느려진다」)
-    struct SheetPreviewCounters { int started = 0, active = 0, peak = 0; };
-    static SheetPreviewCounters sheetPreviewCounters();
-    void dlgPlanSheet();                               // 평면도 조판
-    QDialog* buildSheetDialog(SheetParams& io, bool& accepted);   // 자동화(창 캡처)에서도 씀
-    QDialog* buildPlanSheetDialog(PlanSheetParams& io, const QImage& preview, double prevX0, double prevY1, double prevRes, bool& accepted);
-    QWidget* startPage() const { return startPage_; }
-    void showStart(bool on);
-    /// 레이아웃을 재귀로 비운다(위젯은 숨기고 deleteLater, 하위 레이아웃은 재귀) — 홈 다시 그리기 · 도면 점검 상자가 씀(AC14: 격자 안 위젯이 남아 겹치던 버그)
-    static void clearLayout(QLayout* lay);
-    bool undoTest(QString* log);                        // 자동화: 되돌리기/다시 점검
-    bool uiAudit(const QString& dir, QString* log);     // 자동화(v4 단계 1): 같은 일 단추 겹침 · 자리 규칙 잠금 시험
-    bool iconSheet(const QString& png, QString* log);   // 자동화(v5 A3): 모든 Ico 이름에 SVG 가 있는지 + 칩 모양 격자 캡처
-    class GuideBand* guideBand() const { return guide_; }   // 자동화 --ctx-shot: 그리는 동안 떠 있는 안내(v5 C4)
-    std::shared_ptr<asec::MeshSource> source() const { return src_; }
-    const asec::SectionOutput& lastSection() const { return last_; }   // 명령줄 기록용(수집·절단·영상 ms, 잎·삼각형 수)
-    SectionDoc sectionDoc() const { return section_->doc(); }
-    /// 조판 목록에서 고른 도면 전부를 dir 에 저장(이름 sheetFileName + uniqueSheetFileName, 축척 · 용지는 도면마다 자기 값). 동기 — 명령줄 --sheet-batch 도 쓴다. 저장한 수를 돌려주고 log 에 줄마다
-    int saveCheckedSheets(const QString& dir, const SheetParams& base, QStringList* log);
-    void setAllSheetsChecked(bool on);   // 고르기 칸 전부(평면 1 + 단면 n)
-    void noteBatchDone(int n, const QString& dir);   // 판 아래 「n장 저장됨 · 폴더 열기」
-    bool hasScene() const { return bool(src_); }
-    bool hasSection() const;
-    void setLineLocal(const asec::SectionLine& l);
-    void setThickness(double front, double back);
-    double frontDepth() const; double backDepth() const; bool backUserSet() const { return backUserSet_; }
-    void setDepthFade(bool on);
-    const asec::SrsInfo& srs() const;
-    const asec::SrsReport& srsReport() const { return srsReport_; }
-    QString cursorText() const;   // 자동화 로그: 좌표줄 X/Y/Z + Z 출처
-    struct SectionCounters { int previewsShown = 0, finalsShown = 0; double lastMs = 0; size_t lastTris = 0; };
-    const SectionCounters& sectionCounters() const { return secCounters_; }
-    /// 단면선 끌기 흉내(자동화): final=false 는 끄는 중, true 는 놓음
-    void dragLine(const asec::SectionLine& l, bool final) { plan_->setLine(l, true); requestSection(final); }
-    PlanView* plan() const { return plan_; }
-    SectionView* sectionView() const { return section_; }
-    /// 화면 세로 과장(1·2·5·10). 화면 보기만 — 도면·내보내기는 1:1
-    void setVex(double v);
-    int vexSuggestion() const { return vexSuggest_; }
-    double vexRelief() const { return vexRelief_; }
-    QString windowTitleCheck() const;   // 시험용: 창 제목 + 표시 이름 중복 여부
-    void selectDocTab(int i);                           // 자동화 --tab N: 문서 탭(0 홈 · 1 단면 · 2 도면)
-    void setRibbonContext(int ctx);                     // 0 홈 · 1 단면 · 2 도면 — 리본 묶음 흐림 · 칩 켜고 끄기(디자인 v5 §3.1)
-    void showHomeTab();
-    void closeSheetTab();
-    void discardSheetTab();   // 「도면」 탭 · 조판 위젯 · 저장 함수를 버린다(모델 닫기 · 다른 모델 열기 · × — 검토 I4)
-    class Ribbon* ribbon() const { return ribbon_; }
-    int ribbonContext() const { return ribbonCtx_; }
-    void openFile(const QString& path);
-    int addSectionAt(const asec::SectionLine& l);      // 자동화: 단면 목록에 더함(로컬 좌표) → 번호
-    void selectSectionAt(int i) { selectSection(i); }
-    int sectionCount() const { return int(sections_.size()); }
-    void restoreModelState();                          // 모델별 마지막 단면선·두께·화면·단면 목록 되살리기(프로젝트 파일 → 없으면 설정)
-    void saveModelState();
-    void restoreFromSettings();                        // 설정(레지스트리)에서 — 프로젝트 파일이 없을 때
-    // ---- 프로젝트 파일 <모델이름>.trench.json(core asec/project.hpp · app/project.cpp) — 사용자 결정 2026-10-11 C
-    static QString projectRootOverride;                // --settings DIR 이면 DIR(자동 저장 폴더 = DIR/projects — 시험 격리)
-    QString projectDir() const;                        // 자동 저장 폴더(exe 옆 projects\ → 못 쓰면 %LOCALAPPDATA%\Trench\projects)
-    QString autoProjectPath() const;                   // projectDir()/<모델이름>.trench.json
-    QString projectSavedLabel() const;                 // 헤더 「저장됨 · projects\이름.trench.json」(짧게 — 전체 경로는 풍선 도움말)
-    void applyProjectHeader();                         // 탭 줄 오른쪽 글 · 풍선 도움말
-    asec::ProjectDoc captureProject() const;
-    bool writeProject(const QString& path, QString* msg);
-    bool readProjectFile(const QString& path, asec::ProjectDoc& out, QString* msg);
-    void applyProject(const asec::ProjectDoc& p);
-    bool openProjectFile(const QString& path);         // 모델을 찾아 열고 restoreModelState 가 pendingProject_ 를 적용
-    void saveProjectNow(); void saveProjectAs(); void openProjectDialog();
-    QString projectPath_;                              // 마지막으로 쓴 프로젝트 파일
-    std::shared_ptr<asec::ProjectDoc> pendingProject_; QString pendingProjectPath_;
+  // ---- 작업(동기). 대화상자는 작업 스레드에서, 명령줄 자동화는 GUI 스레드에서
+  // 직접 호출 ----
+  static constexpr int kOpeningSplashMs =
+      motion::kSplash; // 여는 화면 전체 길이(ms) — 한 곳. OpeningSplash::run ·
+                       // --splash-live · --splash-shot 판정이 같은 값을 쓴다
+                       // (T3: 1000)
+  static QImage renderOpeningSplash(
+      const QSize &size,
+      double t = 1.0); // t 0~1: 선 그림이 그려지는 정도(1 = 완성)
+  static void paintOpeningSplash(
+      QPainter &p, const QSize &size,
+      double t); // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs, 1 초)
+  static QString resolveModelPath(
+      const QString &path); // 폴더 경로면 내부 .3mx/.3sm/.obj 를 찾아 돌려줌
+  static QString modelDisplayName(
+      const QString
+          &path); // Production_1 등 기본 파일명은 상위 폴더 이름을 돌려줌
+  bool isValidCameraForScene(double cx, double cy, double mpp) const;
+  bool isValidLineForScene(const asec::SectionLine &l) const;
+  static bool loadScene(const QString &path, OpenedScene &out, QString *err,
+                        const std::function<void(double)> &progress = {});
+  /// .trench.json → 적용 대기에 올리고 모델 경로를 돌려줌(ask=false 면 묻지
+  /// 않음 — 명령줄). applyScene 뒤 restoreModelState 가 적용
+  bool stageProject(const QString &path, QString *modelPath, QString *msg,
+                    bool ask);
+  void applyScene(OpenedScene &&s);
+  bool computeNow(const asec::SectionLine &l,
+                  QString *err); // 동기 단면(자동화용)
+  bool ensureFinalSection();     // 화면 결과가 미리보기면 최종(잎) 계산
+  // 내보내기: 입력을 모두 인자로 받음(스레드 안전). src 는 공유 포인터 사본,
+  // doc 은 GUI 스레드에서 뜬 스냅숏
+  static bool exportSectionImage(const SectionDoc &doc, asec::MeshSource &src,
+                                 const SectionExportParams &p,
+                                 const QString &path, QString *msg,
+                                 const std::atomic<bool> *cancel = nullptr);
+  static bool exportSectionDxf(const SectionDoc &doc, asec::MeshSource &src,
+                               const DxfParams &p, const QString &path,
+                               QString *msg,
+                               const std::atomic<bool> *cancel = nullptr);
+  static bool exportPlan(asec::MeshSource &src, const PlanParams &p,
+                         const asec::SectionLine *line, const QString &path,
+                         QString *msg,
+                         const std::atomic<bool> *cancel = nullptr);
+  static bool
+  exportPointCloud(asec::MeshSource &src, const PointParams &p,
+                   const asec::SectionLine &line, const QString &path,
+                   QString *msg, const std::atomic<bool> *cancel = nullptr,
+                   const std::function<void(size_t)> &progress = {});
+  static bool exportProfileCsv(const SectionDoc &doc, const QString &path,
+                               QString *msg);
+  /// 도면(용지): PDF(벡터 선 + 영상) / PNG / TIFF 는 용지 그대로, DXF 는 모델
+  /// 공간 1:N. progress(0..1)
+  static bool exportSectionSvg(const SectionDoc &doc, asec::MeshSource &src,
+                               const SheetParams &p, const QString &path,
+                               QString *msg);
+  static bool exportSheet(const SectionDoc &doc, asec::MeshSource &src,
+                          const SheetParams &p, const QString &path,
+                          QString *msg,
+                          const std::atomic<bool> *cancel = nullptr,
+                          const std::function<void(double)> &progress = {});
+  /// 용지 한 장 그리기(미리보기·내보내기 공용). pxPerMm = 장치 픽셀/mm, page =
+  /// 나눠 붙이기 쪽 번호(0..)
+  static void paintSheet(QPainter &p, const SectionDoc &doc,
+                         const SheetParams &sp, double pxPerMm, int page,
+                         const QImage &img, const SectionImgGeo &geo,
+                         double viewZoom = 1, double viewPanX = 0,
+                         double viewPanY = 0, SheetPaintProbe *probe = nullptr,
+                         const PlanStrip *plan = nullptr);
+  /// 단면도 출력에 쓰는 영상(PDF · 인쇄 공용): 출력 dpi 입면 영상 + 위치도 띠
+  struct SheetAssets {
+    QImage img;
+    SectionImgGeo geo;
+    PlanStrip strip;
+    bool hasStrip = false;
+    double usedRes = 0;
+  };
+  static bool
+  prepareSheetAssets(const SectionDoc &doc, asec::MeshSource &src,
+                     const SheetParams &p, SheetAssets &out, QString *msg,
+                     const std::atomic<bool> *cancel = nullptr,
+                     const std::function<void(double)> &progress = {});
+  /// 평면도 출력에 쓰는 정사영상(PDF · 인쇄 공용). spOut = 축척 · 범위를 정리한
+  /// 설정
+  static bool
+  preparePlanAssets(asec::MeshSource &src, const PlanSheetParams &p,
+                    PlanSheetParams &spOut, QImage &img, double &x0, double &y1,
+                    double &res, QString *msg,
+                    const std::atomic<bool> *cancel = nullptr,
+                    const std::function<void(double)> &progress = {});
+  /// 인쇄(2026-10-12): 도면 탭의 「인쇄…」 · Ctrl+P. 출력 영상을 작업 스레드로
+  /// 만든 뒤 인쇄 미리보기(프린터 · 쪽 설정 포함)
+  void printSectionSheet(const SectionDoc &doc, const SheetParams &sp);
+  void printPlanSheet(const PlanSheetParams &sp);
+  void
+  printCurrentSheet(); // 열린 도면 탭의 「인쇄…」 단추를 누름(Ctrl+P · 명령줄)
+  /// 명령줄 점검용: printer 가 있으면 대화상자 없이 그 프린터로(outFile 이면
+  /// 파일로) 찍고, previewShot 이면 미리보기 창을 캡처해 닫는다
+  struct PrintTest {
+    QString printer, outFile, previewShot;
+    bool done = false;
+    QString log;
+  };
+  static PrintTest printTest;
+  static bool exportPlanSheet(asec::MeshSource &src, const PlanSheetParams &p,
+                              const QString &path, QString *msg,
+                              const std::atomic<bool> *cancel = nullptr,
+                              const std::function<void(double)> &progress = {});
+  static void paintPlanSheet(QPainter &p, const PlanSheetParams &sp,
+                             double pxPerMm, int page, const QImage &img,
+                             double imgX0, double imgY1, double imgRes,
+                             const asec::Vec3 &origin, double viewZoom = 1,
+                             double viewPanX = 0, double viewPanY = 0,
+                             SheetPaintProbe *probe = nullptr);
+  bool runSheetCheck(const QString &outDir, QString *log);
+  SheetParams defaultSheetParams() const;
+  PlanSheetParams defaultPlanSheetParams() const;
+  void dlgChooseSheet(); // 평면 / 단면 조판 고르기
+  void dlgSheet();       // 단면도 조판
+  /// 조판 미리보기(고해상 입면 · 위치도) 작업 스레드 셈 — 명령줄 점검
+  /// --sheet-stress 용(2026-10-11 「포터블이 느려진다」)
+  struct SheetPreviewCounters {
+    int started = 0, active = 0, peak = 0;
+  };
+  static SheetPreviewCounters sheetPreviewCounters();
+  void dlgPlanSheet(); // 평면도 조판
+  QDialog *buildSheetDialog(SheetParams &io,
+                            bool &accepted); // 자동화(창 캡처)에서도 씀
+  QDialog *buildPlanSheetDialog(PlanSheetParams &io, const QImage &preview,
+                                double prevX0, double prevY1, double prevRes,
+                                bool &accepted);
+  QWidget *startPage() const { return startPage_; }
+  void showStart(bool on);
+  /// 레이아웃을 재귀로 비운다(위젯은 숨기고 deleteLater, 하위 레이아웃은 재귀)
+  /// — 홈 다시 그리기 · 도면 점검 상자가 씀(AC14: 격자 안 위젯이 남아 겹치던
+  /// 버그)
+  static void clearLayout(QLayout *lay);
+  bool undoTest(QString *log); // 자동화: 되돌리기/다시 점검
+  bool uiAudit(const QString &dir,
+               QString *log); // 자동화(v4 단계 1): 같은 일 단추 겹침 · 자리
+                              // 규칙 잠금 시험
+  bool iconSheet(const QString &png,
+                 QString *log); // 자동화(v5 A3): 모든 Ico 이름에 SVG 가 있는지
+                                // + 칩 모양 격자 캡처
+  class GuideBand *guideBand() const {
+    return guide_;
+  } // 자동화 --ctx-shot: 그리는 동안 떠 있는 안내(v5 C4)
+  std::shared_ptr<asec::MeshSource> source() const { return src_; }
+  const asec::SectionOutput &lastSection() const {
+    return last_;
+  } // 명령줄 기록용(수집·절단·영상 ms, 잎·삼각형 수)
+  SectionDoc sectionDoc() const { return section_->doc(); }
+  /// 조판 목록에서 고른 도면 전부를 dir 에 저장(이름 sheetFileName +
+  /// uniqueSheetFileName, 축척 · 용지는 도면마다 자기 값). 동기 — 명령줄
+  /// --sheet-batch 도 쓴다. 저장한 수를 돌려주고 log 에 줄마다
+  int saveCheckedSheets(const QString &dir, const SheetParams &base,
+                        QStringList *log);
+  void setAllSheetsChecked(bool on); // 고르기 칸 전부(평면 1 + 단면 n)
+  void noteBatchDone(int n,
+                     const QString &dir); // 판 아래 「n장 저장됨 · 폴더 열기」
+  bool hasScene() const { return bool(src_); }
+  bool hasSection() const;
+  void setLineLocal(const asec::SectionLine &l);
+  void setThickness(double front, double back);
+  double frontDepth() const;
+  double backDepth() const;
+  bool backUserSet() const { return backUserSet_; }
+  void setDepthFade(bool on);
+  const asec::SrsInfo &srs() const;
+  const asec::SrsReport &srsReport() const { return srsReport_; }
+  QString cursorText() const; // 자동화 로그: 좌표줄 X/Y/Z + Z 출처
+  struct SectionCounters {
+    int previewsShown = 0, finalsShown = 0;
+    double lastMs = 0;
+    size_t lastTris = 0;
+  };
+  const SectionCounters &sectionCounters() const { return secCounters_; }
+  /// 단면선 끌기 흉내(자동화): final=false 는 끄는 중, true 는 놓음
+  void dragLine(const asec::SectionLine &l, bool final) {
+    plan_->setLine(l, true);
+    requestSection(final);
+  }
+  PlanView *plan() const { return plan_; }
+  SectionView *sectionView() const { return section_; }
+  /// 화면 세로 과장(1·2·5·10). 화면 보기만 — 도면·내보내기는 1:1
+  void setVex(double v);
+  int vexSuggestion() const { return vexSuggest_; }
+  double vexRelief() const { return vexRelief_; }
+  QString windowTitleCheck() const; // 시험용: 창 제목 + 표시 이름 중복 여부
+  void selectDocTab(int i); // 자동화 --tab N: 문서 탭(0 홈 · 1 단면 · 2 도면)
+  void setRibbonContext(int ctx); // 0 홈 · 1 단면 · 2 도면 — 리본 묶음 흐림 ·
+                                  // 칩 켜고 끄기(디자인 v5 §3.1)
+  void showHomeTab();
+  void closeSheetTab();
+  void discardSheetTab(); // 「도면」 탭 · 조판 위젯 · 저장 함수를 버린다(모델
+                          // 닫기 · 다른 모델 열기 · × — 검토 I4)
+  class Ribbon *ribbon() const { return ribbon_; }
+  int ribbonContext() const { return ribbonCtx_; }
+  void openFile(const QString &path);
+  int addSectionAt(
+      const asec::SectionLine &l); // 자동화: 단면 목록에 더함(로컬 좌표) → 번호
+  void selectSectionAt(int i) { selectSection(i); }
+  int sectionCount() const { return int(sections_.size()); }
+  void restoreModelState(); // 모델별 마지막 단면선·두께·화면·단면 목록
+                            // 되살리기(프로젝트 파일 → 없으면 설정)
+  void saveModelState();
+  void restoreFromSettings(); // 설정(레지스트리)에서 — 프로젝트 파일이 없을 때
+  // ---- 프로젝트 파일 <모델이름>.trench.json(core asec/project.hpp ·
+  // app/project.cpp) — 사용자 결정 2026-10-11 C
+  static QString projectRootOverride; // --settings DIR 이면 DIR(자동 저장 폴더
+                                      // = DIR/projects — 시험 격리)
+  QString projectDir() const; // 자동 저장 폴더(exe 옆 projects\ → 못 쓰면
+                              // %LOCALAPPDATA%\Trench\projects)
+  QString autoProjectPath() const; // projectDir()/<모델이름>.trench.json
+  QString
+  projectSavedLabel() const; // 헤더 「저장됨 · projects\이름.trench.json」(짧게
+                             // — 전체 경로는 풍선 도움말)
+  void applyProjectHeader(); // 탭 줄 오른쪽 글 · 풍선 도움말
+  asec::ProjectDoc captureProject() const;
+  bool writeProject(const QString &path, QString *msg);
+  bool readProjectFile(const QString &path, asec::ProjectDoc &out,
+                       QString *msg);
+  void applyProject(const asec::ProjectDoc &p);
+  bool
+  openProjectFile(const QString &path); // 모델을 찾아 열고 restoreModelState 가
+                                        // pendingProject_ 를 적용
+  void saveProjectNow();
+  void saveProjectAs();
+  void openProjectDialog();
+  QString projectPath_; // 마지막으로 쓴 프로젝트 파일
+  std::shared_ptr<asec::ProjectDoc> pendingProject_;
+  QString pendingProjectPath_;
 
 protected:
-    bool eventFilter(QObject* o, QEvent* e) override;   // 앱 전체 키보드 초점 테(qApp 에 설치)
-    void dragEnterEvent(QDragEnterEvent*) override;
-    void dropEvent(QDropEvent*) override;
-    void closeEvent(QCloseEvent*) override;
+  bool eventFilter(QObject *o,
+                   QEvent *e) override; // 앱 전체 키보드 초점 테(qApp 에 설치)
+  void dragEnterEvent(QDragEnterEvent *) override;
+  void dropEvent(QDropEvent *) override;
+  void closeEvent(QCloseEvent *) override;
 
 private:
-    PlanView* plan_ = nullptr;
-    SectionView* section_ = nullptr;
-    QWidget* planFrame_ = nullptr; QWidget* sectionFrame_ = nullptr;
-    QSplitter* split_ = nullptr;
-    class Ribbon* ribbon_ = nullptr;
-    int ribbonCtx_ = 1;
-    QWidget* depthBox_ = nullptr;       // 리본 「입면」 묶음의 뒤 깊이 칩 · 뒤 · 앞 칸
-    QToolButton* sheetChip_ = nullptr;  // 「도면」 칩(단면 탭에서 흙색, 도면 탭에서 보기 켜짐 모양)
-    QWidget* docTabsRow_ = nullptr;
-    QLabel* docTabCorner_ = nullptr;
-    int pendingSection_ = -1;           // 홈 썸네일로 연 뒤 고를 단면 번호(restoreModelState 가 씀)
-    motion::FadeStack* body_ = nullptr;      // 0 시작 화면, 1 작업, 조판은 별도 위젯 — 탭 전환은 크로스페이드(motion::kTab)
-    QTabBar* viewTabs_ = nullptr;
-    QWidget* sheetHost_ = nullptr;
-    std::function<void()> embeddedSave_;
-    std::function<void()> sheetRefresh_;   // 열린 단면도 조판에 새 단면(입면 변경 뒤)을 넣는 훅 — buildSheetDialog 가 설정
-    quint64 sheetRefreshGen_ = 0;          // 훅을 건 조판 세대 — 옛 조판이 늦게 지워질 때 새 조판의 훅을 지우지 않게
-    void notifySheetDoc() { if (sheetRefresh_) sheetRefresh_(); }
-    void showSheetTab(QWidget* page);
-    void showSheetTab(QDialog* d, std::function<void()> save);
-    // 조판 탭 왼쪽 목록(평면도 1줄 + 단면들). 작업 화면 단면 목록과 같은 선택을 씀
-    QPointer<QWidget> sheetSide_;
-    QPointer<class QListWidget> sheetList_;
-    bool sheetIsPlan_ = false;
-    std::shared_ptr<SheetParams> lastSheet_;          // 지금 조판의 단면도 설정(다른 단면으로 갈 때 용지·넣을 것·형식을 이어 감)
-    std::shared_ptr<PlanSheetParams> lastPlanSheet_;  // 목록에서 평면도로 돌아올 때 그대로
-    bool reusePlanSheet_ = false;
-    std::vector<bool> sheetChecked_;                  // 조판 목록 고르기 칸(0 = 평면도, 1.. = 단면) — 「n장 저장」
-    std::function<void()> onSheetChecksChanged_;     // 열린 조판 판이 「n장」 글을 고치게
-    QPointer<QLabel> sheetCount_;
-    QPointer<QLabel> sheetDoneLabel_;                 // 조판 판 바닥 「n장 저장됨 · 폴더 열기」(열린 조판의 것)
-    QWidget* buildSheetSide();
-    void refreshSheetList();
-    void openSheetFromList(int row);
-    QWidget* sheetRowWidget(int row);                     // 조판 목록 한 줄(고르기 칸 · 썸네일 · 이름 · 「1:20 · A4 가로 · 저장 안 됨」)
-    QString sheetStatusText(int row) const;
-    void noteSheetSaved(const QString& prefix, const asec::SheetSpec& spec);   // 저장 뒤 목록 상태 글(QSettings 모델별)
-    int checkedSheetCount() const;
-    static QString modelKey(const QString& path);          // QSettings 모델별 키 머리
-    void showWorkTab();
-    void saveEmbeddedSheet();
-    QWidget* startPage_ = nullptr;
-    QWidget* workArea_ = nullptr;
-    class GuideBand* guide_ = nullptr;        // 평면 위 떠 있는 안내(그리는 동안)
-    class FloatButtons* undoBtns_ = nullptr;  // 안내 오른쪽 되돌리기 · 다시
-    QWidget* planHost_ = nullptr;             // 평면 캔버스를 품은 위젯(떠 있는 것들의 부모)
-    QFrame* notice_ = nullptr;
-    QLabel* noticeText_ = nullptr;
-    QLabel *secTitle_ = nullptr, *secFacing_ = nullptr;
-    QToolButton* vexBtn_ = nullptr;
-    int vexSuggest_ = 1; double vexRelief_ = 0;
-    void updateVexUi();
-    QLabel *stripLen_ = nullptr, *stripDepth_ = nullptr, *stripScale_ = nullptr, *stripState_ = nullptr, *stripLevels_ = nullptr;
-    QWidget *planTitle_ = nullptr, *secTitleBar_ = nullptr;
-    QWidget* infoStrip_ = nullptr;             // 단면 머리 아래 정보 줄(계산 상태 · 잘린 선 · 입면 뒤 · 레벨선 범례)
-    int secHeaderStep_ = 0, stripStep_ = 0;    // 좁은 창에서 머리 · 정보 줄을 줄인 단계(0 = 모두 보임, 스펙 §4 — --ui-audit 가 읽는다)
-    QString secTitleFull_;                     // 단면 머리 제목 전체 글(좁으면 fitSectionHeader 가 줄임표 + 툴팁)
-    QWidget* secToggles_ = nullptr;            // 켜기 · 끄기 넷 상자(viewToggles)
-    QToolButton *secTogglesMenu_ = nullptr, *secMaxBtn_ = nullptr;   // 좁을 때 넷을 접는 「그릴 것 ▾」 메뉴 단추 · 「크게」
-    bool fittingHeader_ = false;
-    int secHeaderPasses_ = 0;                  // fitSectionHeader 가 실제로 단계를 다시 고른 횟수(감사 refit — rework 2 code S2)
-    int headerBatch_ = 0;                      // updateHeader 안: 머리 맞춤은 끝에서 한 번만(방위 글까지 바꾼 뒤 — rework 2 code S2 · correctness C3)
-    QString secHeaderKey_;                     // 마지막으로 맞춘 입력(폭 · 제목 · 방위 · 세로 글 · 상태) — 같으면 바로 돌아간다
-    QString vexFull_;                          // 「세로 ×1 ▾」 전체 글(열쇠 — 좁은 머리 3단계 뒤로는 아이콘만)
-    QIcon vexIcon_, vexCaretIcon_;             // 세로 과장 아이콘 · ▾ 를 구운 아이콘(아이콘만일 때 메뉴 표시 — rework 2 UI S1)
-    void fitSectionHeader();                   // 스펙 §4 · Q1 A: 북쪽을 봄 → 크게 → 세로 아이콘만 → 토글을 메뉴로 → 제목 줄임표
-    void setSecTitleText(const QString& full); // 제목은 이 길로만(updateHeader · 감사 1280L)
-    QString stripStateRich_, stripCutFull_, stripCutShort_;   // 정보 줄 글(상태는 서식 글, 잘린 선은 전체 · 점 수 뺀 짧은 글)
-    bool fittingStrip_ = false;
-    void fitInfoStrip();                       // 스펙 §4 · Q2 A: 레벨선 안내 → 입면 뒤 → 점 수 → 줄임표 + 툴팁(계산 상태는 숨기지 않음)
-    void setStripTexts(const QString& stateRich, const QString& cutFull, const QString& cutShort);   // 정보 줄 글은 이 길로만(updateHeader · 감사 1280p)
-    QComboBox* scaleCombo_ = nullptr;
-    QLabel *lvLine_ = nullptr, *lvLabel_ = nullptr;
-    QToolButton* depthChip_[6] = {};
-    void refreshSteps();
-    bool backUserSet_ = false;   // 뒤 깊이를 사용자가 직접 고름(아니면 기본 3 m 를 따름)
-    QMenu* recentMenu_ = nullptr;
-    QUndoStack* undo_ = nullptr;
-    QWidget* sidePanel_ = nullptr;
-    // 고른 단면의 수치 — 오른쪽 판 대신 단면 목록 아래 읽기 전용 칸(T7)
-    enum RoRow { RoLen, RoDepth, RoBearing, RoFacing, RoBand, RoTop, RoFloor, RoCut, RoA, RoB, RoSrs, RoCount };
-    QFrame* readout_ = nullptr;
-    QLabel *roHead_ = nullptr, *roName_ = nullptr, *roNote_ = nullptr;
-    QLabel *roCap_[RoCount] = {}, *roVal_[RoCount] = {};
-    void setRo(int row, const QString& cap, const QString& val);   // 값이 비면 그 줄을 숨김
-    void updateReadout();                                          // 고른 단면 수치(updateHeader 가 부름)
-    void readoutDrawing(int stage, const asec::SectionLine& l);    // 그리는 중 수치(updateCtx 가 부름)
-    QLabel *stripCut_ = nullptr, *stripBand_ = nullptr;
-    QListWidget* secList_ = nullptr;
-    QLabel* secCount_ = nullptr;
-    QLineEdit *cx_ = nullptr, *cy_ = nullptr, *cz_ = nullptr;
-    QLabel *msg_ = nullptr, *info_ = nullptr;
-    QLabel* srsLabel_ = nullptr;   // 상태줄 「수평 EPSG:5187 · 동부원점(GRS80)」 배지 — 표시만(T4)
-    void dlgSrsDetails();
-    asec::SrsReport srsReport_;   // 열린 모델의 좌표계 점검(표시·경고)
-    asec::Box3 sceneBounds_;      // 열린 모델 로컬 상자(좌표계 재점검용)
-    std::vector<std::string> sceneWarnings_;  // 열 때 경고(병합 레이어 등)
-    QProgressBar* progress_ = nullptr;
-    QDoubleSpinBox *front_ = nullptr, *back_ = nullptr;
-    QSlider* opacity_ = nullptr;                 // 영상 불투명도 — 리본 입면 아래 줄(정본, secStyle 이 읽음)
-    QSlider* opacityMenu_ = nullptr;             // 같은 값 — 리본이 낮아 아래 줄이 숨으면 더보기 안에서
-    QWidget* elevRow2_ = nullptr;                // 리본 입면 아래 줄: 영상 불투명도 · 단면선 굵기(사용자 지시 2026-10-10 「더보기 안의 … 입면 밑으로」)
-    QWidget* lineWidthMenu_ = nullptr;           // 더보기 안의 단면선 굵기 칩
-    QAction *opacityMenuAct_ = nullptr, *lineWidthMenuAct_ = nullptr;   // 더보기 안의 두 칸(아래 줄이 보이면 숨김)
-    std::vector<QToolButton*> lineWidthChips_;   // 단면선 굵기 칩 전부(아래 줄 · 더보기) — 하나를 누르면 함께 맞춤
-    void setSectionLineWidth(double px);
-    bool drawEnded_ = false;      // 방금 그리기를 마침(다음 단면 결과를 맞춤으로)
-    bool highContrast_ = false;
-    bool fitNextResult_ = false;
-    // ---- 되돌리기: 단면선·두께·표시·현재 단면 스냅숏
+  PlanView *plan_ = nullptr;
+  SectionView *section_ = nullptr;
+  QWidget *planFrame_ = nullptr;
+  QWidget *sectionFrame_ = nullptr;
+  QSplitter *split_ = nullptr;
+  class Ribbon *ribbon_ = nullptr;
+  int ribbonCtx_ = 1;
+  QWidget *depthBox_ = nullptr; // 리본 「입면」 묶음의 뒤 깊이 칩 · 뒤 · 앞 칸
+  QToolButton *sheetChip_ =
+      nullptr; // 「도면」 칩(단면 탭에서 흙색, 도면 탭에서 보기 켜짐 모양)
+  QWidget *docTabsRow_ = nullptr;
+  QLabel *docTabCorner_ = nullptr;
+  int pendingSection_ =
+      -1; // 홈 썸네일로 연 뒤 고를 단면 번호(restoreModelState 가 씀)
+  motion::FadeStack *body_ = nullptr; // 0 시작 화면, 1 작업, 조판은 별도 위젯 —
+                                      // 탭 전환은 크로스페이드(motion::kTab)
+  QTabBar *viewTabs_ = nullptr;
+  QWidget *sheetHost_ = nullptr;
+  std::function<void()> embeddedSave_;
+  std::function<void()>
+      sheetRefresh_; // 열린 단면도 조판에 새 단면(입면 변경 뒤)을 넣는 훅 —
+                     // buildSheetDialog 가 설정
+  quint64 sheetRefreshGen_ = 0; // 훅을 건 조판 세대 — 옛 조판이 늦게 지워질 때
+                                // 새 조판의 훅을 지우지 않게
+  void notifySheetDoc() {
+    if (sheetRefresh_)
+      sheetRefresh_();
+  }
+  void showSheetTab(QWidget *page);
+  void showSheetTab(QDialog *d, std::function<void()> save);
+  // 조판 탭 왼쪽 목록(평면도 1줄 + 단면들). 작업 화면 단면 목록과 같은 선택을
+  // 씀
+  QPointer<QWidget> sheetSide_;
+  QPointer<class QListWidget> sheetList_;
+  bool sheetIsPlan_ = false;
+  std::shared_ptr<SheetParams>
+      lastSheet_; // 지금 조판의 단면도 설정(다른 단면으로 갈 때 용지·넣을
+                  // 것·형식을 이어 감)
+  std::shared_ptr<PlanSheetParams>
+      lastPlanSheet_; // 목록에서 평면도로 돌아올 때 그대로
+  bool reusePlanSheet_ = false;
+  std::vector<bool> sheetChecked_; // 조판 목록 고르기 칸(0 = 평면도, 1.. =
+                                   // 단면) — 「n장 저장」
+  std::function<void()>
+      onSheetChecksChanged_; // 열린 조판 판이 「n장」 글을 고치게
+  QPointer<QLabel> sheetCount_;
+  QPointer<QLabel> sheetDoneLabel_; // 조판 판 바닥 「n장 저장됨 · 폴더
+                                    // 열기」(열린 조판의 것)
+  QWidget *buildSheetSide();
+  void refreshSheetList();
+  void openSheetFromList(int row);
+  QWidget *sheetRowWidget(int row); // 조판 목록 한 줄(고르기 칸 · 썸네일 · 이름
+                                    // · 「1:20 · A4 가로 · 저장 안 됨」)
+  QString sheetStatusText(int row) const;
+  void noteSheetSaved(
+      const QString &prefix,
+      const asec::SheetSpec &spec); // 저장 뒤 목록 상태 글(QSettings 모델별)
+  int checkedSheetCount() const;
+  static QString modelKey(const QString &path); // QSettings 모델별 키 머리
+  void showWorkTab();
+  void saveEmbeddedSheet();
+  QWidget *startPage_ = nullptr;
+  QWidget *workArea_ = nullptr;
+  class GuideBand *guide_ = nullptr;       // 평면 위 떠 있는 안내(그리는 동안)
+  class FloatButtons *undoBtns_ = nullptr; // 안내 오른쪽 되돌리기 · 다시
+  QWidget *planHost_ = nullptr; // 평면 캔버스를 품은 위젯(떠 있는 것들의 부모)
+  QFrame *notice_ = nullptr;
+  QLabel *noticeText_ = nullptr;
+  QLabel *secTitle_ = nullptr, *secFacing_ = nullptr;
+  QToolButton *vexBtn_ = nullptr;
+  int vexSuggest_ = 1;
+  double vexRelief_ = 0;
+  void updateVexUi();
+  QLabel *stripLen_ = nullptr, *stripDepth_ = nullptr, *stripScale_ = nullptr,
+         *stripState_ = nullptr, *stripLevels_ = nullptr;
+  QWidget *planTitle_ = nullptr, *secTitleBar_ = nullptr;
+  QWidget *infoStrip_ = nullptr; // 단면 머리 아래 정보 줄(계산 상태 · 잘린 선 ·
+                                 // 입면 뒤 · 레벨선 범례)
+  int secHeaderStep_ = 0,
+      stripStep_ = 0; // 좁은 창에서 머리 · 정보 줄을 줄인 단계(0 = 모두 보임,
+                      // 스펙 §4 — --ui-audit 가 읽는다)
+  QString secTitleFull_; // 단면 머리 제목 전체 글(좁으면 fitSectionHeader 가
+                         // 줄임표 + 툴팁)
+  QWidget *secToggles_ = nullptr; // 켜기 · 끄기 넷 상자(viewToggles)
+  QToolButton
+      *secTogglesMenu_ = nullptr,
+      *secMaxBtn_ =
+          nullptr; // 좁을 때 넷을 접는 「그릴 것 ▾」 메뉴 단추 · 「크게」
+  bool fittingHeader_ = false;
+  int secHeaderPasses_ = 0; // fitSectionHeader 가 실제로 단계를 다시 고른
+                            // 횟수(감사 refit — rework 2 code S2)
+  int headerBatch_ = 0; // updateHeader 안: 머리 맞춤은 끝에서 한 번만(방위
+                        // 글까지 바꾼 뒤 — rework 2 code S2 · correctness C3)
+  QString secHeaderKey_; // 마지막으로 맞춘 입력(폭 · 제목 · 방위 · 세로 글 ·
+                         // 상태) — 같으면 바로 돌아간다
+  QString
+      vexFull_; // 「세로 ×1 ▾」 전체 글(열쇠 — 좁은 머리 3단계 뒤로는 아이콘만)
+  QIcon vexIcon_,
+      vexCaretIcon_; // 세로 과장 아이콘 · ▾ 를 구운 아이콘(아이콘만일 때 메뉴
+                     // 표시 — rework 2 UI S1)
+  void fitSectionHeader(); // 스펙 §4 · Q1 A: 북쪽을 봄 → 크게 → 세로 아이콘만 →
+                           // 토글을 메뉴로 → 제목 줄임표
+  void setSecTitleText(
+      const QString &full); // 제목은 이 길로만(updateHeader · 감사 1280L)
+  QString stripStateRich_, stripCutFull_,
+      stripCutShort_; // 정보 줄 글(상태는 서식 글, 잘린 선은 전체 · 점 수 뺀
+                      // 짧은 글)
+  bool fittingStrip_ = false;
+  void fitInfoStrip(); // 스펙 §4 · Q2 A: 레벨선 안내 → 입면 뒤 → 점 수 → 줄임표
+                       // + 툴팁(계산 상태는 숨기지 않음)
+  void setStripTexts(
+      const QString &stateRich, const QString &cutFull,
+      const QString
+          &cutShort); // 정보 줄 글은 이 길로만(updateHeader · 감사 1280p)
+  QComboBox *scaleCombo_ = nullptr;
+  QLabel *lvLine_ = nullptr, *lvLabel_ = nullptr;
+  QToolButton *depthChip_[6] = {};
+  void refreshSteps();
+  bool backUserSet_ =
+      false; // 뒤 깊이를 사용자가 직접 고름(아니면 기본 3 m 를 따름)
+  QMenu *recentMenu_ = nullptr;
+  QUndoStack *undo_ = nullptr;
+  QWidget *sidePanel_ = nullptr;
+  // 고른 단면의 수치 — 오른쪽 판 대신 단면 목록 아래 읽기 전용 칸(T7)
+  enum RoRow {
+    RoLen,
+    RoDepth,
+    RoBearing,
+    RoFacing,
+    RoBand,
+    RoTop,
+    RoFloor,
+    RoCut,
+    RoA,
+    RoB,
+    RoSrs,
+    RoCount
+  };
+  QFrame *readout_ = nullptr;
+  QLabel *roHead_ = nullptr, *roName_ = nullptr, *roNote_ = nullptr;
+  QLabel *roCap_[RoCount] = {}, *roVal_[RoCount] = {};
+  void setRo(int row, const QString &cap,
+             const QString &val); // 값이 비면 그 줄을 숨김
+  void updateReadout();           // 고른 단면 수치(updateHeader 가 부름)
+  void readoutDrawing(
+      int stage,
+      const asec::SectionLine &l); // 그리는 중 수치(updateCtx 가 부름)
+  QLabel *stripCut_ = nullptr, *stripBand_ = nullptr;
+  QListWidget *secList_ = nullptr;
+  QLabel *secCount_ = nullptr;
+  QLineEdit *cx_ = nullptr, *cy_ = nullptr, *cz_ = nullptr;
+  QLabel *msg_ = nullptr, *info_ = nullptr;
+  QLabel *srsLabel_ =
+      nullptr; // 상태줄 「수평 EPSG:5187 · 동부원점(GRS80)」 배지 — 표시만(T4)
+  void dlgSrsDetails();
+  asec::SrsReport srsReport_; // 열린 모델의 좌표계 점검(표시·경고)
+  asec::Box3 sceneBounds_;    // 열린 모델 로컬 상자(좌표계 재점검용)
+  std::vector<std::string> sceneWarnings_; // 열 때 경고(병합 레이어 등)
+  QProgressBar *progress_ = nullptr;
+  QDoubleSpinBox *front_ = nullptr, *back_ = nullptr;
+  QSlider *opacity_ =
+      nullptr; // 영상 불투명도 — 리본 입면 아래 줄(정본, secStyle 이 읽음)
+  QSlider *opacityMenu_ =
+      nullptr; // 같은 값 — 리본이 낮아 아래 줄이 숨으면 더보기 안에서
+  QWidget *elevRow2_ =
+      nullptr; // 리본 입면 아래 줄: 영상 불투명도 · 단면선 굵기(사용자 지시
+               // 2026-10-10 「더보기 안의 … 입면 밑으로」)
+  QWidget *lineWidthMenu_ = nullptr; // 더보기 안의 단면선 굵기 칩
+  QAction *opacityMenuAct_ = nullptr,
+          *lineWidthMenuAct_ =
+              nullptr; // 더보기 안의 두 칸(아래 줄이 보이면 숨김)
+  std::vector<QToolButton *>
+      lineWidthChips_; // 단면선 굵기 칩 전부(아래 줄 · 더보기) — 하나를 누르면
+                       // 함께 맞춤
+  void setSectionLineWidth(double px);
+  bool drawEnded_ = false; // 방금 그리기를 마침(다음 단면 결과를 맞춤으로)
+  bool highContrast_ = false;
+  bool fitNextResult_ = false;
+  // ---- 되돌리기: 단면선·두께·표시·현재 단면 스냅숏
 public:
-    struct ViewState {
-        asec::SectionLine line; bool hasLine = false; double front = 0, back = 0.5;
-        bool image = true, profile = true, levels = true, ticks = true, fade = false, smooth = false;
-        int current = 0;
-        bool operator==(const ViewState& o) const;
-    };
-    ViewState captureState() const;
-    void applyState(const ViewState& s);
-    void commitState(const QString& text, int mergeId = -1);
-    QUndoStack* undoStack() const { return undo_; }
+  struct ViewState {
+    asec::SectionLine line;
+    bool hasLine = false;
+    double front = 0, back = 0.5;
+    bool image = true, profile = true, levels = true, ticks = true,
+         fade = false, smooth = false;
+    int current = 0;
+    bool operator==(const ViewState &o) const;
+  };
+  ViewState captureState() const;
+  void applyState(const ViewState &s);
+  void commitState(const QString &text, int mergeId = -1);
+  QUndoStack *undoStack() const { return undo_; }
+
 private:
-    ViewState lastState_;
-    bool applyingState_ = false;
-    // ---- 단면 목록(P1-1): 실좌표, 설정(모델 경로 키)에 저장
-    std::vector<asec::SavedSection> sections_;
-    int current_ = -1;
-    std::map<int, QImage> thumbs_;
-    void refreshSectionList();
-    QWidget* sectionRowWidget(int i) const;   // 단면 목록 한 줄(썸네일·이름·길이·뒤 깊이) — 작업·조판 목록이 같이 씀
-    void syncCurrentSection();     // 지금 단면선 → sections_[current_]
-    void selectSection(int i);
-    void addSection();
-    void renameSection(int i);
-    void deleteSection(int i, bool confirm = true);
-    bool exportSectionsJson(const QString& path, QString* msg);
-    void importSectionsJson();
-    QString sectionName() const;   // 지금 단면 이름("A–A′")
-    QImage makeThumb() const;      // 목록 썸네일(64×30)
-    // ---- 최근 파일
-    QStringList recentFiles() const;
-    void addRecent(const QString& path);
-    void rebuildRecentMenu();
-    void rebuildStartPage();
-    // ---- 화면 부품
-    QWidget* buildStartPage();
-    QFrame* buildNotice();
-    QWidget* buildSidePanel();
-    QWidget* buildPlanFrame();
-    QWidget* buildSectionFrame();
-    void updateHeader();           // 단면 머리·정보 띠·높이 배지
-    void updateCtx(int stage, const asec::SectionLine& l);
-    void setActiveView(int v);     // 0 평면 1 단면
-    void shiftLine(double d);      // 평행 이동(m, + = 보는 쪽)
-    void dlgKeys();
-    QDialog* keysDialog();                            // F1 창(자동화 · 감사에서도 씀)
-    void setBackDepth(double v);
-    void updateDepthChips();
-    void applyHighContrast(bool on);
-    std::map<QString, QAction*> act_;
+  ViewState lastState_;
+  bool applyingState_ = false;
+  // ---- 단면 목록(P1-1): 실좌표, 설정(모델 경로 키)에 저장
+  std::vector<asec::SavedSection> sections_;
+  int current_ = -1;
+  std::map<int, QImage> thumbs_;
+  void refreshSectionList();
+  QWidget *sectionRowWidget(int i) const; // 단면 목록 한 줄(썸네일·이름·길이·뒤
+                                          // 깊이) — 작업·조판 목록이 같이 씀
+  void syncCurrentSection(); // 지금 단면선 → sections_[current_]
+  void selectSection(int i);
+  void addSection();
+  void renameSection(int i);
+  void deleteSection(int i, bool confirm = true);
+  bool exportSectionsJson(const QString &path, QString *msg);
+  void importSectionsJson();
+  QString sectionName() const; // 지금 단면 이름("A–A′")
+  QImage makeThumb() const;    // 목록 썸네일(64×30)
+  // ---- 최근 파일
+  QStringList recentFiles() const;
+  void addRecent(const QString &path);
+  void rebuildRecentMenu();
+  void rebuildStartPage();
+  // ---- 화면 부품
+  QWidget *buildStartPage();
+  QFrame *buildNotice();
+  QWidget *buildSidePanel();
+  QWidget *buildPlanFrame();
+  QWidget *buildSectionFrame();
+  void updateHeader(); // 단면 머리·정보 띠·높이 배지
+  void updateCtx(int stage, const asec::SectionLine &l);
+  void setActiveView(int v); // 0 평면 1 단면
+  void shiftLine(double d);  // 평행 이동(m, + = 보는 쪽)
+  void dlgKeys();
+  QDialog *keysDialog(); // F1 창(자동화 · 감사에서도 씀)
+  void setBackDepth(double v);
+  void updateDepthChips();
+  void applyHighContrast(bool on);
+  std::map<QString, QAction *> act_;
 
-    std::shared_ptr<asec::MeshSource> src_;
-    QString path_, kind_;
-    size_t displayTris_ = 0;
-    bool streaming_ = false;
+  std::shared_ptr<asec::MeshSource> src_;
+  QString path_, kind_;
+  size_t displayTris_ = 0;
+  bool streaming_ = false;
 
-    // 단면 작업(asec::CoalescingWorker): 끄는 동안 미리보기는 합치고(거친 LOD), 놓으면 잎으로 최종 계산
-    std::unique_ptr<asec::CoalescingWorker> secWorker_;
-    // 커서 정밀 Z: 잎 메시 CPU 피킹(마지막 요청만 계산)
-    std::unique_ptr<asec::CoalescingWorker> pickWorker_;
-    asec::ResultGate pickGate_;
-    uint64_t pickFloorGen_ = 0;
-    QLabel* zSrc_ = nullptr;
-    void requestPick(const QPointF& screen);
-    void showZSource(asec::ZSource s, const QString& detail);
-    asec::ResultGate secGate_;   // GUI 스레드 소유: 이미 보여준 것보다 새 세대만 받음
-    uint64_t secFloorGen_ = 0;   // 장면 바꿈/닫기 이후 세대만 받음
-    SectionCounters secCounters_;
-    asec::SectionOutput last_;  // GUI 스레드 소유(마지막 완료 결과)
-    bool lastFinal_ = false;
+  // 단면 작업(asec::CoalescingWorker): 끄는 동안 미리보기는 합치고(거친 LOD),
+  // 놓으면 잎으로 최종 계산
+  std::unique_ptr<asec::CoalescingWorker> secWorker_;
+  // 커서 정밀 Z: 잎 메시 CPU 피킹(마지막 요청만 계산)
+  std::unique_ptr<asec::CoalescingWorker> pickWorker_;
+  asec::ResultGate pickGate_;
+  uint64_t pickFloorGen_ = 0;
+  QLabel *zSrc_ = nullptr;
+  void requestPick(const QPointF &screen);
+  void showZSource(asec::ZSource s, const QString &detail);
+  asec::ResultGate
+      secGate_; // GUI 스레드 소유: 이미 보여준 것보다 새 세대만 받음
+  uint64_t secFloorGen_ = 0; // 장면 바꿈/닫기 이후 세대만 받음
+  SectionCounters secCounters_;
+  asec::SectionOutput last_; // GUI 스레드 소유(마지막 완료 결과)
+  bool lastFinal_ = false;
 
-    // 일반 작업(열기·내보내기)
-    std::thread task_;
-    std::atomic<bool> taskBusy_{false};
-    std::atomic<bool> cancelTask_{false};
+  // 일반 작업(열기·내보내기)
+  std::thread task_;
+  std::atomic<bool> taskBusy_{false};
+  std::atomic<bool> cancelTask_{false};
 
-    QAction* action(const QString& key) const { return act_.at(key); }
-    QAction* makeAction(const QString& key, const QString& ko, const QString& en, theme::Ico ico, const QString& shortcut = {}, bool checkable = false);
-    QWidget* buildRibbon();
-    QWidget* buildCoordBar();
-    void requestSection(bool final);
-    void onSectionDone(asec::SectionOutput&& out, uint64_t gen, bool final, const QString& err);
-    void runTask(const QString& what, std::function<bool(QString*)> work, std::function<void(bool, const QString&)> done);
-    void setProgress(double f);
-    void updateEnabled();
-    void showStatus(const QString& s);
-    void chooseOpen();
-    void closeScene();
-    void dlgSectionImage();
-    void dlgSectionDxf();
-    void dlgPlan();
-    void dlgPoints(int presetFormat);
-    void dlgProfileCsv();
-    void dlgInfo();
-    void dlgAbout();
-    QString askSavePath(const QString& key, const QString& suggested, const QString& filter);
-    SectionStyle secStyle() const;
-    void report(bool ok, const QString& m);
-    void applySrsReport();
-    void refreshSrs();
+  QAction *action(const QString &key) const { return act_.at(key); }
+  QAction *makeAction(const QString &key, const QString &ko, const QString &en,
+                      theme::Ico ico, const QString &shortcut = {},
+                      bool checkable = false);
+  QWidget *buildRibbon();
+  QWidget *buildCoordBar();
+  void requestSection(bool final);
+  void onSectionDone(asec::SectionOutput &&out, uint64_t gen, bool final,
+                     const QString &err);
+  void runTask(const QString &what, std::function<bool(QString *)> work,
+               std::function<void(bool, const QString &)> done);
+  void setProgress(double f);
+  void updateEnabled();
+  void showStatus(const QString &s);
+  void chooseOpen();
+  void closeScene();
+  void dlgSectionImage();
+  void dlgSectionDxf();
+  void dlgPlan();
+  void dlgPoints(int presetFormat);
+  void dlgProfileCsv();
+  void dlgInfo();
+  void dlgAbout();
+  QString askSavePath(const QString &key, const QString &suggested,
+                      const QString &filter);
+  SectionStyle secStyle() const;
+  void report(bool ok, const QString &m);
+  void applySrsReport();
+  void refreshSrs();
 };

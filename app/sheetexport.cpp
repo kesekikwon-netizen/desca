@@ -2370,7 +2370,7 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
   outer->addWidget(dlgSplit, 1);
 
   // ---- 갱신
-  const QString modelName = QFileInfo(path_).completeBaseName();
+  const QString modelName = modelDisplayName(path_);
   auto refresh = std::make_shared<std::function<void()>>();
   *refresh = [=] {
     st->spec.denom = std::max(10.0, std::round(st->spec.denom));
@@ -3021,7 +3021,7 @@ int MainWindow::saveCheckedSheets(const QString &dir, const SheetParams &base,
   if (!src_ || dir.isEmpty())
     return 0;
   QDir().mkpath(dir);
-  const QString model = QFileInfo(path_).completeBaseName();
+  const QString model = modelDisplayName(path_);
   std::vector<std::string> existing;
   for (const QString &n : QDir(dir).entryList(QDir::Files))
     existing.push_back(n.toStdString());
@@ -3279,7 +3279,7 @@ void MainWindow::dlgSheet() {
       return;
     }
     const bool svg = sp.format == 4;
-    QString base = QFileInfo(path_).completeBaseName() + "_" +
+    QString base = modelDisplayName(path_) + "_" +
                    sectionName()
                        .replace(QStringLiteral("–"), "-")
                        .replace(QStringLiteral("′"), "'")
@@ -3341,7 +3341,7 @@ PlanSheetParams MainWindow::defaultPlanSheetParams() const {
   SheetParams sec = defaultSheetParams();
   sp.srsLabel = sec.srsLabel;
   sp.date = sec.date;
-  sp.title = QFileInfo(path_).completeBaseName();
+  sp.title = modelDisplayName(path_);
   if (sp.title.isEmpty())
     sp.title = QStringLiteral("평면도");
   else
@@ -3639,7 +3639,7 @@ QDialog *MainWindow::buildPlanSheetDialog(PlanSheetParams &io,
           }
         }).detach();
       });
-  const QString modelName = QFileInfo(path_).completeBaseName();
+  const QString modelName = modelDisplayName(path_);
   auto refresh = std::make_shared<std::function<void()>>();
   *refresh = [=] {
     st->spec.denom = std::max(10.0, std::round(st->spec.denom));
@@ -3929,7 +3929,7 @@ void MainWindow::dlgPlanSheet() {
     QString filter = QStringLiteral("%1 (*.%2)").arg(name, ext);
     QString f = askSavePath(
         "plansheet",
-        QFileInfo(path_).completeBaseName() +
+        modelDisplayName(path_) +
             QStringLiteral("_평면도_1-%1.").arg(sp.spec.denom, 0, 'f', 0) + ext,
         filter);
     if (f.isEmpty() || src_ != src)
