@@ -429,22 +429,27 @@ double profileRelief(const std::vector<Polyline>& profile) {
 
 std::vector<SGap> levelLineSpans(const std::vector<Polyline>& profile, double z, double s0, double s1) {
     if (s1 < s0) std::swap(s0, s1);
+    // 열린 잘린 선 하나 = 지면. 그 선과 양 끝에서 곧장 아래로 내린 선으로 닫은 영역이 땅속이다
+    // (처마처럼 뒤로 기운 벽 아래 빈 곳은 밖). 높이 z 의 수평선이 그 경계와 만나는 s 를 모아 정렬하면
+    // 안 · 밖이 번갈아 나온다 — 교차 판정은 반열림(y >= z)으로 맞춰 꼭짓점에서 두 번 세지 않는다.
+    // 여러 잘린 선은 저마다 땅속 구간을 구해 합친다. 닫힌 고리(돌 · 덤불)는 지면이 아니다
     std::vector<SGap> v;
+    std::vector<double> xs;
     for (const auto& pl : profile) {
         if (pl.size() < 2) continue;
         if (pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9) continue;   // 닫힌 고리는 지면이 아님
+        xs.clear();
+        if (pl.front().y >= z) xs.push_back(pl.front().x);   // 앞 끝에서 내린 선
+        if (pl.back().y >= z) xs.push_back(pl.back().x);     // 뒤 끝에서 내린 선
         for (size_t i = 1; i < pl.size(); ++i) {
             const Vec2& a = pl[i - 1];
             const Vec2& b = pl[i];
-            const bool ua = a.y >= z, ub = b.y >= z;
-            if (!ua && !ub) continue;
-            double xa = a.x, xb = b.x;
-            if (ua != ub) {   // 교차점(정확한 s)에서 자름
-                const double dz = b.y - a.y;
-                const double sx = std::fabs(dz) > 1e-15 ? a.x + (b.x - a.x) * (z - a.y) / dz : b.x;
-                if (ua) xb = sx; else xa = sx;
-            }
-            double lo = std::max(s0, std::min(xa, xb)), hi = std::min(s1, std::max(xa, xb));
+            if ((a.y >= z) == (b.y >= z)) continue;
+            xs.push_back(a.x + (b.x - a.x) * (z - a.y) / (b.y - a.y));   // 정확한 교차점에서 끊음
+        }
+        std::sort(xs.begin(), xs.end());
+        for (size_t i = 0; i + 1 < xs.size(); i += 2) {   // 왼쪽 끝 밖에서 시작해 교차마다 안 · 밖이 바뀜
+            const double lo = std::max(s0, xs[i]), hi = std::min(s1, xs[i + 1]);
             if (hi > lo) v.push_back({lo, hi});
         }
     }

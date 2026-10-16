@@ -31,6 +31,11 @@ bool renderElevation(const std::vector<MeshPtr>& meshes, const SectionFrame& f, 
 
 /// 평면 정사영상(위에서 수직으로, 가장 높은 면). x0,y1 = 왼쪽 위 모서리(로컬), res m/px, W×H
 bool renderPlan(const std::vector<MeshPtr>& meshes, double x0, double y1, double res, int W, int H, RgbaImage& out, const std::atomic<bool>* cancel = nullptr);
+/// 평면 정사영상을 돌린 틀로 바로 그림(평·단면도 한 장, 2026-10-16): s = (p − A)·u, t = (p − A)·n 일 때
+/// 픽셀 (i, j) 가운데 = (s0 + (i + .5)·res, t1 − (j + .5)·res). 다 그린 영상을 다시 돌려 표본화하지 않으므로 흐려지지 않는다.
+/// u = (ux, uy) 단위 벡터, n = (nx, ny) 그에 수직인 단위 벡터(보통 왼쪽 법선)
+bool renderPlanFrame(const std::vector<MeshPtr>& meshes, double ax, double ay, double ux, double uy, double nx, double ny, double s0, double t1,
+                     double res, int W, int H, RgbaImage& out, const std::atomic<bool>* cancel = nullptr);
 
 /// 높이 격자(로컬 XY, 균일 간격 노드). z[j*nx+i] = (x0+i*step, y0+j*step) 높이(m).
 struct HeightGrid {

@@ -3,6 +3,7 @@
 #include <sstream>
 #include "catch_amalgamated.hpp"
 #include "asec/engine.hpp"
+#include "asec/raster.hpp"
 #include "asec/sheet.hpp"
 
 using namespace asec;
@@ -45,6 +46,52 @@ TEST_CASE("레벨선 땅속만: 닫힌 고리(돌)는 무시 · 잘린 선 빈 �
     REQUIRE(v.size() == 2);
     CHECK(v[0].s1 == Approx(3)); CHECK(v[1].s0 == Approx(5));
     CHECK(levelLineSpans(pr, 2.2, 0, 8).empty());
+}
+
+TEST_CASE("레벨선 땅속만: 처마처럼 뒤로 기운 벽 아래 빈 곳에는 긋지 않음", "[combo]") {
+    // 낮은 지면 z=0(s 0–3) → 벽이 뒤로 기울어 위 끝이 s=2 (처마) → 높은 단 z=1(s 2–6)
+    // 벽 아래(s 2–2.5, z 0.5)는 처마 밑 빈 곳 — 옛 방식(덮개 합)은 여기에도 그었다(사용자 2026-10-16 「빨간선을 넘어간다」)
+    const std::vector<Polyline> pr = {{{0, 0}, {3, 0}, {2, 1}, {6, 1}}};
+    auto v = levelLineSpans(pr, 0.5, 0, 6);
+    REQUIRE(v.size() == 1);
+    CHECK(v[0].s0 == Approx(2.5)); CHECK(v[0].s1 == Approx(6));
+    // 낮은 지면보다 깊으면 끝까지 한 줄
+    v = levelLineSpans(pr, -0.5, 0, 6);
+    REQUIRE(v.size() == 1);
+    CHECK(v[0].s0 == Approx(0)); CHECK(v[0].s1 == Approx(6));
+    // 높은 단 위는 없음
+    CHECK(levelLineSpans(pr, 1.2, 0, 6).empty());
+}
+
+TEST_CASE("레벨선 땅속만: 끝점은 늘 잘린 선 위(선을 넘지 않음)", "[combo]") {
+    // 들쭉날쭉 앞뒤로 오가는 벽(실제 메시처럼) — 모든 구간 끝은 s 0 · 끝이거나 잘린 선과 만나는 점
+    std::vector<Polyline> pr = {{{0, 1.0}, {1.0, 1.0}, {1.3, 0.8}, {0.9, 0.6}, {1.4, 0.4}, {1.1, 0.2}, {1.6, 0.0},
+                                 {4.0, 0.0}, {4.2, 0.5}, {3.9, 0.7}, {4.4, 1.0}, {6.0, 1.0}}};
+    auto onProfile = [&](double s, double z) {
+        for (const auto& pl : pr)
+            for (size_t i = 1; i < pl.size(); ++i) {
+                const Vec2 a = pl[i - 1], b = pl[i];
+                if ((a.y >= z) == (b.y >= z)) continue;
+                const double sx = a.x + (b.x - a.x) * (z - a.y) / (b.y - a.y);
+                if (std::fabs(sx - s) < 1e-9) return true;
+            }
+        return false;
+    };
+    for (double z = -0.05; z < 1.0; z += 0.1) {
+        for (const SGap& g : levelLineSpans(pr, z, 0, 6)) {
+            CHECK((g.s0 <= 1e-9 || onProfile(g.s0, z)));
+            CHECK((g.s1 >= 6 - 1e-9 || onProfile(g.s1, z)));
+            // 구간 가운데는 땅속: 위로 올라가며 잘린 선을 홀수 번 만난다
+            const double m = 0.5 * (g.s0 + g.s1);
+            int above = 0;
+            for (size_t i = 1; i < pr[0].size(); ++i) {
+                const Vec2 a = pr[0][i - 1], b = pr[0][i];
+                if ((a.x <= m) == (b.x <= m)) continue;
+                if (a.y + (b.y - a.y) * (m - a.x) / (b.x - a.x) >= z) ++above;
+            }
+            CHECK(above % 2 == 1);
+        }
+    }
 }
 
 TEST_CASE("DXF 레벨선 땅속만 선택: 수혈 가운데를 지나는 레벨선 없음, 끄면 옛 동작", "[combo][dxf]") {
@@ -115,15 +162,15 @@ TEST_CASE("단면 표시 높이: 잘린 선 기준이면 뒤 배경 기둥 높�
     REQUIRE(computeSection(*s, rq, newO, &err));
     CHECK(oldO.result.zMax >= 1.5);
     CHECK(newO.result.zMax == Approx(0).margin(1e-9));   // 지면 0 = 10 cm 선 위 그대로
-    CHECK(newO.result.zMin == Approx(-0.1));             // 0 선에서 10 cm 더 아래
+    CHECK(newO.result.zMin == Approx(-0.3));             // 0 선에서 10 cm 레벨선 세 칸 더 아래(사용자 2026-10-16 「3칸만 더」)
     CHECK(newO.result.zMinCut == Approx(0).margin(1e-6));
     CHECK(newO.result.zMaxCut == Approx(0).margin(1e-6));
     // 잘린 선은 같다
-    // 절대 표고 기준 10 cm: 원점 z 가 0.05 면 잘린 선 절대 0.05 → 위 0.1, 아래 0.0 − 0.1
+    // 절대 표고 기준 10 cm: 원점 z 가 0.05 면 잘린 선 절대 0.05 → 위 0.1, 아래 0.0 − 0.3
     s->srs.origin = Vec3(0, 0, 0.05);
     SectionOutput offO; REQUIRE(computeSection(*s, rq, offO, &err));
     CHECK(offO.result.zMax + 0.05 == Approx(0.1));
-    CHECK(offO.result.zMin + 0.05 == Approx(-0.1));
+    CHECK(offO.result.zMin + 0.05 == Approx(-0.3));
     REQUIRE(oldO.result.profile.size() == newO.result.profile.size());
     for (size_t i = 0; i < oldO.result.profile.size(); ++i) CHECK(oldO.result.profile[i] .size() == newO.result.profile[i].size());
 }
@@ -208,4 +255,45 @@ TEST_CASE("한 장 조판: 첫 단면이 북쪽으로 가면 평면을 돌리고
     CHECK(ar.x0 == Approx(9)); CHECK(ar.x1 == Approx(11));
     CHECK(ar.y0 == Approx(9)); CHECK(ar.y1 == Approx(16));
     CHECK(layoutCombo(sp, {}, 1.0).sections.empty());
+}
+
+namespace {
+// 바닥 판 하나(z = 0): x 0–4, y 0–2 — 위에서 보면 회색
+MeshPtr floorSlab() {
+    auto m = std::make_shared<Mesh>();
+    m->pos = {0, 0, 0, 4, 0, 0, 4, 2, 0, 0, 2, 0};
+    m->idx = {0, 1, 2, 0, 2, 3};
+    m->computeBBox();
+    return m;
+}
+bool covered(const RgbaImage& im, int i, int j) { return im.px[(size_t(j) * im.w + i) * 4 + 3] > 0; }
+}  // namespace
+
+TEST_CASE("돌린 평면을 바로 그림: 돌리지 않으면 renderPlan 과 같은 픽셀", "[combo][plan]") {
+    const std::vector<MeshPtr> ms = {floorSlab()};
+    RgbaImage a, b;
+    // renderPlan: 왼쪽 위 (−1, 3), 0.1 m/px, 60 × 40
+    REQUIRE(renderPlan(ms, -1, 3, 0.1, 60, 40, a));
+    // 같은 틀: A = (0, 0), u = (1, 0), n = (0, 1), s0 = −1, t1 = 3
+    REQUIRE(renderPlanFrame(ms, 0, 0, 1, 0, 0, 1, -1, 3, 0.1, 60, 40, b));
+    REQUIRE(a.w == b.w); REQUIRE(a.h == b.h);
+    int diff = 0;
+    for (int j = 0; j < a.h; ++j)
+        for (int i = 0; i < a.w; ++i) diff += covered(a, i, j) != covered(b, i, j);
+    CHECK(diff == 0);
+}
+
+TEST_CASE("돌린 평면을 바로 그림: A→A′ 가 북쪽이면 판이 종이 가로로 눕는다", "[combo][plan]") {
+    const std::vector<MeshPtr> ms = {floorSlab()};
+    // u = (0, 1)(북), n = 왼쪽 법선 (−1, 0)(서). s = y, t = −x → 판은 s 0–2, t −4–0
+    RgbaImage im;
+    const double res = 0.1;
+    REQUIRE(renderPlanFrame(ms, 0, 0, 0, 1, -1, 0, -1, 1, res, 40, 70, im));
+    // 픽셀 (i, j) 가운데: s = −1 + (i + .5)·res, t = 1 − (j + .5)·res
+    auto at = [&](double s, double t) { return covered(im, int((s + 1) / res), int((1 - t) / res)); };
+    CHECK(at(1.0, -2.0));    // 판 안
+    CHECK(at(0.1, -3.9));
+    CHECK_FALSE(at(2.5, -2.0));   // s > 2 밖
+    CHECK_FALSE(at(1.0, 0.5));    // t > 0 밖(동쪽 = 오른쪽 법선 쪽)
+    CHECK_FALSE(at(1.0, -4.5));   // t < −4 밖
 }

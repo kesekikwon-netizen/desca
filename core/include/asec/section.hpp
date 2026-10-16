@@ -116,7 +116,8 @@ double profileRelief(const std::vector<Polyline>& profile);
 struct SGap { double s0 = 0, s1 = 0; };
 std::vector<SGap> profileGaps(const std::vector<Polyline>& profile, double length, double minGap = 0.02);
 /// 레벨선 정리(2026-10-16, 사용자 샘플 보고서 도면 9장): 레벨선은 잘린 선(발굴된 지면) 아래 땅속에만 긋는다.
-/// 높이 z 의 선은 열린 잘린 선의 높이가 z 이상인 s 구간에만 — 지면 위 공기와 파낸 수혈 속(빨간 선 위)에는 없음,
+/// 땅속 = 열린 잘린 선과 그 양 끝에서 곧장 아래로 내린 선으로 닫은 영역. 높이 z 의 선은 그 영역 안 s 구간에만 —
+/// 지면 위 공기 · 파낸 수혈 속 · 처마처럼 뒤로 기운 벽 아래 빈 곳(빨간 선 위)에는 없고, 끝점은 늘 잘린 선 위(2026-10-16 고침).
 /// 수혈 바닥보다 깊은 선은 끝까지 이어짐. 닫힌 고리(돌 · 덤불)는 보지 않는다. 잘린 선이 없는 빈 구간에도 긋지 않는다.
 /// 결과는 [s0, s1] 안, s 오름차순 · 겹침 없음
 std::vector<SGap> levelLineSpans(const std::vector<Polyline>& profile, double z, double s0, double s1);
