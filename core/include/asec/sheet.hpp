@@ -283,6 +283,14 @@ double fitComboDenomOnPaper(const SheetSpec &spec,
                             const ComboLayout *keepFrame = nullptr);
 /// 평면 영상을 만들 로컬 XY 외접 상자(돌린 평면 칸 네 모서리)
 PlanStripArea comboPlanArea(const ComboLayout &c);
+/// 평·단면도 진북 원 반지름(mm, 사용자 2026-10-16 「나침반도 좀더 크게」 → 1.5 배) · 원 가장자리 → 「N」 글자 가운데(mm)
+constexpr double kComboNorthRMm = 5.25;
+constexpr double kComboNorthLabelMm = 2.2;
+/// 평면 단면선 끝 → A · A′ 글자 가운데(mm, 선 방향 바깥)
+constexpr double kComboPlanLabelMm = 2.8;
+/// 진북 자리(종이 mm): 가운데 · 반지름 · 원과 「N」 을 합친 외접 상자
+struct ComboNorth { double cx = 0, cy = 0, r = 0, x0 = 0, y0 = 0, x1 = 0, y1 = 0; };
+ComboNorth comboNorthSpot(const ComboLayout &c);
 
 /// 방위각(북 0°, 시계 방향) → "N 90.4° E" (180° 넘으면 "N 45.0° W")
 std::string formatAzimuth(double azDeg);

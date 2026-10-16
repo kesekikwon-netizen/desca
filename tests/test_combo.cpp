@@ -237,6 +237,8 @@ TEST_CASE("한 장 조판(용지 없음): 내용 외접 상자 + 여백으로 �
     add(c.planX, c.planY); add(c.planX + c.planW, c.planY + c.planH);
     for (auto& p : c.sections)
         for (double x : {p.areaX, p.areaX + p.areaW}) for (double y : {p.areaY, p.areaY + p.areaH}) { double px, py; p.toPaper(x, y, px, py); add(px, py); }
+    const ComboNorth n = comboNorthSpot(c);   // 진북도 내용(평면 칸 바깥에 놓이므로 종이가 그만큼 넓어진다)
+    add(n.x0, n.y0); add(n.x1, n.y1);
     CHECK(x0 == Approx(10)); CHECK(y0 == Approx(10));
     CHECK(c.L.paperW == Approx(x1 + 10));
     CHECK(c.L.paperH == Approx(y1 + 10 + 16));
@@ -270,6 +272,8 @@ TEST_CASE("평·단면도 용지(사용자 2026-10-16 「용지방향이안돼�
                 double px, py; p.toPaper(x, y, px, py);
                 x0 = std::min(x0, px); y0 = std::min(y0, py); x1 = std::max(x1, px); y1 = std::max(y1, py);
             }
+        const ComboNorth n = comboNorthSpot(c);
+        x0 = std::min(x0, n.x0); y0 = std::min(y0, n.y0); x1 = std::max(x1, n.x1); y1 = std::max(y1, n.y1);
     };
     for (auto [pw, ph] : {std::pair<double, double>{297, 210}, {210, 297}}) {
         ComboLayout c = layoutCombo(sp, secs, 1.0);
@@ -316,6 +320,85 @@ TEST_CASE("한 장 조판: 첫 단면이 북쪽으로 가면 평면을 돌리고
     CHECK(ar.x0 == Approx(9)); CHECK(ar.x1 == Approx(11));
     CHECK(ar.y0 == Approx(9)); CHECK(ar.y1 == Approx(16));
     CHECK(layoutCombo(sp, {}, 1.0).sections.empty());
+}
+
+namespace {
+struct MmBox { double x0, y0, x1, y1; };
+bool apart(const MmBox& a, const MmBox& b, double gap) {
+    return a.x1 + gap <= b.x0 || b.x1 + gap <= a.x0 || a.y1 + gap <= b.y0 || b.y1 + gap <= a.y0;
+}
+MmBox sectionBox(const ComboPlaced& p) {
+    MmBox b{1e9, 1e9, -1e9, -1e9};
+    for (double x : {p.areaX, p.areaX + p.areaW})
+        for (double y : {p.areaY, p.areaY + p.areaH}) {
+            double px, py; p.toPaper(x, y, px, py);
+            b.x0 = std::min(b.x0, px); b.y0 = std::min(b.y0, py); b.x1 = std::max(b.x1, px); b.y1 = std::max(b.y1, py);
+        }
+    return b;
+}
+/// 진북이 평면 칸 · 단면 칸 · 평면 단면선 글자(A · A′, 선 끝에서 kComboPlanLabelMm 바깥)와 떨어져 있고, 원과 「N」 을 다 품는다
+void checkNorthOutside(const ComboLayout& c) {
+    const ComboNorth n = comboNorthSpot(c);
+    const MmBox nb{n.x0, n.y0, n.x1, n.y1};
+    CHECK(n.r == Approx(kComboNorthRMm));
+    CHECK(n.x0 <= n.cx - n.r + 1e-9); CHECK(n.x1 >= n.cx + n.r - 1e-9);
+    CHECK(n.y0 <= n.cy - n.r + 1e-9); CHECK(n.y1 >= n.cy + n.r - 1e-9);
+    const double a = c.northDeg() * 3.14159265358979323846 / 180.0;
+    const double tx = n.cx + std::sin(a) * (n.r + kComboNorthLabelMm), ty = n.cy - std::cos(a) * (n.r + kComboNorthLabelMm);
+    CHECK(tx >= n.x0); CHECK(tx <= n.x1); CHECK(ty >= n.y0); CHECK(ty <= n.y1);
+    CHECK(apart(nb, {c.planX, c.planY, c.planX + c.planW, c.planY + c.planH}, 1.0));
+    for (const ComboPlaced& p : c.sections) {
+        CHECK(apart(nb, sectionBox(p), 1.0));
+        const double ax = c.xMm(p.sA), ay = c.yMm(p.tA), bx = c.xMm(p.sB), by = c.yMm(p.tB);
+        const double dl = std::hypot(bx - ax, by - ay);
+        if (dl < 1e-9) continue;
+        const double ux = (bx - ax) / dl, uy = (by - ay) / dl;
+        for (auto [lx, ly] : {std::pair<double, double>{ax - ux * kComboPlanLabelMm, ay - uy * kComboPlanLabelMm},
+                              {bx + ux * kComboPlanLabelMm, by + uy * kComboPlanLabelMm}})
+            CHECK(apart(nb, {lx - 2.2, ly - 1.5, lx + 2.2, ly + 1.5}, 0.5));
+    }
+}
+} // namespace
+
+TEST_CASE("평·단면도 진북(사용자 2026-10-16 「나침반이 안으로?」): 평면 사진 위가 아니라 칸 바깥 · 단면 · 글자와 안 겹침 · 종이 안", "[combo][sheet][north]") {
+    SheetSpec sp; sp.denom = 30;
+    SheetSpec app = sp;   // 앱 평·단면도의 글자 여백(comboSpec)
+    app.gutterLeftMm = 14; app.gutterRightMm = 3; app.gutterTopMm = 6; app.gutterBottomMm = 2;
+    const std::vector<std::vector<ComboSection>> cases = {
+        {{0, 0, 4, 0, 1.0}, {2, -2, 2, 2, 0.8}},                                          // 위 + 왼쪽(사용자 화면)
+        {{0, 0, 4, 0, 1.0}, {2, -2, 2, 2, 0.8}, {3, 2, 3, -2, 0.8}, {4, 1, 0, 1, 0.6}},   // 네 쪽 모두
+        {{0, 0, 3, 3, 1.0}, {0, 3, 3, 0, 0.8}},                                           // 기준이 북동 → 진북이 비스듬
+        {{10, 10, 10, 15, 1.0}},                                                          // 기준이 북쪽 → 진북 오른쪽(90°)
+    };
+    for (const SheetSpec& s : {sp, app})
+        for (double margin : {1.0, 0.0})   // 0 = 단면선 끝이 평면 칸 테두리(사용자 화면처럼 A′ 글자가 칸 바로 밖)
+            for (const auto& secs : cases) {
+                ComboLayout c = layoutCombo(s, secs, margin, 8.0, 4.0);
+                REQUIRE_FALSE(c.sections.empty());
+                checkNorthOutside(c);
+                // 내용 크기 종이 · 정한 용지 모두 진북이 여백 안(종이를 그림 + 진북에 맞춤)
+                freeComboPage(c, 10.0, 16.0);
+                checkNorthOutside(c);
+                ComboNorth n = comboNorthSpot(c);
+                CHECK(n.x0 >= 10 - 1e-6); CHECK(n.y0 >= 10 - 1e-6);
+                CHECK(n.x1 <= c.L.paperW - 10 + 1e-6); CHECK(n.y1 <= c.L.paperH - 10 - 16 + 1e-6);
+                ComboLayout big = layoutCombo(s, secs, margin, 8.0, 4.0);
+                if (placeComboOnPaper(big, 420, 297, 10.0, 16.0)) {
+                    n = comboNorthSpot(big);
+                    CHECK(n.x0 >= 10 - 1e-6); CHECK(n.x1 <= 420 - 10 + 1e-6);
+                    CHECK(n.y0 >= 10 - 1e-6); CHECK(n.y1 <= 297 - 10 - 16 + 1e-6);
+                }
+            }
+    // 끄는 동안 붙든 틀(120° 돌린 평면)도 같은 규칙
+    const ComboLayout fr = comboFrameForRotation(120.0);
+    ComboLayout c = layoutCombo(app, cases[0], 0.0, 8.0, 4.0, &fr);
+    CHECK(c.northDeg() == Approx(120.0));
+    checkNorthOutside(c);
+    // 사용자 화면(위 + 왼쪽): 평면 오른쪽 위 바깥
+    c = layoutCombo(app, cases[0], 0.0, 8.0, 4.0);
+    const ComboNorth n = comboNorthSpot(c);
+    CHECK(n.x0 >= c.planX + c.planW);
+    CHECK(n.cy < c.planY + c.planH * 0.5);
 }
 
 namespace {

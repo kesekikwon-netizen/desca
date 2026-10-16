@@ -188,6 +188,7 @@ struct ComboPaintProbe {
     QList<QRectF> labels;
   };
   QList<Sec> secs;
+  QRectF plan, north; // 평면 칸 · 진북(원 + 「N」 외접 상자), 종이 px
 };
 /// 평·단면도 단면 영상의 품질: Final = 저장(dpi), Preview = 화면 미리보기(개별 도면 미리보기와 같은 해상도 · 잎),
 /// Drag = 도면에서 단면선 끝을 끄는 동안(거친 LOD — 빠르게)

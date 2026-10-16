@@ -394,9 +394,80 @@ double fitComboDenomStep10(const SheetSpec& spec, const std::vector<ComboSection
 }
 
 namespace {
+struct MmRect { double x0, y0, x1, y1; };
+bool mmApart(const MmRect& a, const MmRect& b, double gap) {
+    return a.x1 + gap <= b.x0 || b.x1 + gap <= a.x0 || a.y1 + gap <= b.y0 || b.y1 + gap <= a.y0;
+}
+MmRect sectionPaperBox(const ComboPlaced& p) {
+    MmRect r{1e300, 1e300, -1e300, -1e300};
+    for (double x : {p.areaX, p.areaX + p.areaW})
+        for (double y : {p.areaY, p.areaY + p.areaH}) {
+            double px, py;
+            p.toPaper(x, y, px, py);
+            r.x0 = std::min(r.x0, px); r.x1 = std::max(r.x1, px); r.y0 = std::min(r.y0, py); r.y1 = std::max(r.y1, py);
+        }
+    return r;
+}
+} // namespace
+
+// 진북은 평면 사진 위가 아니라 평면 칸 바깥(사용자 2026-10-16 「나침반이 안으로?」). 오른쪽 위부터 차례로 보며
+// 평면 칸 · 단면 칸(글자 여백 포함) · 평면 단면선 글자(A · A′)와 2 mm 넘게 떨어진 첫 자리. 다 막히면 모든 칸의 오른쪽 밖
+ComboNorth comboNorthSpot(const ComboLayout& c) {
+    const double R = kComboNorthRMm, gap = 2.0;
+    const double a = c.northDeg() * 3.14159265358979323846 / 180.0;
+    const double tx = std::sin(a) * (R + kComboNorthLabelMm), ty = -std::cos(a) * (R + kComboNorthLabelMm);
+    const double hn = 1.3;   // 「N」(7 pt 굵게, 대문자 약 1.8 mm) 반 + 여유
+    const double fx0 = std::min(-R, tx - hn), fx1 = std::max(R, tx + hn), fy0 = std::min(-R, ty - hn), fy1 = std::max(R, ty + hn);
+    auto at = [&](double cx, double cy) {
+        ComboNorth n;
+        n.cx = cx; n.cy = cy; n.r = R;
+        n.x0 = cx + fx0; n.x1 = cx + fx1; n.y0 = cy + fy0; n.y1 = cy + fy1;
+        return n;
+    };
+    const double L = c.planX, T = c.planY, Rt = c.planX + c.planW, B = c.planY + c.planH;
+    std::vector<MmRect> obs{{L, T, Rt, B}};
+    double maxX = Rt;
+    for (const ComboPlaced& p : c.sections) {
+        obs.push_back(sectionPaperBox(p));
+        const double ax = c.xMm(p.sA), ay = c.yMm(p.tA), bx = c.xMm(p.sB), by = c.yMm(p.tB);
+        const double dl = std::hypot(bx - ax, by - ay);
+        if (dl > 1e-9) {   // A · A′ 글자(가운데 = 선 끝에서 바깥으로 kComboPlanLabelMm, 글자 「A′」 반 2.2 × 1.5 mm)
+            const double ux = (bx - ax) / dl, uy = (by - ay) / dl;
+            const double lx[2] = {ax - ux * kComboPlanLabelMm, bx + ux * kComboPlanLabelMm};
+            const double ly[2] = {ay - uy * kComboPlanLabelMm, by + uy * kComboPlanLabelMm};
+            for (int i = 0; i < 2; ++i) obs.push_back({lx[i] - 2.2, ly[i] - 1.5, lx[i] + 2.2, ly[i] + 1.5});
+        }
+    }
+    for (const MmRect& o : obs) maxX = std::max(maxX, o.x1);
+    auto isFree = [&](const ComboNorth& n) {
+        const MmRect nb{n.x0, n.y0, n.x1, n.y1};
+        for (const MmRect& o : obs)
+            if (!mmApart(nb, o, gap)) return false;
+        return true;
+    };
+    const double right = Rt + gap - fx0;
+    std::vector<ComboNorth> cand{
+        at(right, T - fy0),                  // 평면 오른쪽 · 위 맞춤
+        at(right, T - gap - fy1),            // 오른쪽 위 모서리 바깥
+        at(Rt - fx1, T - gap - fy1),         // 평면 위 · 오른쪽 맞춤
+    };
+    for (double y = T - fy0 + 2.0; y + fy1 <= B + 1e-9; y += 2.0) cand.push_back(at(right, y));   // 오른쪽 따라 아래로
+    cand.push_back(at(right, B + gap - fy0));    // 오른쪽 아래 모서리 바깥
+    cand.push_back(at(L - gap - fx1, T - gap - fy1));   // 왼쪽 위 모서리 바깥
+    cand.push_back(at(L - gap - fx1, B + gap - fy0));   // 왼쪽 아래 모서리 바깥
+    for (const ComboNorth& n : cand)
+        if (isFree(n)) return n;
+    return at(maxX + gap - fx0, T - fy0);
+}
+
+namespace {
 /// 평면 칸과 모든 단면 칸(글자 여백 포함)의 종이 위 외접 상자(mm)
 void comboContentBox(const ComboLayout& c, double& x0, double& y0, double& x1, double& y1) {
     x0 = c.planX; y0 = c.planY; x1 = c.planX + c.planW; y1 = c.planY + c.planH;
+    if (!c.sections.empty()) {   // 진북(평면 칸 바깥)도 종이 안에
+        const ComboNorth n = comboNorthSpot(c);
+        x0 = std::min(x0, n.x0); y0 = std::min(y0, n.y0); x1 = std::max(x1, n.x1); y1 = std::max(y1, n.y1);
+    }
     for (const ComboPlaced& p : c.sections)
         for (double x : {p.areaX, p.areaX + p.areaW})
             for (double y : {p.areaY, p.areaY + p.areaH}) {

@@ -5251,15 +5251,6 @@ void paintComboSection(QPainter &p, const ComboSecAsset &a,
   }
 }
 
-/// 진북 자리(종이 mm): 평면 칸 오른쪽 위 안, 칸이 작으면 칸 오른쪽 밖. 사용자 2026-10-16 「나침반도 좀더 크게」 → 1.5 배
-/// (반지름 3.5 → 5.25 mm). SVG · PDF · 화면 · DXF 가 같은 자리
-struct ComboNorthSpot { double cx = 0, cy = 0, r = 0; };
-ComboNorthSpot comboNorthSpot(const ComboLayout &c) {
-  if (c.planW > 30 && c.planH > 30)
-    return {c.planX + c.planW - 10.5, c.planY + 10.5, 5.25};
-  return {c.planX + c.planW + 9.0, c.planY + 6.0, 4.5};
-}
-
 /// 진북(돌린 평면에 맞춰 deg 만큼 시계 방향). 글자는 똑바로
 void paintComboNorth(QPainter &p, double cxMm, double cyMm, double rMm,
                      double deg, double k) {
@@ -5278,7 +5269,8 @@ void paintComboNorth(QPainter &p, double cxMm, double cyMm, double rMm,
   p.drawPolygon(arrow);
   p.restore();
   const double a = deg * 3.14159265358979323846 / 180.0;
-  const QPointF tip = c + QPointF(std::sin(a), -std::cos(a)) * (R + 2.2 * k);
+  const QPointF tip =
+      c + QPointF(std::sin(a), -std::cos(a)) * (R + asec::kComboNorthLabelMm * k);
   p.setFont(theme::paperFont(theme::uiFont(10, true), theme::kPaperTextPt, k,
                              p.device()));
   p.setPen(theme::Ink);
@@ -5306,7 +5298,8 @@ void paintComboPlanLine(QPainter &p, const QPointF &A, const QPointF &B,
   p.setFont(theme::paperFont(theme::uiFont(10, true), theme::kPaperTextPt, k,
                              p.device()));
   p.setPen(theme::Ink);
-  const QPointF ca = A - u * (2.8 * k), cb = B + u * (2.8 * k);
+  const QPointF ca = A - u * (asec::kComboPlanLabelMm * k),
+                cb = B + u * (asec::kComboPlanLabelMm * k);
   p.drawText(QRectF(ca.x() - 6 * k, ca.y() - 1.8 * k, 12 * k, 3.6 * k),
              Qt::AlignCenter, nameA);
   p.drawText(QRectF(cb.x() - 6 * k, cb.y() - 1.8 * k, 12 * k, 3.6 * k),
@@ -5357,7 +5350,8 @@ void paintComboPlan(QPainter &p, const ComboLayout &c, const ComboAssets &a,
                        QPointF(c.xMm(pl.sB) * k, c.yMm(pl.tB) * k),
                        a.secs[i].nameA, a.secs[i].nameB, k, minLinePx);
   }
-  const ComboNorthSpot ns = comboNorthSpot(c);
+  // 진북은 평면 칸 바깥(사용자 2026-10-16 「나침반이 안으로?」) — 자리는 core comboNorthSpot
+  const asec::ComboNorth ns = asec::comboNorthSpot(c);
   paintComboNorth(p, ns.cx, ns.cy, ns.r, c.northDeg(), k);
 }
 
@@ -5439,13 +5433,14 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
            P(t1x - nx * 1.2 + ux * 0.8, t1y - ny * 1.2 + uy * 0.8));
     d.line("PLAN_SECTION_LINE", P(t1x, t1y),
            P(t1x - nx * 1.2 - ux * 0.8, t1y - ny * 1.2 - uy * 0.8));
-    d.text("PLAN_TEXT", P(ax - ux * 2.8, ay - uy * 2.8), kDxfTextMm,
+    const double lm = asec::kComboPlanLabelMm;
+    d.text("PLAN_TEXT", P(ax - ux * lm, ay - uy * lm), kDxfTextMm,
            dxfAscii(a.secs[i].nameA).toStdString(), 1, 2);
-    d.text("PLAN_TEXT", P(bx + ux * 2.8, by + uy * 2.8), kDxfTextMm,
+    d.text("PLAN_TEXT", P(bx + ux * lm, by + uy * lm), kDxfTextMm,
            dxfAscii(a.secs[i].nameB).toStdString(), 1, 2);
   }
   {
-    const ComboNorthSpot ns = comboNorthSpot(c);
+    const asec::ComboNorth ns = asec::comboNorthSpot(c);
     const double cx = ns.cx, cy = ns.cy, R = ns.r;
     const double ang = c.northDeg() * 3.14159265358979323846 / 180.0;
     const double dx = std::sin(ang), dy = -std::cos(ang); // 종이(y 아래) 위 진북
@@ -5455,7 +5450,8 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
            P(cx + dx * R * 0.45 - dy * R * 0.25, cy + dy * R * 0.45 + dx * R * 0.25));
     d.line("NORTH", P(cx + dx * R * 0.85, cy + dy * R * 0.85),
            P(cx + dx * R * 0.45 + dy * R * 0.25, cy + dy * R * 0.45 - dx * R * 0.25));
-    d.text("NORTH", P(cx + dx * (R + 2.2), cy + dy * (R + 2.2)), kDxfTextMm, "N", 1, 2);
+    const double lr = R + asec::kComboNorthLabelMm;
+    d.text("NORTH", P(cx + dx * lr, cy + dy * lr), kDxfTextMm, "N", 1, 2);
   }
   // 단면
   for (size_t i = 0; i < c.sections.size() && i < a.secs.size(); ++i) {
@@ -5789,6 +5785,11 @@ void MainWindow::paintComboSheet(QPainter &p, const ComboAssets &a,
   p.fillRect(QRectF(0, 0, L.paperW * k, L.paperH * k), Qt::white);
   if (!c.sections.empty()) {
     paintComboPlan(p, c, a, sp, k, minLinePx, hideLine);
+    if (probe) {
+      const asec::ComboNorth n = asec::comboNorthSpot(c);
+      probe->plan = QRectF(c.planX * k, c.planY * k, c.planW * k, c.planH * k);
+      probe->north = QRectF(QPointF(n.x0 * k, n.y0 * k), QPointF(n.x1 * k, n.y1 * k));
+    }
     for (size_t i = 0; i < c.sections.size() && i < a.secs.size(); ++i) {
       const ComboPlaced &pl = c.sections[i];
       p.save();
@@ -7343,14 +7344,27 @@ bool MainWindow::runComboCheck(const QString &outDir, QString *log) {
             ++overlap;
       }
     }
-    const bool good = n > 0 && inside == 0 && overlap == 0;
+    // 진북이 평면 사진 · 단면 칸 · 표고 글자 위에 오지 않는가(사용자 2026-10-16 「나침반이 안으로?」)
+    int northHit = pr.north.isEmpty() ? 1 : 0;
+    const QRectF nb = pr.north.adjusted(0.5, 0.5, -0.5, -0.5);
+    if (nb.intersects(pr.plan))
+      ++northHit;
+    for (const ComboPaintProbe::Sec &s : pr.secs) {
+      if (nb.intersects(s.plot.normalized()))
+        ++northHit;
+      for (const QRectF &l : s.labels)
+        if (nb.intersects(l))
+          ++northHit;
+    }
+    const bool good = n > 0 && inside == 0 && overlap == 0 && northHit == 0;
     say(QStringLiteral("combo-check labels %1: sections=%2 labels=%3 inside=%4 "
-                       "overlap=%5 %6")
+                       "overlap=%5 north-hit=%6 %7")
             .arg(tag)
             .arg(pr.secs.size())
             .arg(n)
             .arg(inside)
             .arg(overlap)
+            .arg(northHit)
             .arg(good ? QStringLiteral("ok") : QStringLiteral("FAIL")));
     return good;
   };
