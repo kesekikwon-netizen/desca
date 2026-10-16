@@ -308,6 +308,29 @@ void paintSheetChrome(QPainter &p, const SheetLayout &L, double k,
   }
 }
 
+/// 평면 정사영상에 쓸 메시: 3MX · 3SM 은 해상도 res 에 맞는 단계(LOD)의 타일,
+/// OBJ 는 범위(로컬 XY)에 걸치는 메시 전부
+bool collectPlanMeshes(MeshSource &src, const Box3 &area, double res,
+                       std::vector<MeshPtr> &meshes, QString *msg,
+                       const std::atomic<bool> *cancel) {
+  std::string e;
+  if (auto *t = dynamic_cast<TmxSource *>(&src)) {
+    LeafStats st;
+    if (!t->areaMeshes(area, res, meshes, &st, &e, cancel)) {
+      if (msg)
+        *msg = qs8(e);
+      return false;
+    }
+  } else if (auto *s = dynamic_cast<StaticSource *>(&src)) {
+    for (auto &m : s->meshes)
+      if (!m->bbox.valid() ||
+          !(m->bbox.mx.x < area.mn.x || m->bbox.mn.x > area.mx.x ||
+            m->bbox.mx.y < area.mn.y || m->bbox.mn.y > area.mx.y))
+        meshes.push_back(m);
+  }
+  return true;
+}
+
 bool renderPlanOrtho(MeshSource &src, const Box3 &areaIn, double res,
                      QImage &out, double &x0, double &y1, QString *msg,
                      const std::atomic<bool> *cancel) {
@@ -345,21 +368,8 @@ bool renderPlanOrtho(MeshSource &src, const Box3 &areaIn, double res,
     return false;
   }
   std::vector<MeshPtr> meshes;
-  std::string e;
-  if (auto *t = dynamic_cast<TmxSource *>(&src)) {
-    LeafStats st;
-    if (!t->areaMeshes(area, res, meshes, &st, &e, cancel)) {
-      if (msg)
-        *msg = qs8(e);
-      return false;
-    }
-  } else if (auto *s = dynamic_cast<StaticSource *>(&src)) {
-    for (auto &m : s->meshes)
-      if (!m->bbox.valid() ||
-          !(m->bbox.mx.x < area.mn.x || m->bbox.mn.x > area.mx.x ||
-            m->bbox.mx.y < area.mn.y || m->bbox.mn.y > area.mx.y))
-        meshes.push_back(m);
-  }
+  if (!collectPlanMeshes(src, area, res, meshes, msg, cancel))
+    return false;
   RgbaImage img;
   if (!renderPlan(meshes, x0, y1, res, W, H, img, cancel)) {
     if (msg)
@@ -618,9 +628,11 @@ SheetParams MainWindow::defaultSheetParams() const {
   sp.withImage = st.value("sheet/withImage", true).toBool();
   sp.withLine = st.value("sheet/withLine", true).toBool();
   sp.withLevels = st.value("sheet/withLevels", true).toBool();
-  sp.withTicks =
-      st.value("sheet/withTicks", true)
-          .toBool(); // 거리 눈금(T10) — 끄는 칸은 도면 판의 「그릴 것」(T16)
+  { // 거리 눈금(T10)은 단면 화면의 켜기 · 끄기(D)를 따름 — 기본 끔(사용자
+    // 2026-10-16). 도면 판에 따로 끄는 칸이 생기기 전까지(T16)
+    const auto ti = act_.find(QStringLiteral("ticks"));
+    sp.withTicks = ti != act_.end() && ti->second->isChecked();
+  }
   sp.withTitle = st.value("sheet/withTitle", true).toBool();
   sp.withPlan = st.value("sheet/withPlan", true)
                     .toBool(); // 위치도(평면 띠) — 사용자 결정 2026-10-11
@@ -3279,7 +3291,6 @@ void MainWindow::dlgSheet() {
     sp.withImage = o.withImage;
     sp.withLine = o.withLine;
     sp.withLevels = o.withLevels;
-    sp.withTicks = o.withTicks;
     sp.withTitle = o.withTitle;
     sp.showBaseline = o.showBaseline;
     sp.levelMinorPt = o.levelMinorPt;
@@ -4191,6 +4202,7 @@ bool MainWindow::runSheetCheck(const QString &outDir, QString *log) {
   if (section_ && section_->hasResult()) {
     SheetParams sec = defaultSheetParams();
     sec.withLevels = true; // 판정은 레벨선이 있어야 함(검토 M2)
+    sec.withTicks = true;  // 거리 눈금 그리기 판정(기본은 끔 — 켰을 때 모양을 본다)
     SectionDoc doc = section_->doc();
     auto paintSec = [&](double zoom, QImage &canvas, SheetPaintProbe &probe) {
       SheetGeom G = sheetGeom(doc, sec);
@@ -5149,29 +5161,41 @@ bool MainWindow::renderComboPlan(MeshSource &src, const ComboSheetParams &sp,
   }
   const PlanStripArea pa = comboPlanArea(c);
   res = std::max(1e-4, res);
-  const double pix = (pa.x1 - pa.x0) / res * ((pa.y1 - pa.y0) / res);
-  if (pix > 30e6)
-    res *= std::sqrt(pix / 30e6); // 영상 메모리 상한(약 30 MP)
+  // 돌린 평면을 바로 그린다(다 그린 정사영상을 다시 돌려 표본화하면 흐려짐 —
+  // 사용자 2026-10-16 「평면이 화질저하」). 픽셀 수 상한은 단면 영상과 같은 80 MP
+  const double pix = (c.sMax - c.sMin) / res * ((c.tMax - c.tMin) / res);
+  if (pix > 80e6)
+    res *= std::sqrt(pix / 80e6);
   Box3 box;
-  box.mn = Vec3(pa.x0, pa.y0, src.bounds.mn.z);
-  box.mx = Vec3(pa.x1, pa.y1, src.bounds.mx.z);
-  QImage world;
-  double x0 = 0, y1 = 0;
-  if (!renderPlanOrtho(src, box, res, world, x0, y1, msg, cancel))
+  box.mn = Vec3(std::max(pa.x0, src.bounds.mn.x),
+                std::max(pa.y0, src.bounds.mn.y), src.bounds.mn.z);
+  box.mx = Vec3(std::min(pa.x1, src.bounds.mx.x),
+                std::min(pa.y1, src.bounds.mx.y), src.bounds.mx.z);
+  if (!(box.mx.x > box.mn.x && box.mx.y > box.mn.y)) {
+    if (msg)
+      *msg = QStringLiteral("내보낼 범위가 비어 있습니다");
+    return false;
+  }
+  std::vector<MeshPtr> meshes;
+  if (!collectPlanMeshes(src, box, res, meshes, msg, cancel))
     return false;
   const int W = std::max(1, int(std::ceil((c.sMax - c.sMin) / res)));
   const int H = std::max(1, int(std::ceil((c.tMax - c.tMin) / res)));
   QImage rot(W, H, QImage::Format_RGB32);
-  rot.fill(Qt::white);
   {
-    QPainter q(&rot);
-    q.setRenderHint(QPainter::SmoothPixmapTransform);
-    const SectionLine &l0 = out.secs[0].r.line;
-    const PlanStripXf T =
-        planStripTransform(l0.a.x, l0.a.y, l0.b.x, l0.b.y, x0, y1, res,
-                           -c.sMin / res, c.tMax / res, 1.0 / res);
-    q.setTransform(QTransform(T.m11, T.m12, T.m21, T.m22, T.dx, T.dy));
-    q.drawImage(QPointF(0, 0), world);
+    RgbaImage img;
+    if (!renderPlanFrame(meshes, c.ax, c.ay, c.ux, c.uy, c.nx, c.ny, c.sMin,
+                         c.tMax, res, W, H, img, cancel)) {
+      if (msg)
+        *msg = QStringLiteral("평면 영상 생성 실패(취소 또는 메모리)");
+      return false;
+    }
+    for (int y = 0; y < H; ++y) { // 빈 곳(메시 없음)은 흰 종이
+      QRgb *o = reinterpret_cast<QRgb *>(rot.scanLine(y));
+      const uint8_t *q = &img.px[size_t(y) * W * 4];
+      for (int x = 0; x < W; ++x, q += 4)
+        o[x] = q[3] ? qRgb(q[0], q[1], q[2]) : qRgb(255, 255, 255);
+    }
   }
   out.plan = rot;
   out.planS0 = c.sMin;
@@ -5606,7 +5630,7 @@ void MainWindow::dlgComboSheet() {
                        QString(), nullptr});
       items.push_back({true,
                        QStringLiteral("표고 범위 = 잘린 선 위아래 10 cm 선(아래 "
-                                      "10 cm 더) · 레벨선은 땅속만"),
+                                      "세 칸 더) · 레벨선은 땅속만"),
                        QString(), nullptr});
       for (const QString &sk : assets->skipped)
         items.push_back(
@@ -5658,7 +5682,7 @@ void MainWindow::dlgComboSheet() {
       if (ok && !cancel->load()) {
         const ComboLayout c = comboLayoutFor(a, snap);
         const double ext = std::max(c.sMax - c.sMin, c.tMax - c.tMin);
-        if (!renderComboPlan(*src, snap, std::max(0.003, ext / 1600.0), a, &mp,
+        if (!renderComboPlan(*src, snap, std::max(0.002, ext / 2400.0), a, &mp,
                              cancel.get()))
           a.planMarginM = snap.planMarginM;
       }

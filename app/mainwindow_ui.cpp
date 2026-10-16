@@ -3491,7 +3491,9 @@ MainWindow::MainWindow() {
              QString(), true);
   makeAction("ticks", QStringLiteral("거리 눈금"), "Distance Ticks", I::Ticks,
              "D", true)
-      ->setChecked(QSettings().value("section/ticks", true).toBool());
+      ->setChecked(QSettings().value("section/distTicks", false).toBool());
+  // 기본 끔(사용자 2026-10-16 「단면도에 세로선은 없어도 될거같다」 — 토층을 그릴
+  // 때만 D 로 켬). 새 설정 이름이라 예전에 켜 둔 값(section/ticks)은 따르지 않음
   action("ticks")->setToolTip(QStringLiteral(
       "거리 눈금 (D) — 입면 위 세로 눈금(1 m 마다 · 5 m 굵게, 아래 거리 숫자와 "
       "같은 자리) — 토층을 그릴 자리를 m 로 읽습니다(도면 · 내보내기도 같음)"));
@@ -3860,7 +3862,7 @@ MainWindow::MainWindow() {
     });
   }
   QObject::connect(action("ticks"), &QAction::toggled, this,
-                   [](bool on) { QSettings().setValue("section/ticks", on); });
+                   [](bool on) { QSettings().setValue("section/distTicks", on); });
   QObject::connect(opacity_, &QSlider::valueChanged, this, [this](int) {
     section_->setStyle(secStyle());
     notifySheetDoc();
@@ -4747,13 +4749,14 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
 
   // 4h) 거리 눈금(T10 · 사용자 요청 「입면 토층도 그려야 할 때가 있다 — 체크
   // 표시를 볼 수 있게」): 입면 위에 세로 눈금(1 m · 5 m 굵게)을 그리고, D 키 ·
-  // 단면 머리 아이콘 · 「그릴 것 ▾」 메뉴로 켜고 끈다(기본 켬)
+  // 단면 머리 아이콘 · 「그릴 것 ▾」 메뉴로 켜고 끈다(기본 끔 — 사용자
+  // 2026-10-16 「단면도에 세로선은 없어도 될거같다」)
   {
     const auto ti = act_.find(QStringLiteral("ticks"));
     const bool act = ti != act_.end();
     const bool key =
         act && ti->second->shortcut() == QKeySequence(QStringLiteral("D"));
-    const bool on = act && ti->second->isChecked() && secStyle().showTicks;
+    const bool on = act && !ti->second->isChecked() && !secStyle().showTicks;
     bool hdr = false, menu = false;
     for (auto *b : secTitleBar_->findChildren<QToolButton *>(
              QStringLiteral("viewToggle")))
@@ -4765,7 +4768,7 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
         menu = mb->menu()->actions().contains(ti->second);
     const bool ticksOk = act && key && on && (hdr || menu);
     L << QStringLiteral(
-             "ui-audit dist-ticks action=%1 key-d=%2 on=%3 header=%4 menu=%5%6")
+             "ui-audit dist-ticks action=%1 key-d=%2 default-off=%3 header=%4 menu=%5%6")
              .arg(act ? 1 : 0)
              .arg(key ? 1 : 0)
              .arg(on ? 1 : 0)
