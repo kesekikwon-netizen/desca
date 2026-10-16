@@ -393,8 +393,10 @@ double fitComboDenomStep10(const SheetSpec& spec, const std::vector<ComboSection
     return 2000;
 }
 
-void freeComboPage(ComboLayout& c, double marginMm, double titleMm) {
-    double x0 = c.planX, y0 = c.planY, x1 = c.planX + c.planW, y1 = c.planY + c.planH;
+namespace {
+/// 평면 칸과 모든 단면 칸(글자 여백 포함)의 종이 위 외접 상자(mm)
+void comboContentBox(const ComboLayout& c, double& x0, double& y0, double& x1, double& y1) {
+    x0 = c.planX; y0 = c.planY; x1 = c.planX + c.planW; y1 = c.planY + c.planH;
     for (const ComboPlaced& p : c.sections)
         for (double x : {p.areaX, p.areaX + p.areaW})
             for (double y : {p.areaY, p.areaY + p.areaH}) {
@@ -402,6 +404,12 @@ void freeComboPage(ComboLayout& c, double marginMm, double titleMm) {
                 p.toPaper(x, y, px, py);
                 x0 = std::min(x0, px); x1 = std::max(x1, px); y0 = std::min(y0, py); y1 = std::max(y1, py);
             }
+}
+} // namespace
+
+void freeComboPage(ComboLayout& c, double marginMm, double titleMm) {
+    double x0, y0, x1, y1;
+    comboContentBox(c, x0, y0, x1, y1);
     const double dx = marginMm - x0, dy = marginMm - y0;
     c.planX += dx; c.planY += dy;
     for (ComboPlaced& p : c.sections) { p.originX += dx; p.originY += dy; }
@@ -417,6 +425,63 @@ void freeComboPage(ComboLayout& c, double marginMm, double titleMm) {
     L.fits = true; L.cols = L.rows = 1;
     c.contentW = w; c.contentH = h;
     c.fits = true;
+}
+
+ComboPaper nextComboPaper(ComboPaper p) {
+    switch (p) {
+    case ComboPaper::Content: return ComboPaper::A4Landscape;
+    case ComboPaper::A4Landscape: return ComboPaper::A4Portrait;
+    case ComboPaper::A4Portrait: return ComboPaper::A3Landscape;
+    case ComboPaper::A3Landscape: return ComboPaper::A3Portrait;
+    case ComboPaper::A3Portrait: break;
+    }
+    return ComboPaper::Content;
+}
+
+bool comboPaperSize(ComboPaper p, double& wMm, double& hMm) {
+    switch (p) {
+    case ComboPaper::A4Landscape: paperSizeMm(Paper::A4, true, wMm, hMm); return true;
+    case ComboPaper::A4Portrait: paperSizeMm(Paper::A4, false, wMm, hMm); return true;
+    case ComboPaper::A3Landscape: paperSizeMm(Paper::A3, true, wMm, hMm); return true;
+    case ComboPaper::A3Portrait: paperSizeMm(Paper::A3, false, wMm, hMm); return true;
+    case ComboPaper::Content: break;
+    }
+    return false;
+}
+
+bool placeComboOnPaper(ComboLayout& c, double paperW, double paperH, double marginMm, double titleMm) {
+    double x0, y0, x1, y1;
+    comboContentBox(c, x0, y0, x1, y1);
+    const double w = x1 - x0, h = y1 - y0;
+    const double availW = std::max(0.0, paperW - 2 * marginMm), availH = std::max(0.0, paperH - 2 * marginMm - titleMm);
+    // 여백 안 가운데(넘치면 양쪽으로 같이 넘친다)
+    const double dx = marginMm + (availW - w) * 0.5 - x0, dy = marginMm + (availH - h) * 0.5 - y0;
+    c.planX += dx; c.planY += dy;
+    for (ComboPlaced& p : c.sections) { p.originX += dx; p.originY += dy; }
+    SheetLayout& L = c.L;
+    L.paperW = paperW; L.paperH = paperH;
+    L.frameX = marginMm * 0.5; L.frameY = marginMm * 0.5;
+    L.frameW = paperW - marginMm; L.frameH = paperH - marginMm;
+    L.plotX = marginMm; L.plotY = marginMm; L.plotW = availW; L.plotH = availH;
+    L.titleY = marginMm + availH + marginMm * 0.5;
+    L.contentW = w; L.contentH = h;
+    const bool fits = w <= availW + 1e-6 && h <= availH + 1e-6;
+    L.fits = fits; L.cols = L.rows = 1;
+    c.contentW = w; c.contentH = h;
+    c.fits = fits;
+    return fits;
+}
+
+double fitComboDenomOnPaper(const SheetSpec& spec, const std::vector<ComboSection>& secs, double planMarginM, double paperW,
+                            double paperH, double marginMm, double titleMm, double gapMm, double stackGapMm,
+                            const ComboLayout* keepFrame) {
+    SheetSpec t = spec;
+    for (double d = 10; d <= 2000; d += 10) {
+        t.denom = d;
+        ComboLayout c = layoutCombo(t, secs, planMarginM, gapMm, stackGapMm, keepFrame);
+        if (!c.sections.empty() && placeComboOnPaper(c, paperW, paperH, marginMm, titleMm)) return d;
+    }
+    return 0;
 }
 
 PlanStripArea comboPlanArea(const ComboLayout& c) {

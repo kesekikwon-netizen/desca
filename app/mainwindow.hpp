@@ -137,7 +137,10 @@ struct PlanStrip {
 struct ComboSheetParams {
   double denom = 30;
   int format = 4;
-  double dpi = 300;
+  double dpi = 600; // 저장 영상 dpi — 개별 도면과 같이 600 이상(prepareComboAssets 가 올림)
+  /// 용지(asec::ComboPaper): 0 = 내용 크기(기본), 1 A4 가로 · 2 A4 세로 · 3 A3 가로 · 4 A3 세로. 사용자 2026-10-16
+  /// 「용지방향이안돼」 → 카드 답 「둘 다」 — 용지 단추로 차례대로, 안 들어가면 들어가는 축척을 알림
+  int paper = 0;
   double planMarginM = 1.0; // 평면 칸: 단면선 끝에서 더 보일 거리(m)
   bool withPlanImage = true, withSectionImage = true, withLevels = true;
   double lineWidthPx = 2.0; // 잘린 선 굵기(화면 설정 px → 인쇄 exportLineMm)
@@ -177,6 +180,18 @@ struct ComboAssets {
   asec::Vec3 origin;
   QStringList skipped; // 메시와 만나지 않는 등으로 뺀 단면(「A–A′: 까닭」)
 };
+/// --combo-check: 평·단면도를 그릴 때 단면마다 그림 칸(s 0..L · 표고 범위)과
+/// 표고 글자 상자 — 그 단면 자리 좌표(종이 px, 돌리기 전)
+struct ComboPaintProbe {
+  struct Sec {
+    QRectF plot;
+    QList<QRectF> labels;
+  };
+  QList<Sec> secs;
+};
+/// 평·단면도 단면 영상의 품질: Final = 저장(dpi), Preview = 화면 미리보기(개별 도면 미리보기와 같은 해상도 · 잎),
+/// Drag = 도면에서 단면선 끝을 끄는 동안(거친 LOD — 빠르게)
+enum class ComboRes { Final, Preview, Drag };
 struct PointParams {
   asec::PointFormat format = asec::PointFormat::XYZ;
   int area = 0;
@@ -206,12 +221,19 @@ public:
     double bandTop = 0;    // 아래 띠 위 끝 — 본문 글은 이 위에
     int bodyCount = 0;     // rects 앞쪽 bodyCount 개가 본문(띠 위) 글
   };
+  // 둥근 모서리 반지름(논리 px, 480×300 에서) — 사용자 2026-10-16 「시작 화면 모서리 라운드로 하고 테두리를 고급스럽게」
+  static constexpr int kSplashCornerPx = 12;
+  /// 창 밖이 투명해질 수 있는 플랫폼인가(Windows 는 GPU 없이 · 원격 데스크톱에서도 층 창으로 됨).
+  /// 아니면 네모 모서리 + 같은 테두리
+  static bool splashRoundedSupported();
   static QImage renderOpeningSplash(
       const QSize &size, double t = 1.0, double dpr = 1.0,
-      SplashTextProbe *probe = nullptr); // t 0~1: 선 그림이 그려지는 정도(1 = 완성). size = 논리 px
+      SplashTextProbe *probe = nullptr,
+      bool rounded = true); // t 0~1: 선 그림이 그려지는 정도(1 = 완성). size = 논리 px. rounded = 둥근 모서리(밖은 투명)
   static void paintOpeningSplash(
       QPainter &p, const QSize &size, double t,
-      SplashTextProbe *probe = nullptr); // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs)
+      SplashTextProbe *probe = nullptr,
+      bool rounded = false); // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs). rounded 면 그리는 곳이 ARGB 여야 함
   static QString resolveModelPath(
       const QString &path); // 폴더 경로면 내부 .3mx/.3sm/.obj 를 찾아 돌려줌
   static QString modelDisplayName(
@@ -330,10 +352,10 @@ public:
   /// 단면 목록 전부(지금 단면선을 먼저 목록에 맞춤). 첫 단면이 평면 회전 기준
   std::vector<ComboSecInput> comboInputs();
   void dlgComboSheet();
-  /// 단면마다 잘린 선 · 입면 영상(preview = 화면 미리보기용 거친 영상)
+  /// 단면마다 잘린 선 · 입면 영상(q = 저장 · 미리보기 · 끄는 중)
   static bool computeComboSections(asec::MeshSource &src,
                                    const std::vector<ComboSecInput> &in,
-                                   const ComboSheetParams &sp, bool preview,
+                                   const ComboSheetParams &sp, ComboRes q,
                                    ComboAssets &out, QString *msg,
                                    const std::atomic<bool> *cancel = nullptr,
                                    const std::function<void(double)> &progress = {});
@@ -352,7 +374,22 @@ public:
                               const ComboSheetParams &sp, double pxPerMm,
                               double minLinePx = 0,
                               const asec::ComboLayout *layout = nullptr,
-                              int hideLine = -1);
+                              int hideLine = -1,
+                              ComboPaintProbe *probe = nullptr);
+  /// 저장할 때의 영상(입면 · 평면)을 만든다 — exportComboSheet 와 점검이 같이 씀.
+  /// sp 는 저장 때 값으로 고쳐 돌려준다(축척 정수 · dpi)
+  static bool prepareComboAssets(asec::MeshSource &src,
+                                 const std::vector<ComboSecInput> &in,
+                                 ComboSheetParams &sp, ComboAssets &a,
+                                 QString *msg,
+                                 const std::atomic<bool> *cancel = nullptr,
+                                 const std::function<void(double)> &progress = {});
+  /// 화면 미리보기의 평면 영상 해상도(m/px) — 평·단면도 미리보기가 쓴다
+  static double comboPreviewPlanRes(const ComboAssets &a,
+                                    const ComboSheetParams &sp);
+  /// --combo-check DIR(종료 코드 18): 표고 글자가 그림 칸 밖인지 · 평·단면도
+  /// 영상이 개별 도면만큼 촘촘한지(저장 · 화면 미리보기)
+  bool runComboCheck(const QString &outDir, QString *log);
   static bool exportComboSheet(asec::MeshSource &src,
                                const std::vector<ComboSecInput> &in,
                                const ComboSheetParams &sp, const QString &path,

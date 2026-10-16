@@ -1669,7 +1669,7 @@ void MainWindow::dlgInfo() {
 // (줄여도 잘림 · 겹침 없음 — --splash-shot 이 잰다). 끝 장면(t ≥ .85)의 타일은 앱
 // 아이콘 그림(kerf::appPixmap) 그대로 — 아이콘과 한 SVG 에서 나온다.
 void MainWindow::paintOpeningSplash(QPainter &p, const QSize &sz, double t,
-                                    SplashTextProbe *probe) {
+                                    SplashTextProbe *probe, bool rounded) {
   t = std::clamp(t, 0.0, 1.0);
   // 그림 움직임은 전체 5 초 중 앞 2 초(tm 0→1)에 끝나고, 그 뒤는 끝 장면 +
   // 저작권 줄을 보인다. 진행 막대·상태 글의 시계는 t(실제 시간)
@@ -1855,16 +1855,46 @@ void MainWindow::paintOpeningSplash(QPainter &p, const QSize &sz, double t,
                              .arg(QString::fromLatin1(qVersion())
                                       .section(QLatin1Char('.'), 0, 1)));
   p.fillRect(QRectF(0, bandTop, im.width() * t, 3 * k), theme::Action);
+
+  // 5) 둥근 모서리 · 테두리(사용자 2026-10-16 「시작 화면 모서리 라운드로 하고 테두리를 고급스럽게」).
+  // 모서리 밖은 부드럽게 지운다(Clear + 안티앨리어싱 — 잘라내기 경로는 계단이 생김). 테두리는 두 겹의 가는 선:
+  // 바깥 = 먹색 반투명(크림 위에서 윤곽), 안쪽 = 흰 반투명(어두운 띠 위에서 빛 받은 가장자리)
+  p.save();
+  p.setRenderHint(QPainter::Antialiasing);
+  const QRectF box(im);
+  const double R = rounded ? kSplashCornerPx * im.width() / double(kOpeningSplashW) : 0.0;
+  if (rounded) {
+    QPainterPath outside;
+    outside.setFillRule(Qt::OddEvenFill);
+    outside.addRect(box);
+    outside.addRoundedRect(box, R, R);
+    p.setCompositionMode(QPainter::CompositionMode_Clear);
+    p.fillPath(outside, Qt::black);
+    p.setCompositionMode(QPainter::CompositionMode_SourceOver);
+  }
+  p.setBrush(Qt::NoBrush);
+  p.setPen(QPen(QColor(0x14, 0x14, 0x13, 105), 1.0));
+  p.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), std::max(0.0, R - 0.5),
+                    std::max(0.0, R - 0.5));
+  p.setPen(QPen(QColor(255, 255, 255, 80), 1.0));
+  p.drawRoundedRect(box.adjusted(1.5, 1.5, -1.5, -1.5), std::max(0.0, R - 1.5),
+                    std::max(0.0, R - 1.5));
+  p.restore();
+}
+
+bool MainWindow::splashRoundedSupported() {
+  return QGuiApplication::platformName() == QLatin1String("windows");
 }
 
 QImage MainWindow::renderOpeningSplash(const QSize &size, double t, double dpr,
-                                       SplashTextProbe *probe) {
+                                       SplashTextProbe *probe, bool rounded) {
   const QSize logical =
       size.isEmpty() ? QSize(kOpeningSplashW, kOpeningSplashH) : size;
-  QImage im(logical * dpr, QImage::Format_RGB32);
+  QImage im(logical * dpr, QImage::Format_ARGB32_Premultiplied);
   im.setDevicePixelRatio(dpr);
+  im.fill(Qt::transparent);
   QPainter p(&im);
-  paintOpeningSplash(p, logical, t, probe);
+  paintOpeningSplash(p, logical, t, probe, rounded);
   return im;
 }
 

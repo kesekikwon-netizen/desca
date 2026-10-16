@@ -245,6 +245,66 @@ TEST_CASE("한 장 조판(용지 없음): 내용 외접 상자 + 여백으로 �
     CHECK(c.planW == Approx(6000.0 / 30));
 }
 
+TEST_CASE("평·단면도 용지(사용자 2026-10-16 「용지방향이안돼」 → 「둘 다」): 단추 차례 · 정한 용지 가운데 · 넘치면 맞는 축척", "[combo][sheet]") {
+    // 단추 차례: 내용 크기(기본) → A4 가로 → A4 세로 → A3 가로 → A3 세로 → 내용 크기
+    CHECK(nextComboPaper(ComboPaper::Content) == ComboPaper::A4Landscape);
+    CHECK(nextComboPaper(ComboPaper::A4Landscape) == ComboPaper::A4Portrait);
+    CHECK(nextComboPaper(ComboPaper::A4Portrait) == ComboPaper::A3Landscape);
+    CHECK(nextComboPaper(ComboPaper::A3Landscape) == ComboPaper::A3Portrait);
+    CHECK(nextComboPaper(ComboPaper::A3Portrait) == ComboPaper::Content);
+    double w = 0, h = 0;
+    CHECK_FALSE(comboPaperSize(ComboPaper::Content, w, h));
+    REQUIRE(comboPaperSize(ComboPaper::A4Landscape, w, h)); CHECK(w == Approx(297)); CHECK(h == Approx(210));
+    REQUIRE(comboPaperSize(ComboPaper::A4Portrait, w, h)); CHECK(w == Approx(210)); CHECK(h == Approx(297));
+    REQUIRE(comboPaperSize(ComboPaper::A3Landscape, w, h)); CHECK(w == Approx(420)); CHECK(h == Approx(297));
+    REQUIRE(comboPaperSize(ComboPaper::A3Portrait, w, h)); CHECK(w == Approx(297)); CHECK(h == Approx(420));
+
+    SheetSpec sp; sp.denom = 50;
+    std::vector<ComboSection> secs = {{0, 0, 4, 0, 1.0}, {2, -2, 2, 2, 0.8}};
+    ComboLayout fr = layoutCombo(sp, secs, 1.0);
+    freeComboPage(fr, 10.0, 16.0);
+    auto bbox = [](const ComboLayout& c, double& x0, double& y0, double& x1, double& y1) {
+        x0 = c.planX; y0 = c.planY; x1 = c.planX + c.planW; y1 = c.planY + c.planH;
+        for (auto& p : c.sections)
+            for (double x : {p.areaX, p.areaX + p.areaW}) for (double y : {p.areaY, p.areaY + p.areaH}) {
+                double px, py; p.toPaper(x, y, px, py);
+                x0 = std::min(x0, px); y0 = std::min(y0, py); x1 = std::max(x1, px); y1 = std::max(y1, py);
+            }
+    };
+    for (auto [pw, ph] : {std::pair<double, double>{297, 210}, {210, 297}}) {
+        ComboLayout c = layoutCombo(sp, secs, 1.0);
+        REQUIRE(placeComboOnPaper(c, pw, ph, 10.0, 16.0));
+        CHECK(c.fits); CHECK(c.L.fits);
+        CHECK(c.L.paperW == Approx(pw)); CHECK(c.L.paperH == Approx(ph));
+        // 배치 관계는 내용 크기 종이와 같다(평행 이동만) · 축척 그대로
+        CHECK(c.sections[1].originX - c.planX == Approx(fr.sections[1].originX - fr.planX));
+        CHECK(c.sections[0].originY - c.planY == Approx(fr.sections[0].originY - fr.planY));
+        CHECK(c.planW == Approx(fr.planW));
+        CHECK(c.L.contentW == Approx(fr.L.contentW)); CHECK(c.L.contentH == Approx(fr.L.contentH));
+        // 내용 외접 상자는 여백(10 mm)과 아래 띠(16 mm) 안쪽의 가운데
+        double x0, y0, x1, y1; bbox(c, x0, y0, x1, y1);
+        CHECK(x0 >= 10 - 1e-6); CHECK(y0 >= 10 - 1e-6);
+        CHECK(x1 <= pw - 10 + 1e-6); CHECK(y1 <= ph - 10 - 16 + 1e-6);
+        CHECK(x0 - 10 == Approx(pw - 10 - x1));
+        CHECK(y0 - 10 == Approx(ph - 10 - 16 - y1));
+        CHECK(c.L.titleY > y1); CHECK(c.L.titleY < ph);
+    }
+    // 넘침: 1:20 은 A4 세로에 안 들어감(가운데에 놓되 fits = false) → 들어가는 가장 큰 축척(10 단위)을 알려 준다
+    sp.denom = 20;
+    ComboLayout big = layoutCombo(sp, secs, 1.0);
+    CHECK_FALSE(placeComboOnPaper(big, 210, 297, 10.0, 16.0));
+    CHECK_FALSE(big.fits); CHECK_FALSE(big.L.fits);
+    CHECK(big.L.paperW == Approx(210));
+    const double fit = fitComboDenomOnPaper(sp, secs, 1.0, 210, 297, 10.0, 16.0);
+    CHECK(fit > 20);
+    sp.denom = fit;
+    ComboLayout yes = layoutCombo(sp, secs, 1.0);
+    CHECK(placeComboOnPaper(yes, 210, 297, 10.0, 16.0));
+    sp.denom = fit - 10;
+    ComboLayout no = layoutCombo(sp, secs, 1.0);
+    CHECK_FALSE(placeComboOnPaper(no, 210, 297, 10.0, 16.0));
+}
+
 TEST_CASE("한 장 조판: 첫 단면이 북쪽으로 가면 평면을 돌리고 진북은 오른쪽(90°)", "[combo][sheet]") {
     SheetSpec sp; sp.denom = 50;
     ComboLayout c = layoutCombo(sp, {{10, 10, 10, 15, 1.0}}, 1.0);

@@ -264,6 +264,23 @@ double fitComboDenomStep10(const SheetSpec &spec,
 /// titleY 를 그 종이로 다시 채우고 fits = true. 축척 · 배치 관계는 그대로(평행 이동만)
 void freeComboPage(ComboLayout &c, double marginMm = 10.0,
                    double titleMm = 16.0);
+/// 평·단면도 용지(사용자 2026-10-16 「용지방향이안돼」 → 카드 답 「둘 다」): 기본은 내용 크기, 단추를 누를 때마다
+/// A4 가로 → A4 세로 → A3 가로 → A3 세로 → 내용 크기
+enum class ComboPaper { Content = 0, A4Landscape, A4Portrait, A3Landscape, A3Portrait };
+ComboPaper nextComboPaper(ComboPaper p);
+/// 정한 용지의 가로 × 세로(mm). 내용 크기면 false
+bool comboPaperSize(ComboPaper p, double &wMm, double &hMm);
+/// 정한 용지에 놓기: freeComboPage 와 같은 내용 외접 상자를 paperW × paperH 종이의 여백 안(아래 titleMm 띠 위)
+/// 가운데로 평행 이동한다. 들어가면 true(fits). 안 들어가도 가운데에 놓고(넘친 곳은 종이 밖) false
+bool placeComboOnPaper(ComboLayout &c, double paperW, double paperH,
+                       double marginMm = 10.0, double titleMm = 16.0);
+/// 그 용지에 들어가는 가장 작은 10 단위 분모(최대 2000, 없으면 0). 나머지 인자는 layoutCombo 와 같음
+double fitComboDenomOnPaper(const SheetSpec &spec,
+                            const std::vector<ComboSection> &secs,
+                            double planMarginM, double paperW, double paperH,
+                            double marginMm = 10.0, double titleMm = 16.0,
+                            double gapMm = 6.0, double stackGapMm = 3.0,
+                            const ComboLayout *keepFrame = nullptr);
 /// 평면 영상을 만들 로컬 XY 외접 상자(돌린 평면 칸 네 모서리)
 PlanStripArea comboPlanArea(const ComboLayout &c);
 

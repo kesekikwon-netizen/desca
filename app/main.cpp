@@ -155,7 +155,9 @@ class OpeningSplash : public QWidget {
 public:
     OpeningSplash() : QWidget(nullptr, Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint) {
         setFixedSize(MainWindow::kOpeningSplashW, MainWindow::kOpeningSplashH);   // 480×300 논리 px(배율만큼 Qt 가 키움)
-        setAttribute(Qt::WA_OpaquePaintEvent);
+        // 둥근 모서리는 창 밖이 투명해질 수 있을 때만(Windows 층 창 — GPU 없이 · 원격 데스크톱도 됨). 아니면 네모 + 같은 테두리
+        rounded_ = MainWindow::splashRoundedSupported();
+        setAttribute(rounded_ ? Qt::WA_TranslucentBackground : Qt::WA_OpaquePaintEvent);
         if (QScreen* sc = QGuiApplication::primaryScreen()) move(sc->availableGeometry().center() - rect().center());
     }
     // captureDir 이 있으면 장면 시각(120 · 400 · 700 · 1000 ms)마다 그 창을 직접 찍는다(시험용 --splash-live)
@@ -191,7 +193,7 @@ protected:
     void paintEvent(QPaintEvent*) override {
         QPainter p(this);
         const double t = (finalOnly_ || skipMs_ >= 0) ? 1.0 : (total_ > 0 ? std::min(1.0, clock_.elapsed() / double(total_)) : 1.0);
-        MainWindow::paintOpeningSplash(p, size(), t);
+        MainWindow::paintOpeningSplash(p, size(), t, nullptr, rounded_);
     }
     void keyPressEvent(QKeyEvent* e) override { if (e->key() == Qt::Key_Escape) skip(); else QWidget::keyPressEvent(e); }
     void mousePressEvent(QMouseEvent*) override { skip(); }
@@ -201,6 +203,7 @@ private:
     int total_ = MainWindow::kOpeningSplashMs;
     int skipMs_ = -1;          // ≥ 0 = 끝 장면만 보이는 중(건너뜀 · 애니메이션 끔) — 이 시간(ms)이 지나면 닫힘
     bool finalOnly_ = false;
+    bool rounded_ = false;
 };
 
 #ifdef _WIN32
@@ -254,6 +257,7 @@ int main(int argc, char** argv) {
     double sheetBack = -1;    // --sheet-back m: 도면 탭이 열린 채 리본 「뒤」 깊이를 바꿔 단면 재계산 → 조판이 따라오는지 점검(2026-10-11)
     QString file, shot, logPath, perfPath, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, uiAuditDir, sheetBatch;
     QString iconSheetPng; bool iconSheet = false;
+    QString comboCheck;   // --combo-check DIR: 평·단면도 표고 글자 자리 · 영상 해상도 점검(모델과, 실패 종료 코드 18)
     QStringList svgLayerChecks;   // --svg-layers-check f.svg: 저장한 SVG 의 레이어 · 선 굵기 · 「EL」 점검(모델 없이도, 실패 종료 코드 17)
     int splashEsc = -1;   // --splash-esc N: 여는 화면을 띄우고 N ms 에 Esc 를 눌러 건너뛰는지 잰다(종료 6 = 늦게 닫힘)
     QString cursorSheetPng;   // --cursor-sheet f.png: 도구 커서 전부 × 배율 1 · 2 · 3 을 격자 PNG 로 쓰고 눈 검사(실패 종료 코드 11)
@@ -327,6 +331,7 @@ int main(int argc, char** argv) {
         else if (s == "--sheet-stress") sheetStress = true;
         else if (s == "--combo-drag") comboDrag = nx().toDouble();
         else if (s == "--combo-dial") comboDial = nx().toDouble();
+        else if (s == "--combo-check") comboCheck = nx();
         else if (s == "--plan-rotation") { planRotArg = nx().toDouble(); planRotGiven = true; }
         else if (s == "--print-to") MainWindow::printTest.printer = nx();          // --open-sheet 와 함께: 대화상자 없이 이 프린터로(점검)
         else if (s == "--print-out") MainWindow::printTest.outFile = nx();         // 그 프린터 출력을 파일로(드라이버 출력 — Microsoft Print to PDF 면 PDF)
@@ -378,14 +383,37 @@ int main(int argc, char** argv) {
         }
         const QImage hi = MainWindow::renderOpeningSplash(logical, 1.0, 2.0);   // 배율 200 %(4K) — 같은 논리 크기, 화소는 두 배
         ok = hi.save(named(QStringLiteral("_x2"))) && ok;
+        // 둥근 모서리 · 테두리(사용자 2026-10-16 「시작 화면 모서리 라운드로 하고 테두리를 고급스럽게」): 둥근 판은 네 모서리 밖이
+        // 투명 · 곡선에 반투명 화소(계단 없이 부드러움) · 가운데 불투명. 테두리 = 위 가장자리의 어두운 가는 선 + 아래 띠 안쪽의 밝은
+        // 가는 선. 네모 판(창을 투명하게 못 하는 곳)은 모서리가 불투명이고 테두리는 같다. 배율 1 · 2 모두
+        auto frameCheck = [&](const QImage& src, bool rounded) {
+            const QImage a = src.convertToFormat(QImage::Format_ARGB32);
+            const int Wd = a.width(), Hd = a.height();
+            const int px = std::max(1, int(std::lround(src.devicePixelRatio())));   // 논리 1 px
+            const int R = MainWindow::kSplashCornerPx * px;
+            auto alpha = [&](int x, int y) { return qAlpha(a.pixel(x, y)); };
+            auto lum = [&](int x, int y) { const QRgb c = a.pixel(x, y); return 0.299 * qRed(c) + 0.587 * qGreen(c) + 0.114 * qBlue(c); };
+            int cornersClear = 0, soft = 0;
+            for (int cx : {0, Wd - 1}) for (int cy : {0, Hd - 1}) if (alpha(cx, cy) == 0) ++cornersClear;
+            for (int y = 0; y < R; ++y) for (int x = 0; x < R; ++x) { const int v = alpha(x, y); if (v > 0 && v < 255) ++soft; }
+            const bool center = alpha(Wd / 2, Hd / 2) == 255;
+            const double outer = lum(Wd / 2, 6 * px) - lum(Wd / 2, 0), inner = lum(Wd / 2, Hd - 1 - px) - lum(Wd / 2, Hd - 1 - 6 * px);
+            const bool good = center && outer >= 25 && inner >= 15 && (rounded ? cornersClear == 4 && soft >= R : cornersClear == 0);
+            fprintf(stdout, "splash-frame %s x%d corners-clear=%d soft=%d center-opaque=%d outer-line=%.0f inner-line=%.0f%s\n", rounded ? "round" : "square", px, cornersClear, soft, center ? 1 : 0, outer, inner, good ? "" : "  FAIL");
+            return good;
+        };
+        const QImage sq = MainWindow::renderOpeningSplash(logical, 1.0, 1.0, nullptr, false);
+        ok = sq.save(named(QStringLiteral("_square"))) && ok;
+        const bool frameOk = frameCheck(MainWindow::renderOpeningSplash(logical, 1.0, 1.0), true) & frameCheck(hi, true) &
+                             frameCheck(sq, false) & frameCheck(MainWindow::renderOpeningSplash(logical, 1.0, 2.0, nullptr, false), false);
         const bool timing = frames == 4 && MainWindow::kOpeningSplashMs == motion::kSplash && motion::kSplash == 5000;
         const bool size = sz == logical && hi.size() == logical * 2 && logical == QSize(480, 300);
         const bool textOk = texts > 0 && clipped == 0 && overlap == 0 && intoBand == 0 && minPx >= MainWindow::kSplashMinTextPx;
-        fprintf(stdout, "splash-shot %s: %s (%dx%d) x2=%dx%d frames=%d total-ms=%d texts=%d text-min-px=%d clipped=%d overlap=%d into-band=%d%s\n", ok ? "ok" : "FAILED", splashShot.toUtf8().constData(), sz.width(), sz.height(), hi.width(), hi.height(), frames, MainWindow::kOpeningSplashMs, texts, texts ? minPx : 0, clipped, overlap, intoBand, timing && size && textOk ? "" : "  FAIL");
-        return ok && timing && size && textOk ? 0 : 6;
+        fprintf(stdout, "splash-shot %s: %s (%dx%d) x2=%dx%d frames=%d total-ms=%d texts=%d text-min-px=%d clipped=%d overlap=%d into-band=%d frame=%d%s\n", ok ? "ok" : "FAILED", splashShot.toUtf8().constData(), sz.width(), sz.height(), hi.width(), hi.height(), frames, MainWindow::kOpeningSplashMs, texts, texts ? minPx : 0, clipped, overlap, intoBand, frameOk ? 1 : 0, timing && size && textOk && frameOk ? "" : "  FAIL");
+        return ok && timing && size && textOk && frameOk ? 0 : 6;
     }
     // 자동화(감사 · 캡처 · 내보내기 · 시험)는 늘 움직임 없이 돈다 — 시각이 결과를 흔들지 않게. 여는 화면은 이 아래에서 따로 판단한다
-    motion::setForcedOff(quit || !uiAuditDir.isEmpty() || !shot.isEmpty() || !startShot.isEmpty() || !sheetCheck.isEmpty() || !exports.isEmpty() || !sheetBatch.isEmpty() || undoTest || !ctxShot.isEmpty() || !dialogShot.isEmpty() || haveLine);
+    motion::setForcedOff(quit || !uiAuditDir.isEmpty() || !shot.isEmpty() || !startShot.isEmpty() || !sheetCheck.isEmpty() || !comboCheck.isEmpty() || !exports.isEmpty() || !sheetBatch.isEmpty() || undoTest || !ctxShot.isEmpty() || !dialogShot.isEmpty() || haveLine);
     MainWindow w;
     if (W > 0 && H > 0) { w.resize(W, H); w.setProperty("auditSize", QSize(W, H)); }   // --ui-audit env: 요청한 크기로 열렸는지(B5)
     if (file.isEmpty() && startShot.isEmpty() && shot.isEmpty() && !quit) {
@@ -426,7 +454,7 @@ int main(int argc, char** argv) {
     }
     if (file.isEmpty()) return app.exec();
 
-    bool automated = haveLine || !shot.isEmpty() || !exports.isEmpty() || quit || !perfPath.isEmpty() || !startShot.isEmpty() || !sheetCheck.isEmpty();
+    bool automated = haveLine || !shot.isEmpty() || !exports.isEmpty() || quit || !perfPath.isEmpty() || !startShot.isEmpty() || !sheetCheck.isEmpty() || !comboCheck.isEmpty();
     if (!automated) { QTimer::singleShot(0, &w, [&] { w.openFile(file); }); return app.exec(); }
 
     processFor(200);
@@ -746,6 +774,10 @@ int main(int argc, char** argv) {
             sp.format = f == "pdf" ? 0 : f == "dxf" ? 1 : f == "png" ? 2 : f == "tiff" ? 3 : 4;
             if (sheetScale > 0) sp.denom = sheetScale;
             sp.dpi = dpi;
+            if (!paperArg.isEmpty())   // --paper A4 · A4P · A3 · A3P(P = 세로) · FREE(내용 크기)
+                sp.paper = paperArg == "FREE" ? int(ComboPaper::Content)
+                         : int(paperArg.startsWith("A3") ? (paperArg.endsWith("P") ? ComboPaper::A3Portrait : ComboPaper::A3Landscape)
+                                                         : (paperArg.endsWith("P") ? ComboPaper::A4Portrait : ComboPaper::A4Landscape));
             const std::vector<ComboSecInput> in = w.comboInputs();
             ok = !in.empty() && MainWindow::exportComboSheet(*src, in, sp, path, &m);
         } else m = "unknown export kind";
@@ -959,6 +991,12 @@ int main(int argc, char** argv) {
         bool ck = w.runSheetCheck(sheetCheck, &rep);
         log(rep);
         if (!ck) rc = 8;
+    }
+    if (!comboCheck.isEmpty()) {
+        QString rep;
+        const bool ck = w.runComboCheck(comboCheck, &rep);
+        log(rep.trimmed());
+        if (!ck) rc = 18;
     }
     if (!sheetBatch.isEmpty() && w.hasSection()) {   // v5 E4: 평면도 1 + 단면 n 장이 모두 생겨야 ok
         QStringList lg;
