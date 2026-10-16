@@ -1,5 +1,6 @@
 #include "planview.hpp"
 #include "asec/orbit.hpp"
+#include "asec/sheet.hpp"
 #include <QElapsedTimer>
 #include <QTimer>
 
@@ -365,7 +366,9 @@ void PlanView::updateMatrices() { makeMatrices(width(), height(), proj_, view_);
 void PlanView::fitAll() {
     if (!bounds_.valid()) return;
     fitted_ = true;
-    double w = bounds_.mx.x - bounds_.mn.x, h = bounds_.mx.y - bounds_.mn.y;
+    double w0 = bounds_.mx.x - bounds_.mn.x, h0 = bounds_.mx.y - bounds_.mn.y;
+    const double ya = yaw_ * M_PI / 180.0, ca = std::abs(std::cos(ya)), sa = std::abs(std::sin(ya));
+    const double w = w0 * ca + h0 * sa, h = w0 * sa + h0 * ca;   // 돌린 평면의 화면 가로 · 세로(방향 0° 면 그대로)
     target_ = QVector3D(float(bounds_.center().x - center_.x), float(bounds_.center().y - center_.y), float(bounds_.center().z - center_.z));
     double W = std::max(50, width() - 40), H = std::max(50, height() - 40);
     mpp_ = std::max(1e-4, std::max(w / W, h / H) * 1.04);
@@ -389,12 +392,95 @@ bool PlanView::contentFits() const {
     return v.mn.x <= bounds_.mn.x + 1e-6 && v.mx.x >= bounds_.mx.x - 1e-6 && v.mn.y <= bounds_.mn.y + 1e-6 && v.mx.y >= bounds_.mx.y - 1e-6;   // 경계 1e-6 m(profile §7)
 }
 
-void PlanView::topView() { yaw_ = 0; pitch_ = 90; updateMatrices(); update(); }
+void PlanView::topView() { pitch_ = 90; updateMatrices(); update(); }   // 평면 방향(yaw_)은 사용자가 정한 것이라 그대로(2026-10-16)
 
 void PlanView::homeView() {
-    yaw_ = 0;
     pitch_ = 90;
     fitAll();
+}
+
+double PlanView::rotationDeg() const { return normDeg180(yaw_); }
+
+void PlanView::setRotationDeg(double deg) {
+    const double d = normDeg180(deg);
+    if (std::abs(normDeg180(d - yaw_)) < 1e-12 && std::abs(d - yaw_) < 1e-9) return;
+    yaw_ = d;
+    if (fitted_) fitAll(); else { updateMatrices(); update(); }
+}
+
+void PlanView::startAlignTwoPoints() {
+    if (!hasScene_) return;
+    if (alignValid_ && alignStage_ < 0 && std::abs(normDeg180(yaw_ - alignYaw_)) < 1e-6) {   // 방금 맞춘 그대로 → 가로 ↔ 세로
+        alignVert_ = !alignVert_;
+        yaw_ = rotationToAlign(alignP_.x, alignP_.y, alignQ_.x, alignQ_.y, alignVert_);
+        alignYaw_ = yaw_;
+        updateMatrices(); update();
+        if (onRotate) onRotate(rotationDeg(), true);
+        return;
+    }
+    if (drawStage_ >= 0) setDrawMode(false);
+    alignStage_ = 0; alignHasMouse_ = false;
+    useShape(Qt::CrossCursor);
+    update();
+}
+
+void PlanView::cancelAlign() {
+    if (alignStage_ < 0) return;
+    alignStage_ = -1;
+    refreshCursor(Qt::NoModifier);
+    update();
+}
+
+double PlanView::dialAngleAt(const QPointF& c, const QPointF& p) {
+    return std::atan2(p.x() - c.x(), -(p.y() - c.y())) * 180.0 / M_PI;   // 위 0°, 시계 방향
+}
+
+void PlanView::paintRotationDial(QPainter& p, const QPointF& c, double r, double rotDeg, bool hot, const QString& caption) {
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing);
+    const double a = rotDeg * M_PI / 180.0;   // 진북의 화면 각(위 0°, 시계 방향)
+    auto at = [&](double deg, double rr) { const double t = deg * M_PI / 180.0; return c + QPointF(std::sin(t), -std::cos(t)) * rr; };
+    p.setPen(QPen(hot ? theme::Ink : theme::Edge, hot ? 1.5 : 1.0)); p.setBrush(theme::Card);
+    p.drawEllipse(c, r + 3, r + 3);
+    // 둘레 눈금: 30° 마다(90° 마다 길게) — 평면과 같이 돈다
+    for (int k = 0; k < 12; ++k) {
+        const double d = rotDeg + k * 30.0;
+        const bool major = k % 3 == 0;
+        p.setPen(QPen(major ? theme::Ink2 : theme::Faint, major ? 1.2 : 1.0, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(at(d, r - (major ? 5.0 : 3.0)), at(d, r));
+    }
+    // 가운데: 지금 각(소수 1자리). 눈금 위에 카드색 바탕을 깔고, 길면(−179.9°) 글자를 줄여 원 안에
+    {
+        const double shown = std::abs(rotDeg) < 0.05 ? 0.0 : rotDeg;
+        const QString txt = QStringLiteral("%1°").arg(shown, 0, 'f', 1);
+        QFont fm = theme::monoFont(10);
+        for (int px : {10, 9, 8}) {
+            fm = theme::monoFont(px);
+            if (QFontMetricsF(fm).horizontalAdvance(txt) <= 2 * r - 2) break;
+        }
+        const double tw = QFontMetricsF(fm).horizontalAdvance(txt);
+        const QRectF tr(c.x() - tw / 2 - 2, c.y() - 7, tw + 4, 14);
+        p.setPen(Qt::NoPen); p.setBrush(theme::Card); p.drawRect(tr);
+        p.setFont(fm); p.setPen(theme::Ink);
+        p.drawText(tr, Qt::AlignCenter, txt);
+    }
+    // 진북 표시: 둘레의 흙색이 아닌 먹색 삼각(돌린 만큼 돈다) + 바깥 「N」 — 각 글자 위에(방향이 늘 보이게)
+    const QPointF dir(std::sin(a), -std::cos(a)), side(-dir.y(), dir.x());
+    QPainterPath tri; tri.moveTo(c + dir * (r + 1)); tri.lineTo(c + dir * (r - 8) + side * 4.5); tri.lineTo(c + dir * (r - 8) - side * 4.5); tri.closeSubpath();
+    p.setPen(Qt::NoPen); p.setBrush(theme::Ink); p.drawPath(tri);
+    QFont fn = theme::uiFont(10, true); p.setFont(fn); p.setPen(theme::Ink);
+    const QPointF nc = c + dir * (r + 11);
+    p.setPen(QPen(Qt::white, 3)); 
+    QPainterPath tp; tp.addText(QPointF(0, 0), fn, QStringLiteral("N"));
+    const QRectF tb = tp.boundingRect();
+    tp.translate(nc - tb.center());
+    p.setBrush(Qt::NoBrush); p.drawPath(tp);   // 흰 테(어두운 평면 위에서도 읽힘)
+    p.setPen(Qt::NoPen); p.setBrush(theme::Ink); p.drawPath(tp);
+    if (!caption.isEmpty()) {
+        p.setFont(theme::uiFont(11)); p.setPen(theme::Muted);
+        p.drawText(QRectF(c.x() - 40, c.y() + r + 5, 80, 14), Qt::AlignCenter, caption);
+    }
+    p.restore();
 }
 
 void PlanView::drawGpu(const Gpu& g) {
@@ -749,18 +835,9 @@ void PlanView::paintEmpty(QPainter& p) {
 void PlanView::paintOverlay(QPainter& p) {
     // 북쪽 표시 + 축척 막대
     {
-        const QPointF c = compassCenter();   // 오른쪽 아래 「진북」(스펙 §5) — 눌림 판정(compassHit)과 같은 자리(검토 I1)
-        double a = -yaw_ * M_PI / 180.0;
-        QPointF dir(std::sin(a), -std::cos(a));
-        QPointF tip = c + dir * 16, tail = c - dir * 12, side(dir.y(), -dir.x());
-        QPainterPath arr; arr.moveTo(tip); arr.lineTo(tail + side * 8); arr.lineTo(c - dir * 5); arr.lineTo(tail - side * 8); arr.closeSubpath();
-        p.setPen(QPen(theme::Edge, 1)); p.setBrush(theme::Card); p.drawRoundedRect(QRectF(c.x() - 22, c.y() - 22, 44, 44), 8, 8);
-        p.setPen(Qt::NoPen); p.setBrush(theme::Ink); p.drawPath(arr);
-        QFont f = theme::uiFont(11, true); p.setFont(f); p.setPen(theme::Ink);
-        p.drawText(QRectF(c.x() - 20, c.y() - 37, 40, 13), Qt::AlignCenter, "N");
-        p.setFont(theme::uiFont(11));   // 글자 체계 11 · 12 · 13 · 20(검토 UI 3)
-        p.setPen(theme::Muted);
-        p.drawText(QRectF(c.x() - 28, c.y() + 24, 56, 14), Qt::AlignCenter, QStringLiteral("진북"));
+        // 오른쪽 아래 「진북」(스펙 §5) = 평면 방향 다이얼(2026-10-16) — 눌림 판정(compassHit)과 같은 자리(검토 I1).
+        // 진북은 화면에서 위에서 시계 방향으로 yaw_ 만큼 돈 쪽(view = Rz(−yaw)). 옛 그림은 반대쪽으로 돌았다(3D 돌리기에서만 보이던 잘못)
+        paintRotationDial(p, compassCenter(), dialRadius(), rotationDeg(), dialHot_ || dialDrag_, QStringLiteral("진북"));
         double len = niceStep(mpp_ * 120, 1);
         double px = len / mpp_;
         QRectF sb(16, height() - 22, px, 6);   // 바깥 여백 16 — 나침반과 같은 기준선(검토 UI 2)
@@ -773,6 +850,27 @@ void PlanView::paintOverlay(QPainter& p) {
     }
     double z = refZ() + center_.z;
     auto S = [&](const Vec2& q) { return localToScreen(q.x, q.y, z); };
+    // 두 점 맞춤(2026-10-16): 찍은 점 · 마우스까지 점선 + 위쪽 가운데 안내
+    if (alignStage_ >= 0) {
+        p.save();
+        const QString t = alignStage_ == 0 ? QStringLiteral("두 점 맞춤 · 화면 가로로 놓을 선의 첫 점을 찍으세요 · Esc 취소")
+                                           : QStringLiteral("두 점 맞춤 · 둘째 점을 찍으면 첫 점 → 둘째 점이 화면 가로가 됩니다 · Esc 취소");
+        p.setFont(theme::uiFont(12));
+        QRectF tr(0, 0, QFontMetricsF(p.font()).horizontalAdvance(t) + 20, 26);
+        tr.moveCenter(QPointF(width() / 2.0, 22));
+        p.setPen(QPen(theme::Edge, 1)); p.setBrush(QColor(255, 255, 255, 240)); p.drawRoundedRect(tr, 6, 6);
+        p.setPen(theme::Ink); p.drawText(tr, Qt::AlignCenter, t);
+        if (alignStage_ == 1) {
+            const QPointF a = S(alignP_);
+            if (alignHasMouse_) {
+                const QPointF b = S(alignMouse_);
+                p.setPen(QPen(Qt::white, 3.0)); p.drawLine(a, b);
+                p.setPen(QPen(theme::Ink, 1.5, Qt::DashLine)); p.drawLine(a, b);
+            }
+            p.setPen(QPen(theme::Ink, 1.5)); p.setBrush(Qt::white); p.drawEllipse(a, 4.5, 4.5);
+        }
+        p.restore();
+    }
     // 다른 단면들: 가는 빨간 선 + 끝 글자(두께 띠·눈금 없음). 지금 단면 밑에 깔린다
     if (!others_.empty()) {
         p.save();
@@ -888,6 +986,17 @@ void PlanView::paintOverlay(QPainter& p) {
         p.setPen(QPen(theme::Ink, 2)); p.drawEllipse(c, 8, 8);
         p.setPen(Qt::NoPen); p.setBrush(theme::Ink); p.drawEllipse(c, 2, 2);
     }
+    // 붙은 스냅 이름(그리는 중 · 손잡이 끄는 중): 움직이는 끝 옆 작은 칩
+    if (!snapNote_.isEmpty() && (drawStage_ == 1 || dragHandle_ == 0 || dragHandle_ == 1)) {
+        const QPointF m = dragHandle_ == 0 ? A : B;
+        p.save();
+        p.setFont(theme::uiFont(11));
+        QRectF nr(0, 0, QFontMetricsF(p.font()).horizontalAdvance(snapNote_) + 12, 18);
+        nr.moveTopLeft(m + QPointF(12, 12));
+        p.setPen(QPen(theme::SectionRed, 1)); p.setBrush(QColor(255, 255, 255, 235)); p.drawRoundedRect(nr, 4, 4);
+        p.setPen(theme::SectionRed); p.drawText(nr, Qt::AlignCenter, snapNote_);
+        p.restore();
+    }
     // 손잡이 + 이름(흰 바탕 칩)
     p.setFont(theme::uiFont(13, true));
     QPointF d = B - A; double dl = std::hypot(d.x(), d.y()); QPointF du = dl > 0 ? d / dl : QPointF(1, 0);
@@ -915,11 +1024,43 @@ void PlanView::splitLetters(const QString& name, QString& a, QString& b) {
     a = l; b = r;
 }
 
-// Shift: 동서·남북 고정(A 에서 더 긴 축으로)
+// Shift: 화면 가로 · 세로 고정(A 에서 더 긴 축으로). 방향 0° 면 동서 · 남북 — 옛 동작 그대로, 평면을 돌리면 돌린 화면 기준(2026-10-16)
 Vec2 PlanView::lockAxis(const Vec2& w, Qt::KeyboardModifiers m) const {
     if (!(m & Qt::ShiftModifier)) return w;
-    Vec2 d = w - line_.a;
-    return std::fabs(d.x) >= std::fabs(d.y) ? Vec2(w.x, line_.a.y) : Vec2(line_.a.x, w.y);
+    return snapEnd(line_.a, w, m, nullptr);
+}
+
+Vec2 PlanView::snapEnd(const Vec2& fixed, const Vec2& w, Qt::KeyboardModifiers m, QString* note) const {
+    if (note) note->clear();
+    const Vec2 d = w - fixed;
+    const double len = std::hypot(d.x, d.y);
+    if (len < 1e-9) return w;
+    const double ya = yaw_ * M_PI / 180.0;
+    const Vec2 u(std::cos(ya), std::sin(ya)), v(-std::sin(ya), std::cos(ya));   // 화면 오른쪽 · 위(로컬)
+    if (m & Qt::ShiftModifier) {   // 화면 축 고정: 더 긴 쪽 성분만 남김(옛 Shift 와 같은 투영)
+        const double a = d.x * u.x + d.y * u.y, b = d.x * v.x + d.y * v.y;
+        if (note) *note = std::fabs(a) >= std::fabs(b) ? QStringLiteral("화면 가로") : QStringLiteral("화면 세로");
+        return std::fabs(a) >= std::fabs(b) ? fixed + u * a : fixed + v * b;
+    }
+    if (m & Qt::ControlModifier) return w;   // Ctrl = 붙이지 않음
+    std::vector<double> refs = {normDeg180(yaw_)};
+    for (const OtherSection& o : others_) {
+        const Vec2 od = o.line.b - o.line.a;
+        if (std::hypot(od.x, od.y) > 1e-6) refs.push_back(std::atan2(od.y, od.x) * 180.0 / M_PI);
+    }
+    const AngleSnap sn = snapAngle(std::atan2(d.y, d.x) * 180.0 / M_PI, refs, 3.0);
+    if (!sn.snapped) return w;
+    if (note) {
+        if (sn.source == 0) {
+            const double rel = std::fabs(normDeg180(sn.angleDeg - yaw_));
+            *note = (rel < 45.0 || rel > 135.0) ? QStringLiteral("화면 가로") : QStringLiteral("화면 세로");
+        } else {
+            const QString nm = others_[size_t(sn.source - 1)].name.isEmpty() ? QStringLiteral("다른 단면") : others_[size_t(sn.source - 1)].name;
+            *note = sn.perpendicular ? QStringLiteral("%1 에 직각").arg(nm) : QStringLiteral("%1 와 평행").arg(nm);
+        }
+    }
+    const double t = sn.angleDeg * M_PI / 180.0;
+    return fixed + Vec2(std::cos(t), std::sin(t)) * len;
 }
 
 QPointF PlanView::handleScreenPos(int which) const {
@@ -929,6 +1070,8 @@ QPointF PlanView::handleScreenPos(int which) const {
 }
 
 void PlanView::setDrawMode(bool on) {
+    if (on) alignStage_ = -1;   // 두 점 맞춤 중이면 그만두고 긋기로
+    snapNote_.clear();
     drawStage_ = on ? 0 : -1;
     refreshCursor(Qt::NoModifier);
     if (on && onDrawProgress) onDrawProgress(0, line_);
@@ -1036,14 +1179,41 @@ void PlanView::mousePressEvent(QMouseEvent* e) {
         return;
     }
     if (!hasScene_) { if (e->button() == Qt::LeftButton && onOpenRequest) onOpenRequest(); return; }
-    if (e->button() == Qt::LeftButton && compassHit(e->position())) { homeView(); return; }
+    if (e->button() == Qt::LeftButton && compassHit(e->position()) && alignStage_ < 0) {   // 다이얼 끌기(두 번 누르면 북쪽 위 — mouseDoubleClickEvent)
+        dialDrag_ = true; dialMoved_ = false;
+        dialYaw0_ = rotationDeg();
+        dialAng0_ = dialAngleAt(compassCenter(), e->position());
+        useShape(Qt::ClosedHandCursor);
+        update();
+        return;
+    }
     Vec2 w;
     bool ok = screenToLocalXY(e->position(), w);
+    if (alignStage_ >= 0) {   // 두 점 맞춤: 왼쪽 = 점 찍기, 오른쪽 = 취소
+        if (e->button() == Qt::RightButton) { cancelAlign(); return; }
+        if (e->button() == Qt::LeftButton && ok) {
+            if (alignStage_ == 0) { alignP_ = w; alignStage_ = 1; alignHasMouse_ = false; update(); return; }
+            if (std::hypot(w.x - alignP_.x, w.y - alignP_.y) > 1e-3) {
+                alignQ_ = w; alignVert_ = false; alignValid_ = true;
+                yaw_ = rotationToAlign(alignP_.x, alignP_.y, alignQ_.x, alignQ_.y, false);
+                alignYaw_ = yaw_;
+                alignStage_ = -1;
+                fitted_ = false;
+                updateMatrices();
+                refreshCursor(e->modifiers());
+                update();
+                if (onRotate) onRotate(rotationDeg(), true);
+            }
+            return;
+        }
+        if (e->button() != Qt::MiddleButton) return;   // 가운데 단추 화면 이동은 그대로
+    }
     if (e->button() == Qt::LeftButton && drawStage_ >= 0 && ok) {
         if (drawStage_ == 0) { line_.a = w; line_.b = w; drawStage_ = 1; hasLine_ = false; refreshCursor(e->modifiers()); if (onDrawProgress) onDrawProgress(1, line_); }
         else {
-            line_.b = lockAxis(w, e->modifiers());
+            line_.b = snapEnd(line_.a, w, e->modifiers(), &snapNote_);
             if (SectionFrame(line_).L > 1e-3) {
+                snapNote_.clear();
                 hasLine_ = true; drawStage_ = -1; useShape(Qt::ArrowCursor);
                 if (onDrawModeChanged) onDrawModeChanged(false);
                 emitLine(true);
@@ -1060,8 +1230,8 @@ void PlanView::mousePressEvent(QMouseEvent* e) {
         if (dragHandle_ >= 0) { dragStartMouse_ = e->position(); dragStartLine_ = line_; useShape(Qt::ClosedHandCursor); return; }
     }
     if (e->button() == Qt::LeftButton) { panning_ = true; orbitLift_ = false; useShape(Qt::ClosedHandCursor); }
-    if (e->button() == Qt::MiddleButton) { orbiting_ = true; orbitLift_ = true; useShape(Qt::SizeAllCursor); }
-    if (e->button() == Qt::RightButton) { orbiting_ = true; orbitLift_ = false; useShape(Qt::SizeAllCursor); }
+    if (e->button() == Qt::MiddleButton) { orbiting_ = true; orbitLift_ = true; orbitYaw0_ = yaw_; useShape(Qt::SizeAllCursor); }
+    if (e->button() == Qt::RightButton) { orbiting_ = true; orbitLift_ = false; orbitYaw0_ = yaw_; useShape(Qt::SizeAllCursor); }
 }
 
 void PlanView::mouseMoveEvent(QMouseEvent* e) {
@@ -1098,9 +1268,22 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         Vec3 W = srs_.toWorld(Vec3(w.x, w.y, zz + center_.z));
         onCursor(W.x, W.y, W.z, hz, true);
     }
+    if (dialDrag_) {   // 다이얼: 마우스가 가운데를 도는 만큼 그대로(몇 도 단위 없음 — 사용자 2026-10-16)
+        const double da = normDeg180(dialAngleAt(compassCenter(), e->position()) - dialAng0_);
+        if (std::abs(da) > 1e-9) dialMoved_ = true;
+        yaw_ = normDeg180(dialYaw0_ + da);
+        fitted_ = false;
+        updateMatrices(); update();
+        if (onRotate) onRotate(rotationDeg(), false);
+        return;
+    }
+    if (alignStage_ >= 0) {
+        if (ok) { alignMouse_ = w; alignHasMouse_ = true; update(); }
+        return;
+    }
     if (drawStage_ == 1 && ok) {
         refreshCursor(e->modifiers());   // Shift(축 맞춤)를 누르면 커서 십자가 굵어진다
-        line_.b = lockAxis(w, e->modifiers()); update();
+        line_.b = snapEnd(line_.a, w, e->modifiers(), &snapNote_); update();
         if (onDrawProgress) onDrawProgress(1, line_);
         if (SectionFrame(line_).L > 0.05 && onLineChanged) onLineChanged(line_, false);
         return;
@@ -1110,8 +1293,9 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         screenToLocalXY(dragStartMouse_, w0);
         Vec2 dd = w - w0;
         line_ = dragStartLine_;
-        if (dragHandle_ == 0) line_.a = dragStartLine_.a + dd;
-        else if (dragHandle_ == 1) line_.b = dragStartLine_.b + dd;
+        snapNote_.clear();
+        if (dragHandle_ == 0) line_.a = snapEnd(dragStartLine_.b, dragStartLine_.a + dd, e->modifiers(), &snapNote_);   // 끝을 끌 때도 직각 · 평행 스냅(Ctrl = 끔)
+        else if (dragHandle_ == 1) line_.b = snapEnd(dragStartLine_.a, dragStartLine_.b + dd, e->modifiers(), &snapNote_);
         else { line_.a = dragStartLine_.a + dd; line_.b = dragStartLine_.b + dd; }
         update();
         emitLine(false);
@@ -1127,9 +1311,10 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
     }
     if (orbiting_) {
         fitted_ = false;
-        yaw_ = std::fmod(yaw_ - d.x() * 0.4 + 360.0, 360.0);
+        yaw_ = normDeg180(yaw_ - d.x() * 0.4);
         pitch_ = orbitPitch(pitch_, d.y(), orbitLift_);
         update();
+        if (onRotate && std::abs(normDeg180(yaw_ - orbitYaw0_)) > 1e-9) onRotate(rotationDeg(), false);
         return;
     }
     if (drawStage_ >= 0) { refreshCursor(e->modifiers()); return; }   // 도구를 든 동안: 단계(A · A′)와 Shift(축 맞춤)가 커서에 보인다
@@ -1147,8 +1332,10 @@ void PlanView::mouseMoveEvent(QMouseEvent* e) {
         QPointF A = localToScreen(line_.a.x, line_.a.y, z), B = localToScreen(line_.b.x, line_.b.y, z);
         auto near = [&](QPointF q) { return std::hypot(q.x() - e->position().x(), q.y() - e->position().y()) < 11; };
         if (near(A) || near(B) || near((A + B) / 2)) useTool(kerf::ToolCursor::Handle, false);   // 이 점을 끌 수 있다: 십자 + 빨간 고리(끄는 동안은 OS 닫힌 손)
-        else useShape(compassHit(e->position()) ? Qt::PointingHandCursor : Qt::ArrowCursor);
-    }
+        else useShape(compassHit(e->position()) ? Qt::OpenHandCursor : Qt::ArrowCursor);
+    } else if (hasScene_) useShape(compassHit(e->position()) ? Qt::OpenHandCursor : Qt::ArrowCursor);
+    const bool hot = hasScene_ && compassHit(e->position());
+    if (hot != dialHot_) { dialHot_ = hot; update(); }
 }
 
 void PlanView::mouseReleaseEvent(QMouseEvent*) {
@@ -1158,12 +1345,31 @@ void PlanView::mouseReleaseEvent(QMouseEvent*) {
         useShape(Qt::ArrowCursor);
         return;
     }
-    if (dragHandle_ >= 0) { dragHandle_ = -1; emitLine(true); }
+    if (dialDrag_) {
+        dialDrag_ = false;
+        useShape(Qt::OpenHandCursor);
+        update();
+        if (dialMoved_ && onRotate) onRotate(rotationDeg(), true);
+        return;
+    }
+    if (dragHandle_ >= 0) { dragHandle_ = -1; snapNote_.clear(); emitLine(true); }
+    const bool orbited = orbiting_ && std::abs(normDeg180(yaw_ - orbitYaw0_)) > 1e-9;
     panning_ = orbiting_ = false;
+    if (alignStage_ >= 0) { useShape(Qt::CrossCursor); return; }
     refreshCursor(Qt::NoModifier);
+    if (orbited && onRotate) onRotate(rotationDeg(), true);
 }
 
 void PlanView::mouseDoubleClickEvent(QMouseEvent* e) {
+    if (e->button() == Qt::LeftButton && hasScene_ && compassHit(e->position()) && alignStage_ < 0) {   // 다이얼 두 번 누름 = 북쪽 위(0°)
+        dialDrag_ = false;
+        const bool changed = std::abs(rotationDeg()) > 1e-9;
+        yaw_ = 0;
+        fitted_ = false;
+        updateMatrices(); update();
+        if (changed && onRotate) onRotate(0.0, true);
+        return;
+    }
     if (drawStage_ < 0 && e->button() == Qt::MiddleButton) fitAll();
 }
 
@@ -1211,6 +1417,7 @@ void PlanView::wheelZoom(const QPointF& at, double notches) {
 }
 
 void PlanView::keyPressEvent(QKeyEvent* e) {
+    if (e->key() == Qt::Key_Escape && alignStage_ >= 0) { cancelAlign(); return; }
     if (e->key() == Qt::Key_Escape && drawStage_ >= 0) { drawStage_ = -1; useShape(Qt::ArrowCursor); if (onDrawModeChanged) onDrawModeChanged(false); update(); return; }
     if (e->key() == Qt::Key_Shift && drawStage_ == 1) { useTool(kerf::ToolCursor::DrawB, true); return; }   // Shift = 축 맞춤: 십자가 축 색 · 굵게
     QOpenGLWidget::keyPressEvent(e);
@@ -1251,7 +1458,10 @@ void PlanView::refreshCursor(Qt::KeyboardModifiers m) {
     else useShape(Qt::ArrowCursor);
 }
 
-void PlanView::leaveEvent(QEvent*) { if (onCursor) onCursor(0, 0, 0, false, false); }
+void PlanView::leaveEvent(QEvent*) {
+    if (dialHot_) { dialHot_ = false; update(); }
+    if (onCursor) onCursor(0, 0, 0, false, false);
+}
 
 bool PlanView::viewRectLocal(Box3& out) const {
     if (!hasScene_) return false;

@@ -61,8 +61,9 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
                      const QString& footer, const SectionImgGeo* geo = nullptr, bool busy = false, bool titleRow = true,
                      double contentDxPx = 0, double contentDyPx = 0, double viewZoom = 1, double viewPanX = 0, double viewPanY = 0,
                      SheetPaintProbe* probe = nullptr, const QImage* prevImg = nullptr, const SectionImgGeo* prevGeo = nullptr, double newAlpha = 1.0);   // prevImg = 크로스페이드 중 아직 보이는 옛 영상(그 위에 새 영상이 newAlpha 로 섞여 들어온다)
-/// 레벨선 간격(화면 4 px / 인쇄 0.5 mm 보다 촘촘하면 솎음). ui = DPI/96
-asec::LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport);
+/// 레벨선 간격(화면 8 px / 인쇄 0.5 mm 보다 촘촘하면 10 cm 선만 솎음). 표고 숫자는 50 cm 마다가 원칙(asec::fitLevelLabels) —
+/// 숫자가 있는 50 cm 선은 언제나 긋는다. fit = 숫자 배치(글자 배율 · 번갈아). ui = DPI/96
+asec::LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport, asec::LevelLabelFit* fit = nullptr);
 /// 내보내기용 크기·변환(여백 포함, 영상 픽셀 1:1 정렬)
 QSize sectionExportLayout(const SectionDoc& d, double ppm, double ui, SectionXf& xf);
 

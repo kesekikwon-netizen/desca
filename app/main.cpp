@@ -245,6 +245,9 @@ int main(int argc, char** argv) {
     QStringList a = app.arguments();
     QString splashLive;   // --splash-live DIR: 실제 여는 화면 창을 1 초 돌리며 장면 시각(120 · 400 · 700 · 1000 ms)마다 찍음
     int sheetWheel = 0;
+    double comboDrag = 0;   // --combo-drag px: 평·단면도 평면 단면선 끝 끌기 점검(--open-sheet combo 와, 종료 코드 14)
+    double comboDial = 0;   // --combo-dial 도: 평·단면도 종이 밖 다이얼 돌리기 점검(--open-sheet combo 와, 종료 코드 15)
+    double planRotArg = 0; bool planRotGiven = false; bool planRotateTest = false;   // --plan-rotation 도: 평면 방향을 정한 채로(내보내기 · 도면 점검)
     int sheetPick = -1;   // --sheet-pick N: 조판 탭 왼쪽 도면 목록 N 번째 줄을 누름(0 = 평면도)
     bool sheetEdit = false;   // --sheet-edit: 휠 전에 「조판편집」 단추를 누름   // --sheet-wheel N: 조판 탭 미리보기에 실제 휠 N 칸(확대 +, 축소 -)
     bool sheetStress = false; // --sheet-stress: 도면 탭을 연 채 불투명도 끌기 · 뒤 깊이 연타 · 단면 탭에서 바꾸기 → 조판 미리보기 계산이 쌓이지 않는지(종료 코드 12)
@@ -308,6 +311,7 @@ int main(int argc, char** argv) {
         else if (s == "--splash-shot") splashShot = nx();
         else if (s == "--splash-live") splashLive = nx();
         else if (s == "--undo-test") undoTest = true;
+        else if (s == "--plan-rotate-test") planRotateTest = true;   // 평면 방향 다이얼 · 두 점 맞춤 점검(종료 코드 16)
         else if (s == "--ui-audit") uiAuditDir = nx();   // v4 단계 1: 겹침 · 자리 규칙 잠금 시험(DIR 에 ui-audit.txt · 캡처)
         else if (s == "--paper") paperArg = nx().toUpper();
         else if (s == "--sheet-scale") sheetScale = nx().toDouble();
@@ -319,6 +323,9 @@ int main(int argc, char** argv) {
         else if (s == "--sheet-pick") sheetPick = nx().toInt();
         else if (s == "--sheet-back") sheetBack = nx().toDouble();
         else if (s == "--sheet-stress") sheetStress = true;
+        else if (s == "--combo-drag") comboDrag = nx().toDouble();
+        else if (s == "--combo-dial") comboDial = nx().toDouble();
+        else if (s == "--plan-rotation") { planRotArg = nx().toDouble(); planRotGiven = true; }
         else if (s == "--print-to") MainWindow::printTest.printer = nx();          // --open-sheet 와 함께: 대화상자 없이 이 프린터로(점검)
         else if (s == "--print-out") MainWindow::printTest.outFile = nx();         // 그 프린터 출력을 파일로(드라이버 출력 — Microsoft Print to PDF 면 PDF)
         else if (s == "--print-preview-shot") MainWindow::printTest.previewShot = nx();   // 인쇄 미리보기 창 캡처 뒤 닫기
@@ -593,6 +600,16 @@ int main(int argc, char** argv) {
         processFor(300);
         log(QStringLiteral("sections: %1").arg(w.sectionCount()));
     }
+    if (planRotateTest) {
+        QString pl; const bool ok = w.planRotateTest(&pl);
+        for (const QString& line : pl.trimmed().split(QLatin1Char('\n'))) log(line);
+        if (!ok) rc = 16;
+    }
+    if (planRotGiven && w.hasSection()) {
+        w.setPlanRotation(planRotArg, true);
+        processFor(200);
+        log(QStringLiteral("plan-rotation: %1").arg(w.plan()->rotationDeg(), 0, 'f', 2));
+    }
     if (!uiAuditDir.isEmpty()) {   // v4 단계 1
         QDir().mkpath(uiAuditDir);
         QString al; const bool ok = w.uiAudit(uiAuditDir, &al);
@@ -746,6 +763,16 @@ int main(int argc, char** argv) {
     if (openSheet == QStringLiteral("plan")) { w.dlgPlanSheet(); processFor(500); }
     else if (openSheet == QStringLiteral("section") && w.hasSection()) { w.dlgSheet(); processFor(300); }
     else if (openSheet == QStringLiteral("combo")) { w.dlgComboSheet(); processFor(6000); }   // 평·단면도(미리보기 영상은 작업 스레드)
+    if (openSheet == QStringLiteral("combo") && comboDrag != 0) {
+        QString cl; const bool ok = w.comboDragTest(comboDrag, &cl);
+        for (const QString& line : cl.trimmed().split(QLatin1Char('\n'))) log(line);
+        if (!ok) rc = 14;
+    }
+    if (openSheet == QStringLiteral("combo") && comboDial != 0) {
+        QString cl; const bool ok = w.comboDialTest(comboDial, &cl);
+        for (const QString& line : cl.trimmed().split(QLatin1Char('\n'))) log(line);
+        if (!ok) rc = 15;
+    }
     auto sheetScaleText = [&]() { QString t; for (QSpinBox* sb : w.findChildren<QSpinBox*>()) if (sb->isVisible() && sb->prefix() == QStringLiteral("1:")) t = QString::number(sb->value()); return t; };
     if (!openSheet.isEmpty() && sheetPick >= 0) {
         QListWidget* lw = nullptr;

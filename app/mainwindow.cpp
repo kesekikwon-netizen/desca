@@ -381,6 +381,9 @@ void MainWindow::updateEnabled() {
           2; // 입면 묶음은 도면 탭에서도 쓴다(조판이 따라옴 — 2026-10-11)
   for (const char *k : {"fit", "top", "zoomin", "zoomout"})
     action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
+  action("align2")->setEnabled(sc && !busy); // 평면 방향(표시만 — 계산 중에도 되지만 단면 그리기와 겹치지 않게)
+  if (rotSpin_)
+    rotSpin_->setEnabled(sc);
   action("close")->setEnabled(sc && !busy);
   for (const char *k : {"projsave", "projsaveas"})
     action(k)->setEnabled(sc && !busy);
@@ -572,6 +575,9 @@ void MainWindow::closeScene() {
   current_ = -1;
   refreshSectionList();
   undo_->clear();
+  plan_->setRotationDeg(0); // 평면 방향은 모델마다
+  planRotSet_ = false;
+  syncRotationUi();
   setWindowTitle(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
   discardSheetTab(); // 옛 모델의 「도면」 탭 · 조판 위젯이 남지 않게(검토 I4)
   showStart(true);

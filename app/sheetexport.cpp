@@ -5,6 +5,8 @@
 
 #include "asec/dxf.hpp"
 #include "asec/raster.hpp"
+#include "asec/schedule.hpp"
+#include "cursors.hpp"
 #include "guideband.hpp"
 #include "icons.hpp"
 #include <QAbstractSpinBox>
@@ -18,6 +20,7 @@
 #include <QDialog>
 #include <QDir>
 #include <QDoubleSpinBox>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -50,6 +53,7 @@
 #include <QTabBar>
 #include <QTimer>
 #include <QToolButton>
+#include <QUndoStack>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWheelEvent>
@@ -1401,6 +1405,13 @@ bool MainWindow::exportSheet(const SectionDoc &doc0, MeshSource &src,
 
 // ---------------------------------------------------------------- 도면 창
 namespace {
+/// 끌 수 있는 손잡이 하나(화면 px) — 평·단면도 평면의 단면선 끝
+struct SheetHandle {
+  QPointF at;
+  int asset = -1;   // 그린 단면(ComboAssets::secs) 자리
+  bool endB = false;
+  int section = -1; // 작업 화면 단면 목록(sections_) 자리
+};
 class SheetPreview : public QWidget {
 public:
   std::function<void(QPainter &, const QRect &)> paintFn;
@@ -1428,6 +1439,21 @@ public:
       QStringLiteral("A"); // 거리 글자의 기준 글자(단면 이름 앞 글자)
   static constexpr double kSnapPx =
       14; // 위치도 선에서 이만큼 안이면 선에 붙는다
+  // 끌 수 있는 손잡이(평·단면도의 평면 단면선 끝, 2026-10-16): handleAt 이 참이면
+  // 왼쪽 누름은 화면 이동 대신 손잡이 끌기
+  std::function<bool(QPointF)> handleAt;
+  std::function<void(QPointF)> onHandlePress, onHandleMove, onHandleRelease;
+  std::vector<SheetHandle> handles; // 마지막으로 그린 손잡이(paintFn 이 채움)
+  bool handlePinned = false;        // 끄는 중(또는 놓은 뒤 마지막 계산 중)
+  bool handleBusy = false;          // 단면 · 평면 영상 계산 중
+  // 화면 전용 다이얼(평·단면도 평면 방향, 종이 바깥 — 2026-10-16): dialAt 이 참이면
+  // 왼쪽 누름 · 끌기 · 두 번 누름이 다이얼로 간다(화면 이동 · 처음 크기 대신)
+  std::function<bool(QPointF)> dialAt;
+  std::function<void(QPointF)> onDialPress, onDialMove, onDialRelease;
+  std::function<void()> onDialDoubleClick;
+  QPointF dialCenter; // 마지막으로 그린 다이얼 가운데(화면 px) · 각 — 점검용
+  double dialDeg = 0;
+  bool dialShown = false;
   SheetPreview() {
     setMouseTracking(true);
     setFocusPolicy(Qt::WheelFocus);
@@ -1501,6 +1527,8 @@ public:
       hasHover = false;
       update();
     }
+    if (dialAt && !dialDrag_)
+      dialAt(QPointF(-1e9, -1e9)); // 다이얼 강조 끔
     QWidget::leaveEvent(e);
   }
   void paintEvent(QPaintEvent *) override {
@@ -1536,6 +1564,12 @@ public:
     e->accept();
   }
   void mouseDoubleClickEvent(QMouseEvent *e) override {
+    if (e->button() == Qt::LeftButton && dialAt && dialAt(e->position())) {
+      if (onDialDoubleClick)
+        onDialDoubleClick(); // 다이얼 두 번 = 북쪽 위
+      e->accept();
+      return;
+    }
     pageZoom = 1;
     viewPan = QPointF();
     update();
@@ -1543,6 +1577,23 @@ public:
   } // 종이 보기 처음 크기로
   void mousePressEvent(QMouseEvent *e) override {
     last_ = e->position();
+    if (e->button() == Qt::LeftButton && dialAt && dialAt(e->position())) {
+      dialDrag_ = true;
+      grabMouse();
+      setCursor(Qt::ClosedHandCursor);
+      if (onDialPress)
+        onDialPress(e->position());
+      e->accept();
+      return;
+    }
+    if (e->button() == Qt::LeftButton && handleAt && handleAt(e->position())) {
+      handleDrag_ = true;
+      grabMouse();
+      if (onHandlePress)
+        onHandlePress(e->position());
+      e->accept();
+      return;
+    }
     const bool image = editing && e->button() == Qt::MiddleButton;
     const bool view = e->button() == Qt::LeftButton;
     if (image || view) {
@@ -1555,6 +1606,18 @@ public:
   void mouseMoveEvent(QMouseEvent *e) override {
     const QPointF d = e->position() - last_;
     last_ = e->position();
+    if (dialDrag_) {
+      if (onDialMove)
+        onDialMove(e->position());
+      e->accept();
+      return;
+    }
+    if (handleDrag_) {
+      if (onHandleMove)
+        onHandleMove(e->position());
+      e->accept();
+      return;
+    }
     if (editing && (e->buttons() & Qt::MiddleButton) && onImageDrag) {
       onImageDrag(d);
       e->accept();
@@ -1576,10 +1639,35 @@ public:
       hoverOnStrip = onStrip;
       update();
     }
+    if (!e->buttons() && dialAt && dialAt(e->position())) {
+      setCursor(Qt::OpenHandCursor);
+      return;
+    }
+    if (!e->buttons() && handleAt && handleAt(e->position())) {
+      setCursor(kerf::toolCursor(kerf::ToolCursor::Handle, devicePixelRatioF()));
+      return;
+    }
     setCursor(h && onStrip ? Qt::CrossCursor
                            : (editing ? Qt::SizeAllCursor : Qt::ArrowCursor));
   }
   void mouseReleaseEvent(QMouseEvent *e) override {
+    if (dialDrag_ && e->button() == Qt::LeftButton) {
+      dialDrag_ = false;
+      releaseMouse();
+      setCursor(Qt::OpenHandCursor);
+      if (onDialRelease)
+        onDialRelease(e->position());
+      e->accept();
+      return;
+    }
+    if (handleDrag_ && e->button() == Qt::LeftButton) {
+      handleDrag_ = false;
+      releaseMouse();
+      if (onHandleRelease)
+        onHandleRelease(e->position());
+      e->accept();
+      return;
+    }
     if (e->button() == drag_) {
       const bool img = drag_ == Qt::MiddleButton;
       releaseMouse();
@@ -1608,6 +1696,8 @@ private:
   QTimer *settle_ = nullptr;
   QPointF last_;
   Qt::MouseButton drag_ = Qt::NoButton;
+  bool handleDrag_ = false;
+  bool dialDrag_ = false;
 };
 QSpinBox *scaleSpin(double denom) {
   auto *scale = new QSpinBox;
@@ -4260,6 +4350,60 @@ bool MainWindow::runSheetCheck(const QString &outDir, QString *log) {
                    .arg(expMajor, 0, 'f', 3)
                    .arg(dtOk);
     }
+    { // 표고 숫자 50 cm 마다(사용자 2026-10-16 「축척이 80 이상이 되면 해발값이
+      // 사라진다 · 0.5 m 마다 꼭」): 1:20 ~ 1:200 에서 도면 숫자가 50 cm
+      // 간격으로 빠짐없이 이어지고, 화면 규칙도 50 cm
+      const SectionResult &rr = doc.r;
+      const double oz = rr.srs.origin.z;
+      const long c0 = long(std::ceil((rr.zMin + oz) * 2 - 1e-9)),
+                 c1 = long(std::floor((rr.zMax + oz) * 2 + 1e-9));
+      const long n50 = std::max(0L, c1 - c0 + 1);
+      QStringList bad;
+      double minFont = 999;
+      for (int d : {20, 30, 50, 80, 90, 100, 120, 150, 200}) {
+        SheetParams s50 = sec;
+        s50.spec.denom = d;
+        SheetGeom G = sheetGeom(doc, s50);
+        QImage cv(std::max(1, int(std::ceil(G.L.paperW * k))),
+                  std::max(1, int(std::ceil(G.L.paperH * k))),
+                  QImage::Format_RGB32);
+        cv.fill(Qt::white);
+        SheetPaintProbe pb;
+        {
+          QPainter p(&cv);
+          SectionImgGeo geo{doc.imgS0, doc.imgZ1, doc.imgRes};
+          paintSheet(p, doc, s50, k, 0, doc.img, geo, 1, 0, 0, &pb);
+        }
+        if (d == 200)
+          cv.save(QDir(outDir).filePath(QStringLiteral("sheet_section_d200.png")));
+        std::vector<double> zs;
+        for (const QString &t : pb.labelText)
+          zs.push_back(t.toDouble());
+        std::sort(zs.begin(), zs.end());
+        bool step = !zs.empty();
+        for (size_t i = 1; i < zs.size(); ++i)
+          if (std::abs(zs[i] - zs[i - 1] - 0.5) > 1e-6)
+            step = false;
+        const bool enough = long(zs.size()) == n50;   // 범위 안 50 cm 선마다 하나씩
+        const bool screen50 =
+            sectionLevelPlan(96.0 / 25.4 * 1000.0 / d, 1.0, false).labelCm ==
+            50;
+        minFont = std::min(minFont, pb.fontPx);
+        if (!step || !enough || !screen50)
+          bad << QStringLiteral("1:%1(n=%2/%3 step=%4 screen=%5)")
+                     .arg(d)
+                     .arg(zs.size())
+                     .arg(n50)
+                     .arg(step ? 1 : 0)
+                     .arg(screen50 ? 1 : 0);
+      }
+      lines << QStringLiteral("sheet-check level-labels-50cm denom=20..200 "
+                              "n50=%1 min-font-px=%2 bad=[%3] ok=%4")
+                   .arg(n50)
+                   .arg(minFont)
+                   .arg(bad.join(QLatin1Char(' ')))
+                   .arg(flag(bad.isEmpty() && n50 > 0));
+    }
     QImage s2;
     SheetPaintProbe e2;
     paintSec(2.07, s2, e2);
@@ -4602,6 +4746,14 @@ constexpr double kComboMarginMm = 10.0; // 내용 바깥 여백(종이 = 내용 
 constexpr double kComboTitleMm = 16.0;  // 아래 축척 막대 · 도면명 띠
 constexpr double kComboPlanLineMm =
     0.18; // 평면 위 단면선(사용자 「단면선이 너무 두껍다 · 얇게」)
+constexpr double kComboElevFontMm = 2.1; // 표고 글자 크기
+constexpr double kComboElevLineMm = 2.4; // 표고 글자 한 줄(여유 포함)
+
+/// 평·단면도 표고 글자 배치: 50 cm 마다가 원칙(사용자 2026-10-16 「0.5 m
+/// 마다 해발값은 꼭」), 좁으면 글자를 줄인다. 번갈아 쓸 오른쪽 여백이 없다
+LevelLabelFit comboLabelFit(double mmPerM) {
+  return fitLevelLabels(0.5 * mmPerM, kComboElevLineMm, false);
+}
 
 SheetSpec comboSpec(double denom) {
   SheetSpec s;
@@ -4661,36 +4813,6 @@ void cropComboImage(ComboSecAsset &a, double L) {
     a.img = a.img.copy(i0, j0, i1 - i0, j1 - j0);
   a.imgS0 += i0 * r;
   a.imgZ1 -= j0 * r;
-}
-
-/// 표고 글자를 붙일 레벨선: A 끝(s = 0)에서 지면 바로 아래 선(글자는 그림 칸
-/// 왼쪽 밖) → 없으면 땅속 구간이 있는 가장 높은 선(글자는 그 구간 시작 위)
-struct ComboElevLabel {
-  bool ok = false, atLeft = false;
-  double zAbs = 0, s0 = 0;
-};
-ComboElevLabel pickElevLabel(const ComboSecAsset &a, double L) {
-  ComboElevLabel out;
-  const double oz = a.r.srs.origin.z;
-  const std::vector<LevelLine> lv =
-      levelLines(a.r.zMin + oz - 1e-9, a.r.zMax + oz + 1e-9, 10);
-  for (auto it = lv.rbegin(); it != lv.rend(); ++it) {
-    const std::vector<SGap> g = levelLineSpans(a.r.profile, it->z - oz, 0.0, L);
-    if (g.empty())
-      continue;
-    if (!out.ok) {
-      out.ok = true;
-      out.zAbs = it->z;
-      out.s0 = g.front().s0;
-    }
-    if (g.front().s0 <= 1e-6) {
-      out.zAbs = it->z;
-      out.s0 = 0;
-      out.atLeft = true;
-      return out;
-    }
-  }
-  return out;
 }
 
 /// 단면 하나(단면 자체 좌표: x = 거리 s 오른쪽 · y = 아래로 표고 낮아짐, 원점 =
@@ -4756,20 +4878,25 @@ void paintComboSection(QPainter &p, const ComboSecAsset &a,
              Qt::AlignHCenter | Qt::AlignBottom, a.nameA);
   p.drawText(QRectF(X(L) - 10 * k, -6.0 * k, 20 * k, 5.2 * k),
              Qt::AlignHCenter | Qt::AlignBottom, a.nameB);
-  if (sp.withLevels) {
-    const ComboElevLabel el = pickElevLabel(a, L);
-    if (el.ok) {
-      QFont fe = theme::monoFont(std::max(4, int(std::lround(2.1 * k))));
-      p.setFont(fe);
-      p.setPen(theme::LevelText);
+  if (sp.withLevels) { // 표고 글자: 50 cm 선마다(사용자 2026-10-16 「해발선이 50cm마다」 · 「꼭」). 좁으면 글자를 줄인다
+    const LevelLabelFit lf = comboLabelFit(mmPerM);
+    QFont fe = theme::monoFont(
+        std::max(4, int(std::lround(kComboElevFontMm * lf.scale * k))));
+    p.setFont(fe);
+    p.setPen(theme::LevelText);
+    for (const LevelLabelSpot &el :
+         levelLabelSpots(a.r.profile, a.r.zMin, a.r.zMax, oz, L,
+                         lf.labelCm)) {
       const QString t = QStringLiteral("EL. %1 m")
                             .arg(qs8(formatElevation(el.zAbs, 1)));
       const double y = Y(el.zAbs);
-      if (el.atLeft)
-        p.drawText(QRectF(-14.0 * k, y - 1.6 * k, 13.0 * k, 3.2 * k),
+      const double sc = lf.scale;
+      if (el.atStart) // A 끝에 닿는 선: 그림 칸 왼쪽 밖(표고 글자 여백 14 mm)
+        p.drawText(QRectF(-14.0 * k, y - 1.6 * sc * k, 13.0 * k, 3.2 * sc * k),
                    Qt::AlignRight | Qt::AlignVCenter, t);
-      else
-        p.drawText(QRectF(X(el.s0) + 0.6 * k, y - 3.0 * k, 30 * k, 2.8 * k),
+      else // 가운데에서 시작하는 선: 그 선의 시작 위(다음 50 cm 선 아래에 들어가게)
+        p.drawText(QRectF(X(el.s0) + 0.6 * k, y - (0.2 + 2.6 * sc) * k, 30 * k,
+                          2.6 * sc * k),
                    Qt::AlignLeft | Qt::AlignBottom, t);
     }
   }
@@ -4800,43 +4927,75 @@ void paintComboNorth(QPainter &p, double cxMm, double cyMm, double rMm,
              Qt::AlignCenter, QStringLiteral("N"));
 }
 
+/// 평면 위 단면선 하나(A · B = 종이 px): 얇은 빨강 · 가운데 화살표(바라보는 쪽)
+/// · A/A′ 글자. 끄는 동안 화면이 같은 모양으로 그린다
+void paintComboPlanLine(QPainter &p, const QPointF &A, const QPointF &B,
+                        const QString &nameA, const QString &nameB, double k,
+                        double minLinePx) {
+  const QPointF d = B - A;
+  const double dl = std::hypot(d.x(), d.y());
+  if (dl < 1e-9)
+    return;
+  const QPointF u = d / dl, n(u.y(), -u.x()); // 종이 위 왼쪽 법선 = 바라보는 쪽
+  p.setPen(QPen(theme::SectionRed, std::max(minLinePx, kComboPlanLineMm * k),
+                Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+  p.drawLine(A, B);
+  const QPointF m = (A + B) / 2, a0 = m + n * (0.8 * k), a1 = m + n * (4.0 * k);
+  p.drawLine(a0, a1);
+  p.drawLine(a1, a1 - n * (1.2 * k) + u * (0.8 * k));
+  p.drawLine(a1, a1 - n * (1.2 * k) - u * (0.8 * k));
+  p.setFont(theme::uiFont(std::max(4, int(std::lround(2.8 * k))), true));
+  p.setPen(theme::Ink);
+  const QPointF ca = A - u * (2.8 * k), cb = B + u * (2.8 * k);
+  p.drawText(QRectF(ca.x() - 6 * k, ca.y() - 1.8 * k, 12 * k, 3.6 * k),
+             Qt::AlignCenter, nameA);
+  p.drawText(QRectF(cb.x() - 6 * k, cb.y() - 1.8 * k, 12 * k, 3.6 * k),
+             Qt::AlignCenter, nameB);
+}
+
 /// 평면 칸: 돌린 정사영상 → 테두리 → 단면선(얇은 빨강) · 가운데 화살표(바라보는
-/// 쪽 = 단면이 놓인 쪽) · A/A′ 글자 → 진북
+/// 쪽 = 단면이 놓인 쪽) · A/A′ 글자 → 진북. hideLine = 그리지 않을 단면선
 void paintComboPlan(QPainter &p, const ComboLayout &c, const ComboAssets &a,
-                    const ComboSheetParams &sp, double k, double minLinePx) {
+                    const ComboSheetParams &sp, double k, double minLinePx,
+                    int hideLine) {
   const QRectF pr(c.planX * k, c.planY * k, c.planW * k, c.planH * k);
-  if (sp.withPlanImage && !a.plan.isNull() && a.planRes > 0)
-    p.drawImage(QRectF(c.xMm(a.planS0) * k, c.yMm(a.planT1) * k,
-                       a.plan.width() * a.planRes * c.mmPerM * k,
-                       a.plan.height() * a.planRes * c.mmPerM * k),
-                a.plan);
+  if (sp.withPlanImage && !a.plan.isNull() && a.planRes > 0) {
+    const bool sameFrame =
+        std::fabs(a.planAx - c.ax) < 1e-9 && std::fabs(a.planAy - c.ay) < 1e-9 &&
+        std::fabs(a.planUx - c.ux) < 1e-12 && std::fabs(a.planUy - c.uy) < 1e-12;
+    if (sameFrame)
+      p.drawImage(QRectF(c.xMm(a.planS0) * k, c.yMm(a.planT1) * k,
+                         a.plan.width() * a.planRes * c.mmPerM * k,
+                         a.plan.height() * a.planRes * c.mmPerM * k),
+                  a.plan);
+    else { // 끄는 동안 틀이 바뀜(평면 여유 · 다른 단면): 영상 픽셀 → 옛 틀 (s, t) → 로컬 → 새 틀 → 종이
+      auto paper = [&](double i, double j) {
+        const double so = a.planS0 + i * a.planRes, to = a.planT1 - j * a.planRes;
+        const double x = a.planAx + a.planUx * so + a.planNx * to,
+                     y = a.planAy + a.planUy * so + a.planNy * to;
+        double s, t;
+        c.toST(x, y, s, t);
+        return QPointF(c.xMm(s) * k, c.yMm(t) * k);
+      };
+      const QPointF o = paper(0, 0), di = paper(1, 0) - o, dj = paper(0, 1) - o;
+      p.save();
+      p.setClipRect(pr, Qt::IntersectClip);
+      p.setTransform(QTransform(di.x(), di.y(), dj.x(), dj.y(), o.x(), o.y()),
+                     true);
+      p.drawImage(QPointF(0, 0), a.plan);
+      p.restore();
+    }
+  }
   p.setPen(QPen(theme::Ink2, 0.13 * k));
   p.setBrush(Qt::NoBrush);
   p.drawRect(pr);
-  QFont fl = theme::uiFont(std::max(4, int(std::lround(2.8 * k))), true);
   for (size_t i = 0; i < c.sections.size() && i < a.secs.size(); ++i) {
-    const ComboPlaced &pl = c.sections[i];
-    const QPointF A(c.xMm(pl.sA) * k, c.yMm(pl.tA) * k),
-        B(c.xMm(pl.sB) * k, c.yMm(pl.tB) * k);
-    const QPointF d = B - A;
-    const double dl = std::hypot(d.x(), d.y());
-    if (dl < 1e-9)
+    if (int(i) == hideLine)
       continue;
-    const QPointF u = d / dl, n(u.y(), -u.x()); // 종이 위 왼쪽 법선 = 바라보는 쪽
-    p.setPen(QPen(theme::SectionRed, std::max(minLinePx, kComboPlanLineMm * k),
-                  Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    p.drawLine(A, B);
-    const QPointF m = (A + B) / 2, a0 = m + n * (0.8 * k), a1 = m + n * (4.0 * k);
-    p.drawLine(a0, a1);
-    p.drawLine(a1, a1 - n * (1.2 * k) + u * (0.8 * k));
-    p.drawLine(a1, a1 - n * (1.2 * k) - u * (0.8 * k));
-    p.setFont(fl);
-    p.setPen(theme::Ink);
-    const QPointF ca = A - u * (2.8 * k), cb = B + u * (2.8 * k);
-    p.drawText(QRectF(ca.x() - 6 * k, ca.y() - 1.8 * k, 12 * k, 3.6 * k),
-               Qt::AlignCenter, a.secs[i].nameA);
-    p.drawText(QRectF(cb.x() - 6 * k, cb.y() - 1.8 * k, 12 * k, 3.6 * k),
-               Qt::AlignCenter, a.secs[i].nameB);
+    const ComboPlaced &pl = c.sections[i];
+    paintComboPlanLine(p, QPointF(c.xMm(pl.sA) * k, c.yMm(pl.tA) * k),
+                       QPointF(c.xMm(pl.sB) * k, c.yMm(pl.tB) * k),
+                       a.secs[i].nameA, a.secs[i].nameB, k, minLinePx);
   }
   if (c.planW > 20 && c.planH > 20)
     paintComboNorth(p, c.planX + c.planW - 7.0, c.planY + 7.0, 3.5,
@@ -4992,13 +5151,16 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
         } else
           d.line(layer, Q(0, y), Q(X(L0), y));
       }
-      const ComboElevLabel el = pickElevLabel(as, L0);
-      if (el.ok) {
+      const LevelLabelFit lf = comboLabelFit(mm);
+      const double th = 2.0 * lf.scale;
+      for (const LevelLabelSpot &el :
+           levelLabelSpots(as.r.profile, as.r.zMin, as.r.zMax, oz, L0,
+                           lf.labelCm)) {
         const std::string t = "EL. " + formatElevation(el.zAbs, 1) + " m";
-        if (el.atLeft)
-          d.text("LEVEL_TEXT", Q(-1.0, Y(el.zAbs)), 2.0, t, 2, 2, textRot);
+        if (el.atStart)
+          d.text("LEVEL_TEXT", Q(-1.0, Y(el.zAbs)), th, t, 2, 2, textRot);
         else
-          d.text("LEVEL_TEXT", Q(X(el.s0) + 0.6, Y(el.zAbs) - 0.4), 2.0, t, 0,
+          d.text("LEVEL_TEXT", Q(X(el.s0) + 0.6, Y(el.zAbs) - 0.4), th, t, 0,
                  1, textRot);
       }
     }
@@ -5055,7 +5217,8 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
 } // namespace
 
 ComboLayout MainWindow::comboLayoutFor(const ComboAssets &a,
-                                       const ComboSheetParams &sp) {
+                                       const ComboSheetParams &sp,
+                                       const ComboLayout *keepFrame) {
   std::vector<ComboSection> secs;
   secs.reserve(a.secs.size());
   for (const ComboSecAsset &s : a.secs) {
@@ -5067,8 +5230,13 @@ ComboLayout MainWindow::comboLayoutFor(const ComboAssets &a,
     c.heightM = std::max(0.0, s.r.zMax - s.r.zMin);
     secs.push_back(c);
   }
+  ComboLayout rotFrame;
+  if (!keepFrame && sp.useRotation && !secs.empty()) {
+    rotFrame = comboFrameForRotation(sp.rotationDeg, secs[0].ax, secs[0].ay);
+    keepFrame = &rotFrame;
+  }
   ComboLayout c = layoutCombo(comboSpec(sp.denom), secs, sp.planMarginM,
-                              kComboGapMm, kComboStackMm);
+                              kComboGapMm, kComboStackMm, keepFrame);
   freeComboPage(c, kComboMarginMm, kComboTitleMm);
   return c;
 }
@@ -5124,6 +5292,7 @@ bool MainWindow::computeComboSections(
       cropComboImage(as, L);
     }
     splitSectionName(in[i].name, as.nameA, as.nameB);
+    as.input = int(i);
     out.secs.push_back(std::move(as));
     if (progress)
       progress(double(i + 1) / double(in.size()));
@@ -5201,13 +5370,20 @@ bool MainWindow::renderComboPlan(MeshSource &src, const ComboSheetParams &sp,
   out.planS0 = c.sMin;
   out.planT1 = c.tMax;
   out.planRes = res;
+  out.planAx = c.ax;
+  out.planAy = c.ay;
+  out.planUx = c.ux;
+  out.planUy = c.uy;
+  out.planNx = c.nx;
+  out.planNy = c.ny;
   return true;
 }
 
 void MainWindow::paintComboSheet(QPainter &p, const ComboAssets &a,
                                  const ComboSheetParams &sp, double k,
-                                 double minLinePx) {
-  const ComboLayout c = comboLayoutFor(a, sp);
+                                 double minLinePx, const ComboLayout *layout,
+                                 int hideLine) {
+  const ComboLayout c = layout ? *layout : comboLayoutFor(a, sp);
   const SheetLayout &L = c.L;
   p.save();
   p.setRenderHint(QPainter::Antialiasing);
@@ -5215,7 +5391,7 @@ void MainWindow::paintComboSheet(QPainter &p, const ComboAssets &a,
   p.setRenderHint(QPainter::SmoothPixmapTransform);
   p.fillRect(QRectF(0, 0, L.paperW * k, L.paperH * k), Qt::white);
   if (!c.sections.empty()) {
-    paintComboPlan(p, c, a, sp, k, minLinePx);
+    paintComboPlan(p, c, a, sp, k, minLinePx, hideLine);
     for (size_t i = 0; i < c.sections.size() && i < a.secs.size(); ++i) {
       const ComboPlaced &pl = c.sections[i];
       p.save();
@@ -5398,6 +5574,10 @@ ComboSheetParams MainWindow::defaultComboSheetParams() const {
   }
   if (auto f = act_.find(QStringLiteral("smooth")); f != act_.end() && f->second)
     sp.smooth = f->second->isChecked();
+  if (plan_) { // 평면 화면에서 정한 방향(안 정했으면 첫 단면 기준 자동)
+    sp.useRotation = planRotSet_;
+    sp.rotationDeg = plan_->rotationDeg();
+  }
   const SheetParams sec = defaultSheetParams();
   sp.srsLabel = sec.srsLabel;
   sp.date = sec.date;
@@ -5413,8 +5593,10 @@ std::vector<ComboSecInput> MainWindow::comboInputs() {
   if (!src_)
     return v;
   const Vec3 o = srs().origin;
-  for (const SavedSection &s : sections_) {
+  for (size_t i = 0; i < sections_.size(); ++i) {
+    const SavedSection &s = sections_[i];
     ComboSecInput c;
+    c.index = int(i);
     c.line.a = Vec2(s.ax - o.x, s.ay - o.y);
     c.line.b = Vec2(s.bx - o.x, s.by - o.y);
     c.line.front = s.front;
@@ -5620,17 +5802,37 @@ void MainWindow::dlgComboSheet() {
                  .arg(pl.lenM, 0, 'f', 2)
                  .arg(as.r.zMin + as.r.srs.origin.z, 0, 'f', 1)
                  .arg(as.r.zMax + as.r.srs.origin.z, 0, 'f', 1)
-                 .arg(i == 0 ? QStringLiteral(" · 평면 회전 기준")
-                             : QString()),
+                 .arg(i == 0 && !st->useRotation
+                          ? QStringLiteral(" · 평면 회전 기준")
+                          : QString()),
              QString(), nullptr});
       }
+      items.push_back(
+          {true,
+           st->useRotation
+               ? QStringLiteral("평면 방향 %1° — 종이 밖 다이얼 · 평면 화면에서 "
+                                "정함(다이얼은 도면에 안 들어감)")
+                     .arg(c.northDeg(), 0, 'f', 1)
+               : QStringLiteral("평면 방향 첫 단면 기준(자동, %1°) — 종이 밖 "
+                                "다이얼을 돌리면 정함")
+                     .arg(c.northDeg(), 0, 'f', 1),
+           QString(), nullptr});
       items.push_back({true,
                        QStringLiteral("단면은 평면 단면선 가운데 화살표 쪽에 · "
                                       "평면 A · A′ 와 거리를 맞춤"),
                        QString(), nullptr});
       items.push_back({true,
                        QStringLiteral("표고 범위 = 잘린 선 위아래 10 cm 선(아래 "
-                                      "세 칸 더) · 레벨선은 땅속만"),
+                                      "세 칸 더) · 레벨선은 땅속만 · 표고 글자 "
+                                      "%1마다")
+                           .arg(comboLabelFit(c.mmPerM).labelCm >= 100
+                                    ? QStringLiteral("%1 m ")
+                                          .arg(comboLabelFit(c.mmPerM).labelCm / 100)
+                                    : QStringLiteral("50 cm ")),
+                       QString(), nullptr});
+      items.push_back({true,
+                       QStringLiteral("평면 단면선 끝(A · A′)을 끌면 그 단면을 "
+                                      "다시 자르고, 놓으면 단면 목록에도 들어감"),
                        QString(), nullptr});
       for (const QString &sk : assets->skipped)
         items.push_back(
@@ -5710,9 +5912,297 @@ void MainWindow::dlgComboSheet() {
   QObject::connect(marginTimer, &QTimer::timeout, d,
                    [reload] { (*reload)(false); });
 
+  // 평면 단면선 끝 끌기(2026-10-16, 사용자 「도면 안에서 빨간선 끝단을 움직여 단면을
+  // 실시간으로 변환해서 맞출 수 있을까」): 끄는 동안은 틀(평면 방향)과 화면 자리를
+  // 붙들고 그 단면만 미리보기 품질로 다시 자른다(작업 스레드 · 마지막 요청만). 놓으면
+  // 그 선으로 한 번 더 자르고 단면 목록 · 되돌리기 · 프로젝트 저장에 넣은 뒤, 평면을
+  // 새 틀로 다시 그린다. 그 자리에서 자르지 못하면 처음 선으로 되돌린다
+  struct ComboDrag {
+    bool on = false;       // 누르고 있음
+    bool settling = false; // 놓은 뒤 마지막 계산을 기다림(화면은 아직 붙듦)
+    bool computing = false;
+    int asset = -1, input = -1;
+    bool endB = false;
+    int hoverAsset = -1;
+    bool hoverB = false;
+    ComboLayout c0;    // 누를 때 배치(틀 · 종이 자리)
+    QPointF o0;        // 누를 때 종이 원점(px)
+    double sc0 = 1;    // 누를 때 px/mm
+    SectionLine line0; // 누를 때 선(되돌리기)
+    SectionLine line;  // 지금 선(로컬)
+    ComboSecAsset orig;
+  };
+  auto drag = std::make_shared<ComboDrag>();
+  auto dragWorker = std::make_shared<CoalescingWorker>();
+  auto dragGate = std::make_shared<ResultGate>();
+  const double kHandlePx = 9.0; // 끝점에서 이만큼 안이면 잡힘
+  // 지금 화면의 손잡이 찾기(끄는 중 · 영상 준비 중이면 없음). 자리는 마지막으로 그린 것
+  auto pickHandle = [=](QPointF pos, int &asset, bool &endB) {
+    asset = -1;
+    if (*busy || drag->on || drag->settling || assets->secs.empty())
+      return false;
+    double best = kHandlePx;
+    for (const SheetHandle &h : pv->handles) {
+      const double dd = std::hypot(h.at.x() - pos.x(), h.at.y() - pos.y());
+      if (dd <= best && h.asset >= 0 && h.asset < int(assets->secs.size())) {
+        best = dd;
+        asset = h.asset;
+        endB = h.endB;
+      }
+    }
+    return asset >= 0;
+  };
+  // 놓은 선을 작업 화면의 단면 목록에 쓴다(되돌리기 · 프로젝트 자동 저장 포함)
+  auto commitLine = [this](int index, const SectionLine &l) {
+    if (!src_ || index < 0 || index >= int(sections_.size()))
+      return;
+    const Vec3 o = srs().origin;
+    SavedSection &sv = sections_[size_t(index)];
+    sv.ax = l.a.x + o.x;
+    sv.ay = l.a.y + o.y;
+    sv.bx = l.b.x + o.x;
+    sv.by = l.b.y + o.y;
+    thumbs_.erase(index);
+    if (index == current_) { // 지금 단면이면 평면 · 단면 화면도 새 선으로
+      plan_->setLine(l, true);
+      requestSection(true);
+    }
+    refreshSectionList();
+    commitState(QStringLiteral("단면선(도면에서 끔)"));
+    updateHeader();
+  };
+  auto submitDrag = std::make_shared<std::function<void(bool)>>();
+  *submitDrag = [this, st, inputs, drag, dragWorker, dragGate, assets, failMsg,
+                 refresh, reload, commitLine,
+                 pvp = QPointer<SheetPreview>(pv)](bool final) {
+    if (!src_ || drag->input < 0 || drag->input >= int(inputs->size()))
+      return;
+    ComboSecInput in = (*inputs)[size_t(drag->input)];
+    in.line = drag->line;
+    ComboSheetParams snap = *st;
+    snap.withSectionImage = true;
+    const int assetIdx = drag->asset, inputIdx = drag->input;
+    drag->computing = true;
+    // 작업에는 일꾼의 shared_ptr 을 넣지 않는다(작업이 마지막 참조가 되면 일꾼 스레드가 자기를 join).
+    // 결과 받기는 창(pvp)이 살아 있을 때만 — 창의 손잡이 함수가 일꾼을 쥐고 있으므로 그때는 살아 있음
+    CoalescingWorker *wk = dragWorker.get();
+    dragWorker->submit(final, [src = src_, snap, in, assetIdx, inputIdx, drag,
+                               wk, dragGate, assets, inputs, failMsg, refresh,
+                               reload, commitLine,
+                               pvp](uint64_t gen, bool fin,
+                                    const std::atomic<bool> *cancel) {
+      ComboAssets a;
+      QString m;
+      const bool ok =
+          computeComboSections(*src, {in}, snap, true, a, &m, cancel) &&
+          !a.secs.empty();
+      if (cancel->load())
+        return; // 더 새 요청(놓음)이 이 계산을 취소함
+      ComboSecAsset as;
+      if (ok) {
+        as = std::move(a.secs[0]);
+        as.input = inputIdx;
+      }
+      const SectionLine line = in.line;
+      const int index = in.index;
+      QMetaObject::invokeMethod(
+          qApp,
+          [=]() mutable {
+            if (!pvp || !dragGate->accept(gen))
+              return; // 창이 닫혔거나 더 새 결과가 이미 보임
+            if (gen == wk->latestGen())
+              drag->computing = false;
+            const bool slotOk =
+                assetIdx >= 0 && assetIdx < int(assets->secs.size()) &&
+                assets->secs[size_t(assetIdx)].input == inputIdx;
+            if (ok && slotOk)
+              assets->secs[size_t(assetIdx)] = std::move(as);
+            if (fin) {
+              drag->settling = false;
+              if (ok && slotOk) {
+                (*inputs)[size_t(inputIdx)].line = line;
+                *failMsg = QString();
+                commitLine(index, line);
+                (*reload)(false); // 평면을 새 틀로 다시 그림
+              } else {
+                if (slotOk)
+                  assets->secs[size_t(assetIdx)] = drag->orig;
+                *failMsg =
+                    QStringLiteral("끈 자리에서 단면을 자르지 못해 처음 선으로 "
+                                   "되돌렸습니다") +
+                    (m.isEmpty() ? QString() : QStringLiteral(" — ") + m);
+              }
+            }
+            (*refresh)();
+          },
+          Qt::QueuedConnection);
+    });
+    if (pvp)
+      pvp->update();
+  };
+  // 마우스 자리 → 끄는 끝점(누를 때의 배치로 거꾸로 — 끄는 동안 바뀌지 않음)
+  auto dragTo = [drag](QPointF pos) {
+    const QPointF mm = (pos - drag->o0) / std::max(1e-9, drag->sc0);
+    double s = 0, t = 0, x = 0, y = 0;
+    drag->c0.paperToST(mm.x(), mm.y(), s, t);
+    drag->c0.toXY(s, t, x, y);
+    SectionLine l = drag->line;
+    (drag->endB ? l.b : l.a) = Vec2(x, y);
+    if (SectionFrame(l).L < 0.05)
+      return false; // 너무 짧은 선은 받지 않음
+    drag->line = l;
+    return true;
+  };
+  pv->handleAt = [=](QPointF pos) {
+    int a = -1;
+    bool b = false;
+    const bool hit = pickHandle(pos, a, b);
+    if (a != drag->hoverAsset || b != drag->hoverB) {
+      drag->hoverAsset = a;
+      drag->hoverB = b;
+      pv->update();
+    }
+    return hit;
+  };
+  pv->onHandlePress = [=](QPointF pos) {
+    int a = -1;
+    bool b = false;
+    if (!pickHandle(pos, a, b))
+      return;
+    drag->on = true;
+    drag->asset = a;
+    drag->endB = b;
+    drag->input = assets->secs[size_t(a)].input;
+    drag->c0 = comboLayoutFor(*assets, *st);
+    drag->o0 = pv->lastPaperO;
+    drag->sc0 = pv->fitPxPerMm;
+    drag->line0 = (*inputs)[size_t(drag->input)].line;
+    drag->line = drag->line0;
+    drag->orig = assets->secs[size_t(a)];
+    pv->update();
+  };
+  pv->onHandleMove = [=](QPointF pos) {
+    if (!drag->on || !dragTo(pos))
+      return;
+    (*submitDrag)(false);
+  };
+  pv->onHandleRelease = [=](QPointF pos) {
+    if (!drag->on)
+      return;
+    dragTo(pos);
+    drag->on = false;
+    const SectionLine &l = drag->line, &l0 = drag->line0;
+    if ((l.a - l0.a).len() < 1e-9 && (l.b - l0.b).len() < 1e-9) {
+      pv->update(); // 누르기만 함
+      return;
+    }
+    drag->settling = true;
+    (*submitDrag)(true);
+  };
+
+  // 평면 방향 다이얼(2026-10-16, 사용자 「다이얼을 돌리면 평면도가 돌아가게」 · 「도면에
+  // 포함 안 되게 용지 바깥에서」): 종이 바깥 오른쪽 위에 화면에만 그린다(저장 · 인쇄에
+  // 없음). 끄는 동안 평면(영상은 옮겨 그림) · 단면 자리가 바로 따라 돌고, 놓으면 평면
+  // 화면 방향 · 되돌리기 · 프로젝트에 넣은 뒤 평면 영상을 새 방향으로 다시 그린다. 각 고정
+  // 없음. 두 번 누르면 북쪽 위
+  struct ComboDial {
+    bool valid = false, hot = false, drag = false, moved = false, self = false;
+    QPointF c;
+    double rot0 = 0, ang0 = 0;
+    // 끄는 동안 붙든 화면: 평면 칸 가운데 땅 점(wx, wy)이 화면 scr0 에 그대로, 배율 sc0
+    double wx = 0, wy = 0, sc0 = 1;
+    QPointF scr0;
+  };
+  auto dial = std::make_shared<ComboDial>();
+  auto dialSet = [this, st, dial, refresh, reload,
+                  pvp = QPointer<SheetPreview>(pv)](double deg, bool final) {
+    st->useRotation = true;
+    st->rotationDeg = normDeg180(deg);
+    dial->self = true; // 아래 setPlanRotation 이 이 창 고리를 다시 부르지 않게
+    setPlanRotation(st->rotationDeg, final);
+    dial->self = false;
+    if (final) {
+      (*refresh)();
+      (*reload)(false); // 평면 영상을 새 방향으로
+    }
+    if (pvp)
+      pvp->update();
+  };
+  pv->dialAt = [=](QPointF pos) {
+    const bool on = dial->valid && !assets->secs.empty() && !drag->on &&
+                    !drag->settling &&
+                    std::hypot(pos.x() - dial->c.x(), pos.y() - dial->c.y()) <=
+                        PlanView::dialRadius() + 6;
+    if (on != dial->hot) {
+      dial->hot = on;
+      pv->update();
+    }
+    return on;
+  };
+  pv->onDialPress = [=](QPointF pos) {
+    const ComboLayout c = comboLayoutFor(*assets, *st);
+    dial->drag = true;
+    dial->moved = false;
+    dial->rot0 = c.northDeg();
+    dial->ang0 = PlanView::dialAngleAt(dial->c, pos);
+    const double sm = (c.sMin + c.sMax) / 2, tm = (c.tMin + c.tMax) / 2;
+    c.toXY(sm, tm, dial->wx, dial->wy);
+    dial->sc0 = pv->fitPxPerMm;
+    dial->scr0 = pv->lastPaperO + QPointF(c.xMm(sm), c.yMm(tm)) * dial->sc0;
+    pv->update();
+  };
+  pv->onDialMove = [=](QPointF pos) {
+    if (!dial->drag)
+      return;
+    const double da =
+        normDeg180(PlanView::dialAngleAt(dial->c, pos) - dial->ang0);
+    if (!dial->moved && std::abs(da) < 0.05)
+      return;
+    dial->moved = true;
+    dialSet(dial->rot0 + da, false);
+  };
+  pv->onDialRelease = [=](QPointF) {
+    if (!dial->drag)
+      return;
+    dial->drag = false;
+    if (dial->moved)
+      dialSet(st->rotationDeg, true);
+    pv->update();
+  };
+  pv->onDialDoubleClick = [=] {
+    if (st->useRotation && std::abs(st->rotationDeg) < 1e-9)
+      return; // 이미 북쪽 위
+    dialSet(0.0, true);
+  };
+  // 평면 화면에서 돌리거나 되돌리면 이 도면도 따라간다. 고리는 약한 참조만 쥔다 — 창이
+  // 닫히면(창의 람다가 쥔 강한 참조가 사라지면) 아무것도 안 하고 영상 메모리도 잡지 않는다
+  comboRotHook_ = [this, wst = std::weak_ptr<ComboSheetParams>(st),
+                   wdial = std::weak_ptr<ComboDial>(dial),
+                   wrefresh = std::weak_ptr<std::function<void()>>(refresh),
+                   wreload = std::weak_ptr<std::function<void(bool)>>(reload),
+                   pvp = QPointer<SheetPreview>(pv)](bool final) {
+    const auto st = wst.lock();
+    const auto dial = wdial.lock();
+    const auto refresh = wrefresh.lock();
+    const auto reload = wreload.lock();
+    if (!st || !dial || !refresh || !reload || !pvp || dial->self)
+      return;
+    st->useRotation = planRotSet_;
+    st->rotationDeg = plan_->rotationDeg();
+    pvp->update();
+    if (final) {
+      (*refresh)();
+      (*reload)(false);
+    }
+  };
+
   pv->paintFn = [=](QPainter &p, const QRect &rc) {
     p.fillRect(rc, theme::Desk);
     if (assets->secs.empty()) {
+      dial->valid = false;
+      pv->dialShown = false;
+      pv->handles.clear();
+      pv->handleBusy = *busy;
       p.setPen(theme::Muted);
       p.setFont(theme::uiFont(13));
       p.drawText(rc, Qt::AlignCenter,
@@ -5721,25 +6211,114 @@ void MainWindow::dlgComboSheet() {
                                     : *failMsg);
       return;
     }
-    const ComboLayout c = comboLayoutFor(*assets, *st);
-    double sc = std::min((rc.width() - 48.0) / c.L.paperW,
-                         (rc.height() - 110.0) / c.L.paperH);
-    if (sc <= 0.02)
-      return;
-    sc *= pv->pageZoom;
+    const bool pinned = drag->on || drag->settling;
+    const ComboLayout c = pinned ? comboLayoutFor(*assets, *st, &drag->c0)
+                                 : comboLayoutFor(*assets, *st);
+    double sc = 0;
+    QPointF o;
+    if (pinned) { // 끄는 동안: 배율 · 평면 자리를 누를 때 그대로(종이가 커져도 평면이 마우스 밑에서 움직이지 않음)
+      sc = drag->sc0;
+      o = drag->o0 + (QPointF(drag->c0.xMm(0), drag->c0.yMm(0)) -
+                      QPointF(c.xMm(0), c.yMm(0))) *
+                         sc;
+    } else if (dial->drag) { // 다이얼을 끄는 동안: 배율 그대로, 평면 칸 가운데를 축으로 돈다
+      sc = dial->sc0;
+      double s0 = 0, t0 = 0;
+      c.toST(dial->wx, dial->wy, s0, t0);
+      o = dial->scr0 - QPointF(c.xMm(s0), c.yMm(t0)) * sc;
+    } else {
+      sc = std::min((rc.width() - 48.0) / c.L.paperW,
+                    (rc.height() - 110.0) / c.L.paperH);
+      if (sc <= 0.02)
+        return;
+      sc *= pv->pageZoom;
+    }
     const QSizeF pz(c.L.paperW * sc, c.L.paperH * sc);
-    const QPointF o(rc.left() + (rc.width() - pz.width()) / 2 + pv->viewPan.x(),
-                    rc.top() + (rc.height() - pz.height()) / 2 +
-                        pv->viewPan.y());
+    if (!pinned && !dial->drag)
+      o = QPointF(rc.left() + (rc.width() - pz.width()) / 2 + pv->viewPan.x(),
+                  rc.top() + (rc.height() - pz.height()) / 2 + pv->viewPan.y());
     pv->lastPaperO = o;
     pv->lastPaperSize = QPointF(pz.width(), pz.height());
     pv->fitPxPerMm = sc;
+    pv->handlePinned = pinned;
+    pv->handleBusy = *busy || drag->computing;
+    if (!pinned) {
+      pv->handles.clear();
+      for (size_t i = 0; i < c.sections.size() && i < assets->secs.size(); ++i) {
+        const int in = assets->secs[i].input;
+        if (in < 0 || in >= int(inputs->size()))
+          continue;
+        const ComboPlaced &pl = c.sections[i];
+        for (int e = 0; e < 2; ++e)
+          pv->handles.push_back(
+              {o + QPointF(c.xMm(e ? pl.sB : pl.sA), c.yMm(e ? pl.tB : pl.tA)) *
+                       sc,
+               int(i), e == 1, (*inputs)[size_t(in)].index});
+      }
+    }
     p.save();
     p.translate(o);
     p.setClipRect(QRectF(QPointF(0, 0), pz));
-    paintComboSheet(p, *assets, *st, sc, 1.0); // 화면: 선은 1 px 아래로 가늘지 않게
+    paintComboSheet(p, *assets, *st, sc, 1.0, &c,
+                    pinned ? drag->asset : -1); // 화면: 선은 1 px 아래로 가늘지 않게
+    auto ring = [&](const QPointF &q, bool big) { // 손잡이(화면 전용 — 저장에는 없음)
+      p.setPen(QPen(theme::SectionRed, 1.5));
+      p.setBrush(Qt::white);
+      p.drawEllipse(q, big ? 5.0 : 4.0, big ? 5.0 : 4.0);
+    };
+    if (pinned && drag->asset >= 0 &&
+        drag->asset < int(assets->secs.size())) { // 끄는 선: 마우스를 바로 따라감
+      double sa, ta, sb, tb;
+      c.toST(drag->line.a.x, drag->line.a.y, sa, ta);
+      c.toST(drag->line.b.x, drag->line.b.y, sb, tb);
+      const QPointF A(c.xMm(sa) * sc, c.yMm(ta) * sc),
+          B(c.xMm(sb) * sc, c.yMm(tb) * sc);
+      const ComboSecAsset &as = assets->secs[size_t(drag->asset)];
+      paintComboPlanLine(p, A, B, as.nameA, as.nameB, sc, 1.0);
+      ring(A, !drag->endB);
+      ring(B, drag->endB);
+    } else if (drag->hoverAsset >= 0 &&
+               drag->hoverAsset < int(c.sections.size())) {
+      const ComboPlaced &pl = c.sections[size_t(drag->hoverAsset)];
+      ring(QPointF(c.xMm(drag->hoverB ? pl.sB : pl.sA),
+                   c.yMm(drag->hoverB ? pl.tB : pl.tA)) *
+               sc,
+           true);
+    }
     p.restore();
     paintPaperFrame(p, o, pz);
+    { // 다이얼 자리: 종이 오른쪽 바깥 → 종이 위 바깥 → 그래도 없으면 미리보기 오른쪽 위 구석
+      const double R = PlanView::dialRadius(), ext = R + 17, gap = 14;
+      QPointF dc(o.x() + pz.width() + gap + ext, o.y() + ext);
+      if (dc.x() + ext > rc.right() - 6) {
+        dc = QPointF(o.x() + pz.width() - ext, o.y() - gap - (R + 19));
+        if (dc.y() - ext < rc.top() + 4)
+          dc = QPointF(rc.right() - 12 - ext, rc.top() + 12 + ext);
+      }
+      if (dial->drag)
+        dc = dial->c; // 끄는 동안 다이얼은 제자리(종이가 돌며 커져도)
+      dial->c = dc;
+      dial->valid = true;
+      pv->dialCenter = dc;
+      pv->dialDeg = c.northDeg();
+      pv->dialShown = true;
+      PlanView::paintRotationDial(p, dc, R, c.northDeg(),
+                                  dial->hot || dial->drag,
+                                  QStringLiteral("평면 방향"));
+    }
+    if (pinned && drag->asset >= 0 && drag->asset < int(assets->secs.size())) {
+      const ComboSecAsset &as = assets->secs[size_t(drag->asset)];
+      p.setPen(theme::Muted);
+      p.setFont(theme::uiFont(12));
+      p.drawText(QRectF(rc.left() + 12, rc.bottom() - 100, rc.width() - 24, 20),
+                 Qt::AlignHCenter | Qt::AlignVCenter,
+                 QStringLiteral("%1%2%3 · 길이 %4 m%5")
+                     .arg(as.nameA, QChar(0x2013), as.nameB)
+                     .arg(SectionFrame(drag->line).L, 0, 'f', 2)
+                     .arg(drag->computing ? QStringLiteral(" · 다시 자르는 중…")
+                                          : QString()));
+      return;
+    }
     if (*busy) {
       p.setPen(theme::Muted);
       p.setFont(theme::uiFont(12));
@@ -5847,4 +6426,211 @@ void MainWindow::dlgComboSheet() {
         [this](bool ok, const QString &m) { report(ok, m); });
   });
   refreshSheetList();
+}
+
+bool MainWindow::comboDragTest(double dxPx, QString *log) {
+  auto say = [&](const QString &t) {
+    if (log)
+      *log += t + QLatin1Char('\n');
+  };
+  auto pump = [](int ms) {
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < ms)
+      QApplication::processEvents(QEventLoop::AllEvents, 10);
+  };
+  SheetPreview *pv = nullptr;
+  for (QWidget *w : findChildren<QWidget *>(QStringLiteral("sheetPreview")))
+    if (w->isVisible())
+      pv = static_cast<SheetPreview *>(w);
+  if (!pv || !undo_ || !lastCombo_) {
+    say(QStringLiteral("combo-drag: 평·단면도 미리보기가 없음 FAIL"));
+    return false;
+  }
+  QElapsedTimer t;
+  t.start();
+  while (t.elapsed() < 120000 && (pv->handles.empty() || pv->handleBusy))
+    pump(20);
+  const SheetHandle *h = nullptr;
+  for (const SheetHandle &x : pv->handles)
+    if (x.asset == 0 && x.endB)
+      h = &x;
+  if (!h || h->section < 0 || h->section >= int(sections_.size())) {
+    say(QStringLiteral("combo-drag: 기준 단면 손잡이 없음 handles=%1 FAIL")
+            .arg(pv->handles.size()));
+    return false;
+  }
+  const int sec = h->section;
+  const QPointF at = h->at;
+  const SavedSection before = sections_[size_t(sec)];
+  const double sc = pv->fitPxPerMm, mmPerM = 1000.0 / lastCombo_->denom;
+  const int undo0 = undo_->index();
+  auto send = [&](QEvent::Type ty, QPointF q, Qt::MouseButton b,
+                  Qt::MouseButtons bs) {
+    QMouseEvent ev(ty, q, pv->mapToGlobal(q), b, bs, Qt::NoModifier);
+    QApplication::sendEvent(pv, &ev);
+  };
+  send(QEvent::MouseMove, at, Qt::NoButton, Qt::NoButton);
+  send(QEvent::MouseButtonPress, at, Qt::LeftButton, Qt::LeftButton);
+  bool pinnedMid = false;
+  for (int i = 1; i <= 8; ++i) {
+    send(QEvent::MouseMove, at + QPointF(dxPx * i / 8.0, 0), Qt::NoButton,
+         Qt::LeftButton);
+    pump(60);
+    pinnedMid = pinnedMid || pv->handlePinned;
+  }
+  send(QEvent::MouseButtonRelease, at + QPointF(dxPx, 0), Qt::LeftButton,
+       Qt::NoButton);
+  t.restart();
+  while (t.elapsed() < 120000 &&
+         (pv->handlePinned || pv->handleBusy || undo_->index() == undo0))
+    pump(20);
+  pump(200);
+  const SavedSection &after = sections_[size_t(sec)];
+  const double ux = before.bx - before.ax, uy = before.by - before.ay,
+               ul = std::hypot(ux, uy);
+  const double ds = dxPx / (sc * mmPerM); // 기준 단면은 종이 가로 = A→A′
+  const double ex = ux / ul * ds, ey = uy / ul * ds;
+  const double gx = after.bx - before.bx, gy = after.by - before.by;
+  const bool moved = std::fabs(gx - ex) < 1e-6 && std::fabs(gy - ey) < 1e-6 &&
+                     after.ax == before.ax && after.ay == before.ay;
+  const bool undone = undo_->index() > undo0 &&
+                      undo_->text(undo_->index() - 1).contains(
+                          QStringLiteral("도면에서"));
+  // 다시 배치된 평면에서 기준 단면 손잡이 사이 거리 = 새 길이
+  double lenScreen = -1;
+  const SheetHandle *ha = nullptr, *hb = nullptr;
+  for (const SheetHandle &x : pv->handles)
+    if (x.asset == 0)
+      (x.endB ? hb : ha) = &x;
+  if (ha && hb)
+    lenScreen = std::hypot(hb->at.x() - ha->at.x(), hb->at.y() - ha->at.y()) /
+                (pv->fitPxPerMm * mmPerM);
+  const double newLen = std::hypot(after.bx - after.ax, after.by - after.ay);
+  const bool relaid = ha && hb && std::fabs(lenScreen - newLen) < 0.01;
+  const bool ok = pinnedMid && moved && undone && relaid && !pv->handlePinned;
+  say(QStringLiteral("combo-drag: section=%1 dx=%2px expect=%3m got=%4m "
+                     "len=%5m screen-len=%6m pinned-mid=%7 undo=%8 relaid=%9 %10")
+          .arg(qs8(after.name))
+          .arg(dxPx, 0, 'f', 1)
+          .arg(ds, 0, 'f', 4)
+          .arg(std::hypot(gx, gy), 0, 'f', 4)
+          .arg(newLen, 0, 'f', 3)
+          .arg(lenScreen, 0, 'f', 3)
+          .arg(pinnedMid ? 1 : 0)
+          .arg(undone ? 1 : 0)
+          .arg(relaid ? 1 : 0)
+          .arg(ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
+  return ok;
+}
+
+// --combo-dial DEG(종료 코드 15): 평·단면도 종이 밖 다이얼을 마우스로 DEG 만큼 돌려
+// ① 도면 방향 · 평면 화면 방향이 같이 바뀌고 ② 되돌리기 한 칸 ③ 다이얼이 종이 바깥
+// ④ 놓은 뒤 평면 영상이 새 방향으로 다시 그려지고 ⑤ 두 번 누르면 북쪽 위(0°)인지 본다
+bool MainWindow::comboDialTest(double deg, QString *log) {
+  auto say = [&](const QString &t) {
+    if (log)
+      *log += t + QLatin1Char('\n');
+  };
+  auto pump = [](int ms) {
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < ms)
+      QApplication::processEvents(QEventLoop::AllEvents, 10);
+  };
+  SheetPreview *pv = nullptr;
+  for (QWidget *w : findChildren<QWidget *>(QStringLiteral("sheetPreview")))
+    if (w->isVisible())
+      pv = static_cast<SheetPreview *>(w);
+  if (!pv || !undo_ || !lastCombo_) {
+    say(QStringLiteral("combo-dial: 평·단면도 미리보기가 없음 FAIL"));
+    return false;
+  }
+  QElapsedTimer t;
+  t.start();
+  while (t.elapsed() < 120000 &&
+         (pv->handles.empty() || pv->handleBusy || !pv->dialShown))
+    pump(20);
+  if (!pv->dialShown) {
+    say(QStringLiteral("combo-dial: 다이얼이 안 보임 FAIL"));
+    return false;
+  }
+  const QPointF c = pv->dialCenter;
+  const double R = PlanView::dialRadius();
+  const QRectF paper(pv->lastPaperO, QSizeF(pv->lastPaperSize.x(),
+                                            pv->lastPaperSize.y()));
+  const bool outside =
+      !paper.intersects(QRectF(c - QPointF(R + 17, R + 17),
+                               QSizeF(2 * (R + 17), 2 * (R + 17) + 2)));
+  const bool auto0 = !lastCombo_->useRotation;
+  const int undo0 = undo_->index();
+  auto send = [&](QEvent::Type ty, QPointF q, Qt::MouseButton b,
+                  Qt::MouseButtons bs) {
+    QMouseEvent ev(ty, q, pv->mapToGlobal(q), b, bs, Qt::NoModifier);
+    QApplication::sendEvent(pv, &ev);
+  };
+  auto onRing = [&](double a) { // 다이얼 둘레 점(위 0°, 시계 방향)
+    const double r = a * 3.14159265358979323846 / 180.0;
+    return c + QPointF(std::sin(r), -std::cos(r)) * (R * 0.8);
+  };
+  send(QEvent::MouseMove, onRing(0), Qt::NoButton, Qt::NoButton);
+  const double planBefore = plan_->rotationDeg();
+  const double before = pv->dialDeg; // 누르기 전 도면 방향(자동이면 첫 단면 기준)
+  send(QEvent::MouseButtonPress, onRing(0), Qt::LeftButton, Qt::LeftButton);
+  bool liveMid = false;
+  for (int i = 1; i <= 10; ++i) {
+    send(QEvent::MouseMove, onRing(deg * i / 10.0), Qt::NoButton,
+         Qt::LeftButton);
+    pump(30);
+    liveMid = liveMid || (lastCombo_->useRotation &&
+                          std::abs(plan_->rotationDeg() - planBefore) > 1e-6);
+  }
+  send(QEvent::MouseButtonRelease, onRing(deg), Qt::LeftButton, Qt::NoButton);
+  t.restart();
+  while (t.elapsed() < 120000 && (pv->handleBusy || undo_->index() == undo0))
+    pump(20);
+  pump(200);
+  const double got = lastCombo_->rotationDeg;
+  const bool same = lastCombo_->useRotation &&
+                    std::abs(normDeg180(plan_->rotationDeg() - got)) < 1e-9;
+  const double turned = normDeg180(got - before);
+  const bool undone = undo_->index() == undo0 + 1 &&
+                      undo_->text(undo_->index() - 1).contains(
+                          QStringLiteral("평면 방향"));
+  // 두 번 누르면 북쪽 위(놓은 뒤 종이가 다시 맞춰져 다이얼 자리가 바뀌었을 수 있음)
+  const QPointF c2 = pv->dialCenter;
+  send(QEvent::MouseMove, c2, Qt::NoButton, Qt::NoButton);
+  send(QEvent::MouseButtonDblClick, c2, Qt::LeftButton, Qt::LeftButton);
+  send(QEvent::MouseButtonRelease, c2, Qt::LeftButton, Qt::NoButton);
+  t.restart();
+  while (t.elapsed() < 120000 && (pv->handleBusy || undo_->index() == undo0 + 1))
+    pump(20);
+  pump(200);
+  const bool north = std::abs(plan_->rotationDeg()) < 1e-9 &&
+                     lastCombo_->useRotation &&
+                     std::abs(lastCombo_->rotationDeg) < 1e-9 &&
+                     std::abs(pv->pageZoom - 1.0) < 1e-12;
+  // 평면 화면에서 돌리면 열린 도면도 따라감(되돌리기 = 평면 방향 칸 하나 앞으로)
+  setPlanRotation(12.5, true);
+  pump(100);
+  const bool follows = lastCombo_->useRotation &&
+                       std::abs(lastCombo_->rotationDeg - 12.5) < 1e-9;
+  const bool ok = outside && liveMid && same &&
+                  std::abs(turned - normDeg180(deg)) < 0.5 && undone &&
+                  north && follows;
+  say(QStringLiteral("combo-dial: deg=%1 auto-before=%2 turned=%3 plan=%4 "
+                     "outside-paper=%5 live=%6 same=%7 undo=%8 north-dbl=%9 "
+                     "follows-plan=%10 %11")
+          .arg(deg, 0, 'f', 1)
+          .arg(auto0 ? 1 : 0)
+          .arg(turned, 0, 'f', 2)
+          .arg(plan_->rotationDeg(), 0, 'f', 2)
+          .arg(outside ? 1 : 0)
+          .arg(liveMid ? 1 : 0)
+          .arg(same ? 1 : 0)
+          .arg(undone ? 1 : 0)
+          .arg(north ? 1 : 0)
+          .arg(follows ? 1 : 0)
+          .arg(ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
+  return ok;
 }

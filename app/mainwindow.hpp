@@ -145,18 +145,25 @@ struct ComboSheetParams {
   double levelMinorPt = 0.2, levelMajorPt = 0.5;
   bool depthFade = false;
   bool smooth = false; // 잘린 선 평활(화면 설정과 같게)
+  /// 평면 방향(2026-10-16, 사용자 「평면을 어떻게 놓을지 먼저 정한다」): 켜면 첫
+  /// 단면 기준 자동 회전 대신 rotationDeg(진북이 화면 위에서 시계 방향으로 돈
+  /// 각, PlanView::rotationDeg 와 같은 값)로 놓는다
+  bool useRotation = false;
+  double rotationDeg = 0;
   QString title, srsLabel, date;
 };
 /// 한 단면의 입력(로컬 좌표 단면선 + 앞 · 뒤 깊이, 이름 "A–A′")
 struct ComboSecInput {
   asec::SectionLine line;
   QString name;
+  int index = -1; // sections_ 안 자리(도면에서 끈 단면선을 목록에 되돌려 쓸 곳)
 };
 struct ComboSecAsset {
   asec::SectionResult r;
   QImage img; // 입면 영상(그림 칸 s 0..L · 표고 범위로 잘라 둠). 없으면 비움
   double imgS0 = 0, imgZ1 = 0, imgRes = 0; // z 로컬
   QString nameA, nameB;
+  int input = -1; // 입력(ComboSecInput 목록) 안 자리 — 계산 못 한 단면은 빠지므로
 };
 struct ComboAssets {
   std::vector<ComboSecAsset> secs;
@@ -164,6 +171,9 @@ struct ComboAssets {
   /// m/px. 만들 때의 평면 여유 planMarginM
   QImage plan;
   double planS0 = 0, planT1 = 0, planRes = 0, planMarginM = -1;
+  /// 평면 영상을 그린 돌린 틀(원점 · s 축 · t 축). 단면선을 끄는 동안 틀이 바뀌면
+  /// 이 틀에서 새 틀로 옮겨 그린다(놓으면 새 틀로 다시 그림)
+  double planAx = 0, planAy = 0, planUx = 1, planUy = 0, planNx = 0, planNy = 1;
   asec::Vec3 origin;
   QStringList skipped; // 메시와 만나지 않는 등으로 뺀 단면(「A–A′: 까닭」)
 };
@@ -322,12 +332,17 @@ public:
                               double res, ComboAssets &out, QString *msg,
                               const std::atomic<bool> *cancel = nullptr);
   static asec::ComboLayout comboLayoutFor(const ComboAssets &a,
-                                          const ComboSheetParams &sp);
+                                          const ComboSheetParams &sp,
+                                          const asec::ComboLayout *keepFrame = nullptr);
   /// minLinePx = 화면 미리보기에서 선이 이보다 가늘지 않게(저장은 0 — 종이
   /// 굵기 그대로)
+  /// layout 을 주면 그 배치로(끄는 동안 틀을 붙든 배치), hideLine = 평면에서
+  /// 그리지 않을 단면선(끄는 중인 선 — 화면이 따로 그림)
   static void paintComboSheet(QPainter &p, const ComboAssets &a,
                               const ComboSheetParams &sp, double pxPerMm,
-                              double minLinePx = 0);
+                              double minLinePx = 0,
+                              const asec::ComboLayout *layout = nullptr,
+                              int hideLine = -1);
   static bool exportComboSheet(asec::MeshSource &src,
                                const std::vector<ComboSecInput> &in,
                                const ComboSheetParams &sp, const QString &path,
@@ -346,6 +361,11 @@ public:
   /// 버그)
   static void clearLayout(QLayout *lay);
   bool undoTest(QString *log); // 자동화: 되돌리기/다시 점검
+  bool planRotateTest(QString *log); // 자동화: 평면 방향(다이얼 · 두 점 맞춤) 점검
+  /// 자동화(--combo-drag px, 종료 코드 14): 열린 평·단면도에서 기준 단면 A′ 끝을
+  /// 가로로 px 만큼 끌고 놓아, 단면 목록 · 되돌리기 · 다시 배치가 끈 만큼 바뀌는지
+  bool comboDragTest(double dxPx, QString *log);
+  bool comboDialTest(double deg, QString *log);
   bool uiAudit(const QString &dir,
                QString *log); // 자동화(v4 단계 1): 같은 일 단추 겹침 · 자리
                               // 규칙 잠금 시험
@@ -496,6 +516,8 @@ private:
                                    // 단면) — 「n장 저장」
   std::function<void()>
       onSheetChecksChanged_; // 열린 조판 판이 「n장」 글을 고치게
+  /// 열린 평·단면도가 평면 방향을 따라가게(평면 화면 다이얼 · 각도 칸 · 되돌리기). final = 놓음
+  std::function<void(bool final)> comboRotHook_;
   QPointer<QLabel> sheetCount_;
   QPointer<QLabel> sheetDoneLabel_; // 조판 판 바닥 「n장 저장됨 · 폴더
                                     // 열기」(열린 조판의 것)
@@ -638,6 +660,8 @@ public:
     bool image = true, profile = true, levels = true, ticks = true,
          fade = false, smooth = false;
     int current = 0;
+    double rot = 0;      // 평면 방향(진북이 화면 위에서 시계 방향으로 돈 각, 2026-10-16)
+    bool rotSet = false; // 사용자가 방향을 정함(평·단면도가 이 방향을 쓴다)
     bool operator==(const ViewState &o) const;
   };
   ViewState captureState() const;
@@ -645,7 +669,14 @@ public:
   void commitState(const QString &text, int mergeId = -1);
   QUndoStack *undoStack() const { return undo_; }
 
+  /// 평면 방향을 바꿈(다이얼 · 두 점 맞춤 · 각도 칸 · 도면 다이얼). final 이면 되돌리기 한 칸 + 프로젝트 저장
+  void setPlanRotation(double deg, bool final);
+  bool planRotationSet() const { return planRotSet_; }
+
 private:
+  bool planRotSet_ = false;               // 사용자가 평면 방향을 정함(아니면 평·단면도는 첫 단면 기준 자동)
+  QDoubleSpinBox *rotSpin_ = nullptr; // 평면 머리의 각도 칸
+  void syncRotationUi();
   ViewState lastState_;
   bool applyingState_ = false;
   // ---- 단면 목록(P1-1): 실좌표, 설정(모델 경로 키)에 저장

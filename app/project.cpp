@@ -265,6 +265,8 @@ ProjectDoc MainWindow::captureProject() const {
     p.camY = plan_->cameraY() + o.y;
     p.metersPerPixel = plan_->metersPerPixel();
   }
+  p.hasPlanRotation = planRotSet_; // 평면 방향(2026-10-16) — 정했을 때만
+  p.planRotationDeg = planRotSet_ ? plan_->rotationDeg() : 0.0;
   { // 단면도 조판: 지금 연 조판 값(없으면 기본값 = 설정)
     const SheetParams sp = lastSheet_ ? *lastSheet_ : defaultSheetParams();
     ProjectSheet &s = p.sectionSheet;
@@ -441,6 +443,10 @@ void MainWindow::applyProject(const ProjectDoc &p) {
   }
   if (!appliedLine) {
     section_->setStyle(secStyle());
+  }
+  if (p.hasPlanRotation) { // 평면 방향(표시만) — 카메라보다 먼저(맞춤이 돌린 크기로)
+    plan_->setRotationDeg(p.planRotationDeg);
+    planRotSet_ = true;
   }
   if (p.hasCamera) {
     const double cx = p.camX - o.x, cy = p.camY - o.y, mpp = p.metersPerPixel;

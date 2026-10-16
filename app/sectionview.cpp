@@ -93,10 +93,18 @@ SectionDoc SectionView::doc() const {
     return d;
 }
 
-LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport) {
+LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport, LevelLabelFit* fit) {
     QFont small(theme::fontFamily()); small.setPixelSize(std::max(8, int(std::lround(11.5 * ui))));
     const double minLinePx = forExport ? 0.5 / 25.4 * 96.0 * ui : 8.0 * ui;   // 인쇄 0.5 mm / 화면 8 px(더 촘촘하면 50 cm 선만 — 회색 면처럼 보이지 않게, 검토 UI 1)
-    return planLevels(ppm, minLinePx, QFontMetricsF(small).height() * 1.35, 10);
+    const double textH = QFontMetricsF(small).height() * 1.35;
+    LevelPlan lp = planLevels(ppm, minLinePx, textH, 10);
+    // 숫자는 50 cm 마다(사용자 2026-10-16 「축척이 80 이상이 되면 해발값이 사라진다 · 0.5 m 마다 해발값은 꼭」): 옛 규칙은 글자가 겹치면
+    // 1 m 로 솎아 1:100 근처에서 50 cm 숫자가 사라졌다. 이제 글자를 줄이고 · 양쪽 번갈아 써서 50 cm 를 지키고, 그 선도 언제나 긋는다
+    const LevelLabelFit lf = fitLevelLabels(0.5 * ppm, textH);
+    lp.labelCm = lf.labelCm;
+    lp.lineCm = std::min(lp.lineCm, lf.labelCm);
+    if (fit) *fit = lf;
+    return lp;
 }
 
 void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const SectionXf& xf, double ui, const QImage& img, bool forExport,
@@ -147,9 +155,10 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     //    간격 규칙(planLevels): 선 10 cm·숫자 50 cm 기본. 화면은 선 사이 4 px, 인쇄(내보내기)는 0.5 mm 보다 좁으면 50 cm·1 m·5 m 로 솎음.
     //    확대해도 10 cm 보다 촘촘하게 긋지 않음.
     std::vector<LevelLine> levels;
-    LevelPlan lp = sectionLevelPlan(ppmZ, ui, forExport);   // 레벨선 간격은 세로 픽셀/m 기준
+    LevelLabelFit lf;
+    LevelPlan lp = sectionLevelPlan(ppmZ, ui, forExport, &lf);   // 레벨선 간격은 세로 픽셀/m 기준
     // 세로 과장 화면: 10 cm 선마다 숫자가 겹치지 않으면 10 cm 숫자(얕은 기복 읽기). 내보내기·1:1 은 규칙 그대로(50 cm)
-    if (vex > 1.0 && lp.lineCm == 10 && 0.1 * ppmZ >= fm.height() * 1.35) lp.labelCm = 10;
+    if (vex > 1.0 && lp.lineCm == 10 && 0.1 * ppmZ >= fm.height() * 1.35) { lp.labelCm = 10; lf = LevelLabelFit{10, false, 1.0}; }
     if (st_.showLevels) {
         // 표고 범위(r.zMin–zMax, 잘린 선 ±10 cm 선) 안에만 — 화면이 높아도 위아래로 레벨선을 늘어놓지 않음(사용자 2026-10-16 「해발선 여유폭이 너무 넓다」)
         levels = levelLines(std::max(zVis0, r_.zMin + oz - 1e-9), std::min(zVis1, r_.zMax + oz + 1e-9), lp.lineCm);
@@ -295,17 +304,36 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         sideClip += sideR.toAlignedRect();
         p.setClipRegion(sideClip);
         const int lab = lp.labelCm;
+        // 좁으면 글자를 줄이고(lf.scale) · 왼쪽 · 오른쪽 번갈아(lf.alternate — 짝수 번째 cm 는 왼쪽, 홀수 번째는 오른쪽: 끌어도 자리가 안 바뀜)
+        QFont lMono = mono, lMonoBold = monoBold;
+        if (lf.scale < 1.0) {
+            lMono.setPixelSize(std::max(6, int(std::lround(mono.pixelSize() * lf.scale))));
+            lMonoBold.setPixelSize(lMono.pixelSize());
+        }
+        const double lh = fm.height() * lf.scale;
         for (auto& lv : levels) {
             if (lv.cm % lab != 0) continue;
             double ys = Y(lv.z);
-            if (ys < pr.top() + fm.height() * 0.3 || ys > pr.bottom() - fm.height() * 0.3) continue;
-            p.setFont(lv.cls == LevelClass::Master ? monoBold : mono);
+            if (ys < pr.top() + lh * 0.3 || ys > pr.bottom() - lh * 0.3) continue;
+            const long kth = lv.cm / lab;
+            const bool onL = !lf.alternate || kth % 2 == 0, onR = !lf.alternate || kth % 2 != 0;
+            p.setFont(lv.cls == LevelClass::Master ? lMonoBold : lMono);
             p.setPen(theme::LevelText);
             QString t = QString::fromStdString(formatElevation(lv.z));
-            QRectF labL(area.left(), ys - fm.height() / 2, std::max(0.0, pr.left() - area.left() - 8 * ui), fm.height());
-            p.drawText(labL, Qt::AlignRight | Qt::AlignVCenter, t);
+            QRectF labL(area.left(), ys - lh / 2, std::max(0.0, pr.left() - area.left() - 8 * ui), lh);
+            QRectF labR(pr.right() + 7 * ui, ys - lh / 2, std::max(0.0, area.right() - pr.right() - 8 * ui), lh);
+            // 여백 칸보다 긴 숫자는 그 칸에 들어가게 글자만 줄인다(오른쪽 여백 9 mm 에서 「45.5」 끝이 잘리던 것 — 번갈아 쓰면 오른쪽에만 있는 숫자가 생긴다)
+            auto fitText = [&](const QRectF& r, int align) {
+                const QFont f0 = p.font();
+                const double tw = QFontMetricsF(f0).horizontalAdvance(t);
+                if (tw > r.width() && r.width() > 1) {
+                    QFont f1 = f0; f1.setPixelSize(std::max(6, int(std::floor(f0.pixelSize() * r.width() / tw))));
+                    p.setFont(f1); p.drawText(r, align, t); p.setFont(f0);
+                } else p.drawText(r, align, t);
+            };
+            if (onL) fitText(labL, Qt::AlignRight | Qt::AlignVCenter);
             if (probe) {
-                probe->labels.push_back(labL);
+                probe->labels.push_back(onL ? labL : labR);
                 probe->labelText << t;
                 if (probe->neighborPx <= 0 && probe->labels.size() >= 2)
                     probe->neighborPx = std::abs(probe->labels.back().center().y() - probe->labels[probe->labels.size() - 2].center().y());
@@ -316,7 +344,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
             p.drawLine(QPointF(pr.left() - 5 * ui, ys), QPointF(pr.left(), ys));
             p.drawLine(QPointF(pr.right(), ys), QPointF(pr.right() + 5 * ui, ys));
             p.setPen(theme::LevelText);
-            p.drawText(QRectF(pr.right() + 8 * ui, ys - fm.height() / 2, std::max(0.0, area.right() - pr.right() - 10 * ui), fm.height()), Qt::AlignLeft | Qt::AlignVCenter, t);
+            if (onR) fitText(labR, Qt::AlignLeft | Qt::AlignVCenter);
         }
         p.restore();
         p.setFont(small); p.setPen(theme::Idle);   // 잘림 영역 밖에서(안에서는 그림 칸 위라 전부 잘렸음 — 검토 UI 8)

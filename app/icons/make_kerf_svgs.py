@@ -44,6 +44,7 @@ ICONS = {
     'gap': '<path d="M3 12h5M16 12h5"/><path d="M10 9l-1 6M15 9l-1 6"/>',
     'menu': '<path d="M4 7h16M4 12h16M4 17h16"/>',
     'sheet': '<rect x="4" y="3" width="16" height="18" rx="1"/><rect x="7" y="6" width="10" height="8"/><path d="M7 17h10"/>',
+    'align-2pt': '<circle cx="5" cy="15" r="2"/><circle cx="19" cy="15" r="2"/><path d="M7 15h10"/><path d="M5 8a8 8 0 0 1 13-3"/><path d="M18 2v3h-3"/>',   # 두 점 맞춤(두 점이 가로로 + 돌리기)
 }
 HEAD = ('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" '
         'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">\n')

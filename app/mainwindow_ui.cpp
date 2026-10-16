@@ -452,7 +452,8 @@ bool MainWindow::ViewState::operator==(const ViewState &o) const {
   return hasLine == o.hasLine && (!hasLine || eqL(line, o.line)) &&
          front == o.front && back == o.back && image == o.image &&
          profile == o.profile && levels == o.levels && ticks == o.ticks &&
-         fade == o.fade && smooth == o.smooth && current == o.current;
+         fade == o.fade && smooth == o.smooth && current == o.current &&
+         rot == o.rot && rotSet == o.rotSet;
 }
 
 QAction *MainWindow::makeAction(const QString &key, const QString &ko,
@@ -975,6 +976,23 @@ QWidget *MainWindow::buildPlanFrame() {
     QObject::connect(a, &QAction::triggered, this, fn);
     h->addWidget(iconBtn(a));
   };
+  // 평면 방향(2026-10-16): 각도 칸(진북이 위에서 시계 방향으로 돈 각) · 두 점 맞춤. 다이얼은 평면 오른쪽 아래 진북 표시
+  rotSpin_ = new QDoubleSpinBox;
+  rotSpin_->setObjectName("planRotation");
+  rotSpin_->setRange(-180.0, 180.0);
+  rotSpin_->setDecimals(1);
+  rotSpin_->setSingleStep(1.0);
+  rotSpin_->setWrapping(true);
+  rotSpin_->setSuffix(QStringLiteral("°"));
+  rotSpin_->setKeyboardTracking(false);
+  rotSpin_->setFixedWidth(70);
+  rotSpin_->setToolTip(QStringLiteral(
+      "평면 방향: 진북이 화면 위에서 시계 방향으로 돈 각(0 = 북쪽 위). 표시만 "
+      "돌리고 좌표 · 높이는 그대로입니다. 평·단면도도 이 방향으로 놓입니다."));
+  QObject::connect(rotSpin_, &QDoubleSpinBox::valueChanged, this,
+                   [this](double v) { setPlanRotation(v, true); });
+  h->addWidget(rotSpin_);
+  h->addWidget(iconBtn(action("align2")));
   h->addWidget(iconBtn(action("top"))); // v4: 위에서(T) — 제자리
   mk(theme::Ico::Fit, QStringLiteral("맞춤 (F)"), [this] { plan_->fitAll(); });
   mk(theme::Ico::ZoomIn, QStringLiteral("확대"),
@@ -2330,7 +2348,27 @@ MainWindow::ViewState MainWindow::captureState() const {
   s.fade = action("fade")->isChecked();
   s.smooth = action("smooth")->isChecked();
   s.current = current_;
+  s.rot = plan_->rotationDeg();
+  s.rotSet = planRotSet_;
   return s;
+}
+
+void MainWindow::syncRotationUi() {
+  if (!rotSpin_)
+    return;
+  QSignalBlocker b(rotSpin_);
+  rotSpin_->setValue(plan_->rotationDeg());
+}
+
+void MainWindow::setPlanRotation(double deg, bool final) {
+  if (std::abs(asec::normDeg180(deg - plan_->rotationDeg())) > 1e-9)
+    plan_->setRotationDeg(deg);
+  planRotSet_ = true;
+  syncRotationUi();
+  if (final)
+    commitState(QStringLiteral("평면 방향 %1°").arg(plan_->rotationDeg(), 0, 'f', 1));
+  if (comboRotHook_)
+    comboRotHook_(final);
 }
 
 void MainWindow::applyState(const ViewState &s) {
@@ -2348,6 +2386,11 @@ void MainWindow::applyState(const ViewState &s) {
     action(k)->setChecked(
         v); // applyingState_ 가 되돌리기 기록을 막음(단추 동기화는 신호로)
   section_->setStyle(secStyle());
+  plan_->setRotationDeg(s.rot); // 평면 방향도 되돌린다(표시만)
+  planRotSet_ = s.rotSet;
+  syncRotationUi();
+  if (comboRotHook_)
+    comboRotHook_(true);
   current_ = (s.current >= 0 && s.current < int(sections_.size())) ? s.current
                                                                    : current_;
   if (s.hasLine) {
@@ -2381,6 +2424,120 @@ void MainWindow::commitState(const QString &text, int mergeId) {
   undo_->push(new StateCmd(this, lastState_, now, text, mergeId));
   lastState_ = now;
   saveModelState();
+}
+
+// --plan-rotate-test(종료 코드 16): 평면 방향(2026-10-16) — 다이얼을 마우스로 45° 돌리면
+// 평면 · 각도 칸 · 되돌리기가 따라가고, 화면 위쪽이 진북에서 그만큼 돈 땅 방향이며, 두 점
+// 맞춤이 찍은 두 점을 화면 가로(다시 누르면 세로)로 놓고, 다이얼 두 번 누름이 북쪽 위인지
+bool MainWindow::planRotateTest(QString *log) {
+  auto say = [&](const QString &s) {
+    if (log)
+      *log += s + "\n";
+  };
+  if (!src_ || !plan_) {
+    say("plan-rotate: 모델 없음 FAIL");
+    return false;
+  }
+  auto pump = [](int ms) {
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < ms)
+      QApplication::processEvents(QEventLoop::AllEvents, 10);
+  };
+  auto send = [&](QEvent::Type ty, QPointF q, Qt::MouseButton b,
+                  Qt::MouseButtons bs) {
+    QMouseEvent ev(ty, q, plan_->mapToGlobal(q), b, bs, Qt::NoModifier);
+    QApplication::sendEvent(plan_, &ev);
+  };
+  // 화면 방향 → 땅 방향(진북에서 시계 방향 각, 도)
+  auto groundAngle = [&](QPointF from, QPointF to, double *deg) {
+    Vec2 a, b;
+    if (!plan_->screenToLocalXYPublic(from, a) ||
+        !plan_->screenToLocalXYPublic(to, b))
+      return false;
+    *deg = std::atan2(b.x - a.x, b.y - a.y) * 180.0 / M_PI;
+    return true;
+  };
+  const QPointF m(plan_->width() / 2.0, plan_->height() / 2.0);
+  setPlanRotation(0.0, true);
+  pump(100);
+  const int undo0 = undo_->index();
+  // ① 다이얼 끌기 45°
+  const QPointF c = plan_->compassCenter();
+  const double R = PlanView::dialRadius() * 0.8;
+  auto ring = [&](double a) {
+    const double r = a * M_PI / 180.0;
+    return c + QPointF(std::sin(r), -std::cos(r)) * R;
+  };
+  send(QEvent::MouseMove, ring(0), Qt::NoButton, Qt::NoButton);
+  send(QEvent::MouseButtonPress, ring(0), Qt::LeftButton, Qt::LeftButton);
+  for (int i = 1; i <= 9; ++i) {
+    send(QEvent::MouseMove, ring(45.0 * i / 9.0), Qt::NoButton, Qt::LeftButton);
+    pump(20);
+  }
+  send(QEvent::MouseButtonRelease, ring(45.0), Qt::LeftButton, Qt::NoButton);
+  pump(100);
+  const double rot = plan_->rotationDeg();
+  const bool dialOk = std::abs(rot - 45.0) < 0.01 && planRotSet_;
+  const bool spinOk = rotSpin_ && std::abs(rotSpin_->value() - 45.0) < 0.051;
+  const bool undoOne = undo_->index() == undo0 + 1 &&
+                       undo_->text(undo_->index() - 1).contains(
+                           QStringLiteral("평면 방향"));
+  double upDeg = 0, rightDeg = 0;
+  const bool upOk = groundAngle(m, m - QPointF(0, 100), &upDeg) &&
+                    std::abs(normDeg180(upDeg + rot)) < 0.2; // 화면 위 = 진북에서 −45°
+  // ② 되돌리기 · 다시
+  undo_->undo();
+  pump(50);
+  const bool undoBack = std::abs(plan_->rotationDeg()) < 1e-9 &&
+                        rotSpin_ && std::abs(rotSpin_->value()) < 1e-9;
+  undo_->redo();
+  pump(50);
+  const bool redoOk = std::abs(plan_->rotationDeg() - 45.0) < 0.01 && planRotSet_;
+  // ③ 두 점 맞춤(가로) → 다시 누르면 세로
+  const QPointF P(plan_->width() * 0.32, plan_->height() * 0.62),
+      Q(plan_->width() * 0.68, plan_->height() * 0.41);
+  Vec2 wP, wQ;
+  bool alignH = false, alignV = false;
+  if (plan_->screenToLocalXYPublic(P, wP) &&
+      plan_->screenToLocalXYPublic(Q, wQ)) {
+    const double want = std::atan2(wQ.x - wP.x, wQ.y - wP.y) * 180.0 / M_PI;
+    action("align2")->trigger();
+    for (const QPointF &q : {P, Q}) {
+      send(QEvent::MouseMove, q, Qt::NoButton, Qt::NoButton);
+      send(QEvent::MouseButtonPress, q, Qt::LeftButton, Qt::LeftButton);
+      send(QEvent::MouseButtonRelease, q, Qt::LeftButton, Qt::NoButton);
+      pump(30);
+    }
+    alignH = groundAngle(m, m + QPointF(100, 0), &rightDeg) &&
+             std::abs(normDeg180(rightDeg - want)) < 0.2 && !plan_->aligning();
+    action("align2")->trigger(); // 방금 맞춘 그대로 → 세로
+    pump(30);
+    alignV = groundAngle(m, m - QPointF(0, 100), &upDeg) &&
+             std::abs(normDeg180(upDeg - want)) < 0.2;
+  }
+  // ④ 다이얼 두 번 = 북쪽 위
+  send(QEvent::MouseButtonDblClick, c, Qt::LeftButton, Qt::LeftButton);
+  send(QEvent::MouseButtonRelease, c, Qt::LeftButton, Qt::NoButton);
+  pump(50);
+  const bool northOk = std::abs(plan_->rotationDeg()) < 1e-9;
+  const bool ok = dialOk && spinOk && undoOne && upOk && undoBack && redoOk &&
+                  alignH && alignV && northOk;
+  say(QStringLiteral("plan-rotate: dial=%1(%2°) spin=%3 undo-one=%4 "
+                     "screen-up=%5 undo=%6 redo=%7 align-h=%8 align-v=%9 "
+                     "north-dbl=%10 %11")
+          .arg(dialOk ? 1 : 0)
+          .arg(rot, 0, 'f', 2)
+          .arg(spinOk ? 1 : 0)
+          .arg(undoOne ? 1 : 0)
+          .arg(upOk ? 1 : 0)
+          .arg(undoBack ? 1 : 0)
+          .arg(redoOk ? 1 : 0)
+          .arg(alignH ? 1 : 0)
+          .arg(alignV ? 1 : 0)
+          .arg(northOk ? 1 : 0)
+          .arg(ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
+  return ok;
 }
 
 bool MainWindow::undoTest(QString *log) {
@@ -2532,6 +2689,8 @@ void MainWindow::restoreModelState() {
   thumbs_.clear();
   current_ = -1;
   projectPath_.clear();
+  plan_->setRotationDeg(0); // 평면 방향: 모델마다(프로젝트에 있으면 아래에서)
+  planRotSet_ = false;
   // 프로젝트 파일이 있으면 그걸로(열기 대화상자·끌어놓기로 연 .trench.json →
   // 없으면 projects\ 의 자동 저장본). 없으면 설정(레지스트리)
   std::shared_ptr<ProjectDoc> pj = pendingProject_;
@@ -2561,6 +2720,7 @@ void MainWindow::restoreModelState() {
     restoreFromSettings();
   if (undo_)
     undo_->clear();
+  syncRotationUi();
   lastState_ = captureState();
   updateDepthChips();
   refreshSectionList();
@@ -3476,6 +3636,8 @@ MainWindow::MainWindow() {
   makeAction("fit", QStringLiteral("맞춤"), "Fit View", I::Fit, "F");
   makeAction("top", QStringLiteral("위에서"), "Top", I::Orbit,
              "T"); // 「평면」 칩(map)과 다른 아이콘(검토 UI 6)
+  makeAction("align2", QStringLiteral("두 점 맞춤"), "Align by two points",
+             I::Align2); // 평면 방향(2026-10-16): 두 점을 찍은 선이 화면 가로
   makeAction("zoomin", QStringLiteral("확대"), "Zoom In", I::ZoomIn, "+");
   makeAction("zoomout", QStringLiteral("축소"), "Zoom Out", I::ZoomOut, "-");
   makeAction("image", QStringLiteral("입면 영상"), "Image", I::Image, "I", true)
@@ -3839,9 +4001,18 @@ MainWindow::MainWindow() {
     section_->update();
   });
   action("top")->setToolTip(QStringLiteral(
-      "3D로 돌린 뒤 평면 제자리 (T). 왼쪽 화면 N 을 눌러도 같습니다."));
+      "3D로 기울인 뒤 위에서 보기로 · 맞춤 (T). 평면 방향은 그대로 — 북쪽 위는 "
+      "오른쪽 아래 진북 다이얼을 두 번 누릅니다."));
   QObject::connect(action("top"), &QAction::triggered, this,
                    [this] { plan_->homeView(); });
+  action("align2")->setToolTip(QStringLiteral(
+      "두 점 맞춤: 평면에서 두 점(유구 장축 · 조사 경계 등)을 찍으면 그 선이 "
+      "화면 가로가 되게 평면을 돌립니다. 바로 한 번 더 누르면 세로. Esc 취소"));
+  QObject::connect(action("align2"), &QAction::triggered, this,
+                   [this] { plan_->startAlignTwoPoints(); });
+  plan_->onRotate = [this](double deg, bool final) {
+    setPlanRotation(deg, final);
+  };
   QObject::connect(action("zoomin"), &QAction::triggered, this, [this] {
     plan_->zoomBy(1 / 1.4);
     section_->zoomBy(1.4);
