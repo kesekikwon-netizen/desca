@@ -5576,9 +5576,10 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
   d.addLayer("PLAN_TEXT", 7, 18);
   d.addLayer("NORTH", 7, 18);
   d.addLayer("SECTION_IMAGE", 7);
-  d.addLayer("SECTION_PROFILE", 1, dxfLineWeight(asec::kCutLinePt));
-  d.addLayer("LEVEL_10CM", 9, dxfLineWeight(sp.levelMinorPt));
-  d.addLayer("LEVEL_50CM", 8, dxfLineWeight(sp.levelMajorPt));
+  // 0.8 · 0.5 · 0.2 = SVG 와 같은 레이어 이름(사용자 2026-10-16 「0.2 0.5 0.8로 레이어를 잡아 내보내기」)
+  d.addLayer(asec::kLayerCut, 1, dxfLineWeight(asec::kCutLinePt));
+  d.addLayer(asec::kLayerLevelMinor, 9, dxfLineWeight(sp.levelMinorPt));
+  d.addLayer(asec::kLayerLevelMajor, 8, dxfLineWeight(sp.levelMajorPt));
   d.addLayer("LEVEL_TEXT", 7, 18);
   d.addLayer("SECTION_TEXT", 7, 25);
   d.addLayer("TITLE", 7, 18);
@@ -5683,7 +5684,7 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
       for (const LevelLine &lv :
            levelLines(as.r.zMin + oz - 1e-9, as.r.zMax + oz + 1e-9, 10)) {
         const char *layer =
-            lv.cls == LevelClass::Minor ? "LEVEL_10CM" : "LEVEL_50CM";
+            lv.cls == LevelClass::Minor ? asec::kLayerLevelMinor : asec::kLayerLevelMajor;
         const double y = Y(lv.z);
         if (ground) {
           for (const SGap &g : levelLineSpans(as.r.profile, lv.z - oz, 0.0, L0))
@@ -5733,7 +5734,7 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
       pts.reserve(n);
       for (size_t j = 0; j < n; ++j)
         pts.push_back(Q2(X(pl0[j].x), Y(pl0[j].y + oz)));
-      d.polyline2d("SECTION_PROFILE", pts, closed);
+      d.polyline2d(asec::kLayerCut, pts, closed);
     }
     d.text("SECTION_TEXT", Q(X(0), -1.0), kDxfTextMm,
            dxfAscii(as.nameA).toStdString(), 1, 1, textRot);

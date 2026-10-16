@@ -117,7 +117,7 @@ TEST_CASE("DXF 레벨선 땅속만 선택: 수혈 가운데를 지나는 레벨�
             if (code == 10) x0 = std::stod(val);
             if (code == 11) {
                 x1 = std::stod(val);
-                if (layer.rfind("LEVEL_", 0) == 0 && layer != "LEVEL_TEXT") {
+                if (layer == "0.2" || layer == "0.5") {   // 해발선 레이어(사용자 2026-10-16 「0.2 0.5 0.8로 레이어」)
                     ++lines;
                     if (std::min(x0, x1) < 4.0 && std::max(x0, x1) > 4.0) ++crossing;
                 }

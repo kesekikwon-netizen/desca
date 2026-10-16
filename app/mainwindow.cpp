@@ -951,8 +951,8 @@ bool MainWindow::exportSectionDxf(const SectionDoc &doc, MeshSource &src,
     nv += pl.size();
   if (msg)
     *msg = QStringLiteral(
-               "%1%2\n\n%3 · 단면선 %4개(%5점), 레이어 SECTION_PROFILE = "
-               "빨강(1)\n레벨선 10 cm / 50 cm / 1 m, 표고 라벨, 축, A·A′ 표시")
+               "%1%2\n\n%3 · 단면선 %4개(%5점), 레이어 0.8 = "
+               "빨강(1)\n레벨선 레이어 0.2(10 cm) · 0.5(50 cm · 1 m), 표고 라벨, 축, A·A′ 표시")
                .arg(QFileInfo(path).fileName(),
                     pngName.isEmpty() ? QString() : ", " + pngName,
                     p.world3d ? QStringLiteral("3D 실좌표(EPSG) 배치")
@@ -1387,8 +1387,8 @@ void MainWindow::dlgSectionDxf() {
     double denom = sr.denom(), dpi = sr.dpi->value();
     calc->setText(
         QStringLiteral("문자 높이 2 mm × 1/%1 = <b>%2 m</b> · 영상 픽셀 <b>%3 "
-                       "mm</b><br>레이어: SECTION_PROFILE(빨강 1), LEVEL_10CM "
-                       "/ 50CM / 1M, LEVEL_TEXT, SECTION_AXIS, SECTION_IMAGE")
+                       "mm</b><br>레이어: 0.8(빨간 단면선), 0.5(50 cm · 1 m 레벨선), "
+                       "0.2(10 cm 레벨선), LEVEL_TEXT, SECTION_AXIS, SECTION_IMAGE")
             .arg(denom, 0, 'f', 0)
             .arg(0.002 * denom, 0, 'f', 3)
             .arg(mm(groundResolution(denom, dpi))));
