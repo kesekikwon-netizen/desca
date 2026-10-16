@@ -6464,6 +6464,8 @@ bool MainWindow::comboDragTest(double dxPx, QString *log) {
   const QPointF at = h->at;
   const SavedSection before = sections_[size_t(sec)];
   const double sc = pv->fitPxPerMm, mmPerM = 1000.0 / lastCombo_->denom;
+  const bool rotSet = lastCombo_->useRotation; // 끄는 동안 바뀌지 않음
+  const double rotDeg = lastCombo_->rotationDeg;
   const int undo0 = undo_->index();
   auto send = [&](QEvent::Type ty, QPointF q, Qt::MouseButton b,
                   Qt::MouseButtons bs) {
@@ -6487,13 +6489,21 @@ bool MainWindow::comboDragTest(double dxPx, QString *log) {
     pump(20);
   pump(200);
   const SavedSection &after = sections_[size_t(sec)];
-  const double ux = before.bx - before.ax, uy = before.by - before.ay,
-               ul = std::hypot(ux, uy);
-  const double ds = dxPx / (sc * mmPerM); // 기준 단면은 종이 가로 = A→A′
+  // 종이 가로(오른쪽)의 땅 방향: 평면 방향이 자동이면 기준 단면 A→A′, 정해져 있으면 그 각
+  // (같은 --settings 로 --combo-dial 뒤에 돌리면 프로젝트에서 평면 방향이 되살아난다)
+  double ux = before.bx - before.ax, uy = before.by - before.ay;
+  if (rotSet) {
+    const ComboLayout f = comboFrameForRotation(rotDeg);
+    ux = f.ux;
+    uy = f.uy;
+  }
+  const double ul = std::hypot(ux, uy);
+  const double ds = dxPx / (sc * mmPerM);
   const double ex = ux / ul * ds, ey = uy / ul * ds;
   const double gx = after.bx - before.bx, gy = after.by - before.by;
-  const bool moved = std::fabs(gx - ex) < 1e-6 && std::fabs(gy - ey) < 1e-6 &&
-                     after.ax == before.ax && after.ay == before.ay;
+  const double moveErr = std::hypot(gx - ex, gy - ey);
+  const bool aFixed = after.ax == before.ax && after.ay == before.ay;
+  const bool moved = moveErr < 1e-6 && aFixed;
   const bool undone = undo_->index() > undo0 &&
                       undo_->text(undo_->index() - 1).contains(
                           QStringLiteral("도면에서"));
@@ -6508,18 +6518,24 @@ bool MainWindow::comboDragTest(double dxPx, QString *log) {
                 (pv->fitPxPerMm * mmPerM);
   const double newLen = std::hypot(after.bx - after.ax, after.by - after.ay);
   const bool relaid = ha && hb && std::fabs(lenScreen - newLen) < 0.01;
-  const bool ok = pinnedMid && moved && undone && relaid && !pv->handlePinned;
-  say(QStringLiteral("combo-drag: section=%1 dx=%2px expect=%3m got=%4m "
-                     "len=%5m screen-len=%6m pinned-mid=%7 undo=%8 relaid=%9 %10")
+  const bool released = !pv->handlePinned;
+  const bool ok = pinnedMid && moved && undone && relaid && released;
+  say(QStringLiteral("combo-drag: section=%1 plan-dir=%2 dx=%3px expect=%4m "
+                     "got=%5m move-err=%6mm a-fixed=%7 len=%8m screen-len=%9m ")
           .arg(qs8(after.name))
+          .arg(rotSet ? QString::number(rotDeg, 'f', 2) : QStringLiteral("auto"))
           .arg(dxPx, 0, 'f', 1)
           .arg(ds, 0, 'f', 4)
           .arg(std::hypot(gx, gy), 0, 'f', 4)
+          .arg(moveErr * 1000.0, 0, 'g', 3)
+          .arg(aFixed ? 1 : 0)
           .arg(newLen, 0, 'f', 3)
-          .arg(lenScreen, 0, 'f', 3)
+          .arg(lenScreen, 0, 'f', 3) +
+      QStringLiteral("pinned-mid=%1 undo=%2 relaid=%3 released=%4 %5")
           .arg(pinnedMid ? 1 : 0)
           .arg(undone ? 1 : 0)
           .arg(relaid ? 1 : 0)
+          .arg(released ? 1 : 0)
           .arg(ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
   return ok;
 }
