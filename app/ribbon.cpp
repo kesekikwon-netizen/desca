@@ -176,9 +176,15 @@ int Ribbon::chooseLook(const QList<int>& widths, int available) {
 
 RibbonLook Ribbon::look() const { return looks().at(lookIndex_); }
 
+// 칩 폭은 모든 칩이 같다(사용자 2026-10-16 「전체 ui 크기와 배치 고르게」): 글자 보이는 크기는 가장 넓은 글자 + 8
+// (타일 + 6 보다 작지 않게, 글자 64 px 까지), 글자 숨김 크기는 표의 칩 폭. 칩마다 달랐을 때는 「열기」와 「프로젝트」의 폭이 달랐다
 int Ribbon::chipWidth(const RibbonLook& L, const QToolButton* b) const {
     if (!L.labels) return L.chipWidth;
-    return std::max(L.tile + 6, std::min(labelWidth(b), kMaxLabelWidth) + kLabelPad);   // 바닥은 타일 + 6(Strata 는 + 8 — 묶음 7 + 입면 위젯이 1920 에 들어가게 2 px 좁힘)
+    (void)b;
+    int w = L.tile + 6;   // 바닥은 타일 + 6(Strata 는 + 8 — 입면 위젯까지 1920 에 들어가게 2 px 좁힘)
+    for (const Chip& c : chips_)
+        if (!c.button->property("narrowOnly").toBool()) w = std::max(w, std::min(labelWidth(c.button), kMaxLabelWidth) + kLabelPad);
+    return w;
 }
 
 int Ribbon::chipHeight(const RibbonLook& L) const { return L.tile + 12 + (L.labels ? lineHeight() : 0); }

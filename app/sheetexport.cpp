@@ -50,6 +50,8 @@
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QSvgGenerator>
+#include <QXmlStreamReader>
+#include <QRegularExpression>
 #include <QTabBar>
 #include <QTimer>
 #include <QToolButton>
@@ -57,6 +59,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QKeyEvent>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -201,6 +204,270 @@ SheetMarks sheetMarks(const SheetLayout &L) {
   return m;
 }
 
+// ---- SVG 레이어(사용자 2026-10-16 「레이어가 너무 많이 잡힌다 · 단면선 빨간색은 0.8 · 해발선 0.5 · 0.2」) ----
+// QSvgGenerator 는 펜 · 붓 · 변환이 바뀔 때마다 <g> 를 새로 열어 일러스트레이터에서 그룹이 수백 개로 보인다. 저장한 뒤 그림 요소를
+// 여섯 레이어로 다시 묶는다(아래 → 위): 0.2(10 cm 해발선 0.2 pt) · 0.5(50 cm 해발선 0.5 pt) · 이미지(평면 · 입면 영상) · 틀(테두리 ·
+// 축척 막대 · 진북 · 평면 단면선 · 눈금) · 0.8(빨간 잘린 선 0.8 pt) · 글자(7 pt). 요소마다 원래 상위 <g>(변환 · 잘림 · 불투명도)를
+// 그대로 다시 감싸 모양 · 좌표 · 굵기는 바뀌지 않는다. 그리는 순서는 해발선 → 영상 → 빨간 선 그대로
+const char *const kSvgLayerNames[6] = {"0.2", "0.5", "이미지", "틀", "0.8", "글자"};
+enum SvgLayer { SvgL02 = 0, SvgL05, SvgLImage, SvgLFrame, SvgL08, SvgLText, SvgLDrop };
+
+/// 레이어 id: 일러스트레이터는 숫자로 시작하는 이름을 「_x30_」 처럼 적고 읽을 때 되돌린다(0.8 → _x30_.8)
+QString svgLayerId(const QString &name) {
+  if (!name.isEmpty() && name.at(0).isDigit())
+    return QStringLiteral("_x%1_").arg(int(name.at(0).unicode()), 2, 16, QLatin1Char('0')) + name.mid(1);
+  return name;
+}
+
+QString svgEsc(QString t, bool attr) {
+  t.replace(QLatin1Char('&'), QLatin1String("&amp;"));
+  t.replace(QLatin1Char('<'), QLatin1String("&lt;"));
+  t.replace(QLatin1Char('>'), QLatin1String("&gt;"));
+  if (attr)
+    t.replace(QLatin1Char('"'), QLatin1String("&quot;"));
+  return t;
+}
+
+QString svgOpenTag(const QXmlStreamReader &r) {
+  QString o = QLatin1Char('<') + r.qualifiedName().toString();
+  for (const QXmlStreamNamespaceDeclaration &ns : r.namespaceDeclarations())
+    o += ns.prefix().isEmpty()
+             ? QStringLiteral(" xmlns=\"%1\"").arg(svgEsc(ns.namespaceUri().toString(), true))
+             : QStringLiteral(" xmlns:%1=\"%2\"").arg(ns.prefix().toString(),
+                                                     svgEsc(ns.namespaceUri().toString(), true));
+  for (const QXmlStreamAttribute &a : r.attributes())
+    o += QStringLiteral(" %1=\"%2\"").arg(a.qualifiedName().toString(),
+                                          svgEsc(a.value().toString(), true));
+  return o + QLatin1Char('>');
+}
+
+/// 지금 요소(시작 태그를 읽은 상태)부터 끝 태그까지 그대로 글로
+QString svgSubtree(QXmlStreamReader &r) {
+  QString o = svgOpenTag(r);
+  int depth = 1;
+  while (depth > 0 && !r.atEnd()) {
+    r.readNext();
+    if (r.isStartElement()) {
+      o += svgOpenTag(r);
+      ++depth;
+    } else if (r.isEndElement()) {
+      o += QStringLiteral("</%1>").arg(r.qualifiedName().toString());
+      --depth;
+    } else if (r.isCharacters()) {
+      o += svgEsc(r.text().toString(), false);
+    }
+  }
+  return o;
+}
+
+/// transform="matrix(a,b,c,d,e,f)" 의 넓이 배율 √|ad − bc|(선 굵기가 이만큼 커진다)
+double svgTransformScale(const QString &t) {
+  const int a = t.indexOf(QLatin1String("matrix("));
+  if (a < 0)
+    return 1.0;
+  const int b = t.indexOf(QLatin1Char(')'), a);
+  const QStringList v = t.mid(a + 7, b - a - 7).split(QRegularExpression(QStringLiteral("[,\\s]+")),
+                                                       Qt::SkipEmptyParts);
+  if (v.size() < 4)
+    return 1.0;
+  return std::sqrt(std::abs(v[0].toDouble() * v[3].toDouble() - v[1].toDouble() * v[2].toDouble()));
+}
+
+struct SvgItem {
+  QString tag, xml, fill, stroke, chainKey;
+  QStringList chainOpen; // 원래 상위 <g> 들(바깥 → 안)
+  double fillOpacity = 1, strokeW = 1; // 굵기는 변환 배율을 곱한 종이 단위(96 dpi px = 0.75 pt)
+  int layer = SvgLFrame;
+};
+
+/// QSvgGenerator 가 쓴 글을 레이어 여섯으로. 실패하면 빈 글
+QString layerSvgText(const QString &in, const QString &desc) {
+  QXmlStreamReader r(in);
+  QString svgOpen, title;
+  QStringList defs;
+  std::vector<SvgItem> items;
+  struct Anc {
+    QString open;
+    int id;
+    QString fill, stroke;
+    double fillOpacity, strokeW, scale;
+    bool hasFill, hasStroke, hasFop, hasSw;
+  };
+  std::vector<Anc> chain;
+  int nextId = 0;
+  static const QStringList kLeaf = {QStringLiteral("path"),    QStringLiteral("polyline"),
+                                    QStringLiteral("polygon"), QStringLiteral("line"),
+                                    QStringLiteral("rect"),    QStringLiteral("circle"),
+                                    QStringLiteral("ellipse"), QStringLiteral("image"),
+                                    QStringLiteral("text")};
+  while (!r.atEnd()) {
+    r.readNext();
+    if (r.isStartElement()) {
+      const QString n = r.name().toString();
+      if (n == QLatin1String("svg")) {
+        svgOpen = svgOpenTag(r);
+        continue;
+      }
+      if (n == QLatin1String("title")) {
+        title = r.readElementText();
+        continue;
+      }
+      if (n == QLatin1String("desc")) {
+        r.skipCurrentElement();
+        continue;
+      }
+      if (n == QLatin1String("defs")) {
+        defs << svgSubtree(r);
+        continue;
+      }
+      if (n == QLatin1String("g")) {
+        const QXmlStreamAttributes at = r.attributes();
+        Anc a{svgOpenTag(r), nextId++, {}, {}, 1, 1, 1, false, false, false, false};
+        if (at.hasAttribute(QLatin1String("fill"))) { a.fill = at.value(QLatin1String("fill")).toString(); a.hasFill = true; }
+        if (at.hasAttribute(QLatin1String("stroke"))) { a.stroke = at.value(QLatin1String("stroke")).toString(); a.hasStroke = true; }
+        if (at.hasAttribute(QLatin1String("fill-opacity"))) { a.fillOpacity = at.value(QLatin1String("fill-opacity")).toDouble(); a.hasFop = true; }
+        if (at.hasAttribute(QLatin1String("stroke-width"))) { a.strokeW = at.value(QLatin1String("stroke-width")).toDouble(); a.hasSw = true; }
+        a.scale = svgTransformScale(at.value(QLatin1String("transform")).toString());
+        chain.push_back(a);
+        continue;
+      }
+      if (kLeaf.contains(n)) {
+        SvgItem it;
+        it.tag = n;
+        QString fill = QStringLiteral("black"), stroke = QStringLiteral("none");
+        double fop = 1, sw = 1, sc = 1;
+        for (const Anc &a : chain) {
+          if (a.hasFill) fill = a.fill;
+          if (a.hasStroke) stroke = a.stroke;
+          if (a.hasFop) fop = a.fillOpacity;
+          if (a.hasSw) sw = a.strokeW;
+          sc *= a.scale;
+          it.chainOpen << a.open;
+          it.chainKey += QString::number(a.id) + QLatin1Char('/');
+        }
+        const QXmlStreamAttributes at = r.attributes();
+        if (at.hasAttribute(QLatin1String("fill"))) fill = at.value(QLatin1String("fill")).toString();
+        if (at.hasAttribute(QLatin1String("stroke"))) stroke = at.value(QLatin1String("stroke")).toString();
+        if (at.hasAttribute(QLatin1String("fill-opacity"))) fop = at.value(QLatin1String("fill-opacity")).toDouble();
+        if (at.hasAttribute(QLatin1String("stroke-width"))) sw = at.value(QLatin1String("stroke-width")).toDouble();
+        sc *= svgTransformScale(at.value(QLatin1String("transform")).toString());
+        it.fill = fill.toLower();
+        it.stroke = stroke.toLower();
+        it.fillOpacity = fop;
+        it.strokeW = sw * sc;
+        it.xml = svgSubtree(r);
+        items.push_back(std::move(it));
+        continue;
+      }
+      r.skipCurrentElement(); // 그 밖(빈 DRAW_* 등)은 버림
+    } else if (r.isEndElement() && r.name() == QLatin1String("g") && !chain.empty()) {
+      chain.pop_back();
+    }
+  }
+  if (r.hasError() || svgOpen.isEmpty())
+    return {};
+
+  // 나누기: 굵기는 종이 위 pt(96 dpi 단위 = 0.75 pt) — 0.8 pt = 1.0667, 0.5 pt = 0.6667, 0.2 pt = 0.2667
+  const double u08 = asec::kCutLinePt / 0.75, u05 = 0.5 / 0.75, u02 = 0.2 / 0.75;
+  auto near = [](double a, double b) { return std::abs(a - b) <= 0.02 * std::max(1.0, b); };
+  const QString red = theme::ProfileRed.name(), lvMajor = theme::LevelMajor.name(),
+                lvMinor = theme::LevelMinor.name();
+  for (SvgItem &it : items) {
+    if (it.tag == QLatin1String("text"))
+      it.layer = SvgLText;
+    else if (it.tag == QLatin1String("image"))
+      it.layer = SvgLImage;
+    else if (it.stroke == red && near(it.strokeW, u08))
+      it.layer = SvgL08;
+    else if (it.stroke == lvMajor && near(it.strokeW, u05))
+      it.layer = SvgL05;
+    else if (it.stroke == lvMinor && near(it.strokeW, u02))
+      it.layer = SvgL02;
+  }
+  // 바탕 칠(선 없는 면): 아래 레이어(0.2 · 0.5 · 이미지)의 마지막 요소보다 먼저 그린 것은 틀(위)로 올리면 영상 · 해발선을 덮는다.
+  // 흰 불투명 바탕(종이 · 그림 칸 바탕)은 흰 종이 위라 버리고, 그 밖 색(평면 칸 옅은 바탕)은 이미지 레이어에서 원래 순서대로
+  int lastLow = -1;
+  for (int i = 0; i < int(items.size()); ++i)
+    if (items[i].layer <= SvgLImage)
+      lastLow = i;
+  for (int i = 0; i < lastLow; ++i) {
+    SvgItem &it = items[i];
+    if (it.layer != SvgLFrame || it.stroke != QLatin1String("none") ||
+        it.fill == QLatin1String("none"))
+      continue;
+    it.layer = (it.fill == QLatin1String("#ffffff") && it.fillOpacity >= 0.999) ? SvgLDrop : SvgLImage;
+  }
+
+  QString o = QStringLiteral("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n");
+  if (!svgOpen.contains(QLatin1String("xmlns:inkscape")))
+    svgOpen.insert(svgOpen.size() - 1,
+                   QStringLiteral(" xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\""));
+  o += svgOpen + QLatin1Char('\n');
+  o += QStringLiteral("<title>%1</title>\n<desc>%2</desc>\n").arg(svgEsc(title, false), svgEsc(desc, false));
+  for (const QString &d : defs)
+    o += d + QLatin1Char('\n');
+  for (int L = SvgL02; L <= SvgLText; ++L) {
+    bool any = false;
+    for (const SvgItem &it : items)
+      if (it.layer == L) { any = true; break; }
+    if (!any)
+      continue; // 빈 레이어는 만들지 않는다
+    const QString name = QString::fromUtf8(kSvgLayerNames[L]);
+    o += QStringLiteral("<g id=\"%1\" data-name=\"%2\" inkscape:label=\"%2\" inkscape:groupmode=\"layer\">\n")
+             .arg(svgEsc(svgLayerId(name), true), svgEsc(name, true));
+    // 원래 같은 상위 <g> 에 있던 이웃 요소끼리는 그 <g> 들을 한 번만 다시 연다
+    const QString *key = nullptr;
+    int open = 0;
+    for (const SvgItem &it : items) {
+      if (it.layer != L)
+        continue;
+      if (!key || it.chainKey != *key) {
+        for (; open > 0; --open)
+          o += QLatin1String("</g>");
+        o += it.chainOpen.join(QString()) + QLatin1Char('\n');
+        open = int(it.chainOpen.size());
+        key = &it.chainKey;
+      }
+      o += it.xml + QLatin1Char('\n');
+    }
+    for (; open > 0; --open)
+      o += QLatin1String("</g>");
+    o += QStringLiteral("\n</g>\n");
+  }
+  o += QStringLiteral("</svg>\n");
+  return o;
+}
+
+/// 저장한 SVG 파일을 레이어 여섯으로 다시 쓴다
+bool layerSvgFile(const QString &path, QString *msg) {
+  QFile f(path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (msg)
+      *msg = QStringLiteral("SVG 를 읽을 수 없습니다");
+    return false;
+  }
+  const QString in = QString::fromUtf8(f.readAll());
+  f.close();
+  const QString out = layerSvgText(
+      in, QStringLiteral("Layers: 0.2 = 10 cm level lines 0.2 pt, 0.5 = 50 cm level lines 0.5 pt, "
+                         "image, frame, 0.8 = red cut line 0.8 pt, text 7 pt"));
+  if (out.isEmpty()) {
+    if (msg)
+      *msg = QStringLiteral("SVG 레이어를 나눌 수 없습니다");
+    return false;
+  }
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    if (msg)
+      *msg = QStringLiteral("SVG 를 쓸 수 없습니다");
+    return false;
+  }
+  f.write(out.toUtf8());
+  return true;
+}
+
+/// DXF 글자 높이(종이 mm) = 7 pt 의 em — SVG · PDF 와 같은 7 pt(사용자 2026-10-16 「글자크기는 7pt 고정」)
+constexpr double kDxfTextMm = theme::ptMm(theme::kPaperTextPt);
+
 QString coordText(double v, double step) {
   int dec = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
   return QString::number(v, 'f', dec);
@@ -210,6 +477,9 @@ struct SheetChrome {
   QString title, srs, date, facing, kind, paper, pageTag;
   double denom = 40;
   bool showTitle = true;
+  /// ≥ 0 이면 축척 막대를 이 x(종이 mm) 가운데에 크게 놓고 도면 글은 그 아래 줄
+  /// 가운데(평·단면도, 사용자 2026-10-16 「축척자 더크게 중앙 평면 아래」)
+  double barCenterMm = -1;
 };
 
 void paintCompass(QPainter &p, double cx, double cy, double r, double k) {
@@ -226,9 +496,9 @@ void paintCompass(QPainter &p, double cx, double cy, double r, double k) {
   p.setBrush(theme::Ink);
   p.drawPolygon(arrow);
   p.setPen(theme::Ink);
-  QFont f = theme::uiFont(std::max(6, int(std::lround(2.2 * k))), true);
-  p.setFont(f);
-  p.drawText(QRectF(c.x() - R, c.y() - R - 3.2 * k, R * 2, 3.0 * k),
+  p.setFont(theme::paperFont(theme::uiFont(10, true), theme::kPaperTextPt, k,
+                              p.device()));
+  p.drawText(QRectF(c.x() - R * 2, c.y() - R - 3.2 * k, R * 4, 3.0 * k),
              Qt::AlignHCenter | Qt::AlignBottom, QStringLiteral("진북"));
 }
 
@@ -244,14 +514,21 @@ void paintSheetChrome(QPainter &p, const SheetLayout &L, double k,
   if (!c.showTitle)
     return;
 
-  const double ui = k * 25.4 / 96.0;
-  QFont fText = theme::uiFont(std::max(6, int(std::lround(10.5 * ui))));
-  QFont fMono = theme::monoFont(std::max(5, int(std::lround(9.5 * ui))));
+  // 도면 글자는 7 pt 고정(사용자 2026-10-16 「글자크기는 7pt 고정」 · 「글자 전부」)
+  const QFont fText =
+      theme::paperFont(theme::uiFont(10), theme::kPaperTextPt, k, p.device());
+  const QFont fMono =
+      theme::paperFont(theme::monoFont(10), theme::kPaperTextPt, k, p.device());
+  const double em = theme::ptMm(theme::kPaperTextPt);
+  const bool centred = c.barCenterMm >= 0;
 
-  // 막대는 종이 위에 들어가는 가장 긴 1·2·5×10ⁿ m (폭 약 20–35 mm)
+  // 막대는 종이 위에 들어가는 가장 긴 1·2·5×10ⁿ m (폭 약 20–35 mm, 평·단면도는
+  // 틀 안에서 최대 60 mm)
+  const double barMaxMm =
+      centred ? std::clamp(L.frameW - 16.0, 10.0, 60.0) : 35.0;
   double lenM = 0;
   {
-    const double maxM = 35.0 * c.denom / 1000.0,
+    const double maxM = barMaxMm * c.denom / 1000.0,
                  pw = std::pow(10.0,
                                std::floor(std::log10(std::max(1e-9, maxM))));
     for (double mlt : {1.0, 2.0, 5.0, 10.0})
@@ -261,9 +538,14 @@ void paintSheetChrome(QPainter &p, const SheetLayout &L, double k,
       lenM = pw;
   }
   const double barMm = lenM * 1000.0 / c.denom;
-  const double sbLeft = (L.frameX + 3.0) * k;
-  const double sbTop = (L.titleY + 1.8) * k;
-  const double sbH = 1.4 * k;
+  double sbLeftMm = L.frameX + 3.0;
+  if (centred)
+    sbLeftMm = std::clamp(c.barCenterMm - barMm * 0.5, L.frameX + 6.0,
+                          std::max(L.frameX + 6.0,
+                                   L.frameX + L.frameW - 6.0 - barMm));
+  const double sbLeft = sbLeftMm * k;
+  const double sbTop = (L.titleY + (centred ? 2.0 : 1.8)) * k;
+  const double sbH = (centred ? 2.0 : 1.4) * k;
   const QRectF sb(sbLeft, sbTop, barMm * k, sbH);
 
   p.setPen(QPen(theme::Ink, 0.2 * k));
@@ -281,11 +563,14 @@ void paintSheetChrome(QPainter &p, const SheetLayout &L, double k,
     return meters >= 1 ? QString::number(meters, 'g', 4) + " m"
                        : QString::number(meters * 100, 'g', 4) + " cm";
   };
-  p.drawText(QRectF(sb.left() - 5 * k, sb.bottom() + 0.4 * k, 10 * k, 3.2 * k),
+  const double numTop = sb.bottom() + 0.4 * k, numH = (em + 0.8) * k;
+  p.drawText(QRectF(sb.left() - 5 * k, numTop, 10 * k, numH),
              Qt::AlignHCenter | Qt::AlignTop, QStringLiteral("0"));
-  p.drawText(
-      QRectF(sb.right() - 12 * k, sb.bottom() + 0.4 * k, 24 * k, 3.2 * k),
-      Qt::AlignHCenter | Qt::AlignTop, ml(lenM));
+  if (centred) // 막대가 길어 가운데 값도 적는다
+    p.drawText(QRectF(sb.center().x() - 12 * k, numTop, 24 * k, numH),
+               Qt::AlignHCenter | Qt::AlignTop, ml(lenM * 0.5));
+  p.drawText(QRectF(sb.right() - 12 * k, numTop, 24 * k, numH),
+             Qt::AlignHCenter | Qt::AlignTop, ml(lenM));
 
   // 제일 하단 한 줄: 도면명 · 축척 1:<denom> · <srs> · <date> (· <pageTag>)
   QStringList parts;
@@ -300,6 +585,18 @@ void paintSheetChrome(QPainter &p, const SheetLayout &L, double k,
     parts << c.pageTag;
   const QString meta = parts.join(QStringLiteral("  ·  "));
 
+  if (centred) { // 막대 아래 줄, 막대와 같은 가운데(틀 안으로)
+    p.setFont(fText);
+    p.setPen(theme::Ink);
+    const double w = QFontMetricsF(fText, p.device()).horizontalAdvance(meta) +
+                     2.0 * k;
+    const double fl = (L.frameX + 3.0) * k, fr = (L.frameX + L.frameW - 3.0) * k;
+    double x = std::clamp(sb.center().x() - w * 0.5, fl, std::max(fl, fr - w));
+    const double top = numTop + numH + 1.0 * k;
+    p.drawText(QRectF(x, top, std::min(w, fr - fl), (em + 1.0) * k),
+               Qt::AlignHCenter | Qt::AlignTop, meta);
+    return;
+  }
   const double textLeft = sb.right() + 8.0 * k;
   const double textRight = (L.frameX + L.frameW - 4.0) * k;
   const double bandTop = L.titleY * k;
@@ -410,6 +707,7 @@ void paintPlanStrip(QPainter &p, const SectionDoc &doc, const SheetGeom &G,
                     const SectionPaperWindow &W, const SectionXf &xf, double k,
                     double ui, const PlanStrip *plan,
                     SheetPaintProbe *probe = nullptr) {
+  (void)ui; // 글자는 종이 pt(7 pt) — 화면 배율과 무관
   const SectionLine &ln = doc.r.line;
   const SheetLayout &L = G.L;
   const double mmPerM = 1.0 / W.mPerMm; // 확대 포함
@@ -453,8 +751,8 @@ void paintPlanStrip(QPainter &p, const SectionDoc &doc, const SheetGeom &G,
   p.setBrush(wash);
   p.drawRect(
       QRectF(X(0), Y(ln.back), X(lenM) - X(0), Y(-ln.front) - Y(ln.back)));
-  // 단면선(빨강 0.35 mm) + 양끝 동그라미
-  p.setPen(QPen(theme::SectionRed, exportLineMm(doc.st.lineWidthPx) * k,
+  // 단면선(빨강 0.8 pt) + 양끝 동그라미
+  p.setPen(QPen(theme::SectionRed, exportLineMm() * k,
                 Qt::SolidLine, Qt::RoundCap));
   p.setBrush(Qt::NoBrush);
   p.drawLine(QPointF(X(0), Y(0)), QPointF(X(lenM), Y(0)));
@@ -465,7 +763,8 @@ void paintPlanStrip(QPainter &p, const SectionDoc &doc, const SheetGeom &G,
   p.setPen(QPen(theme::Ink, 0.25 * k));
   p.setBrush(Qt::NoBrush);
   p.drawRect(clip);
-  QFont fSmall = theme::uiFont(std::max(5, int(std::lround(9 * ui))));
+  const QFont fSmall = // 7 pt(사용자 2026-10-16 「글자크기는 7pt 고정」)
+      theme::paperFont(theme::uiFont(10), theme::kPaperTextPt, k, p.device());
   p.setFont(fSmall);
   QString cap =
       QStringLiteral(
@@ -476,7 +775,7 @@ void paintPlanStrip(QPainter &p, const SectionDoc &doc, const SheetGeom &G,
           .arg(G.halfM, 0, 'g', 3);
   if (!plan || plan->img.isNull())
     cap += QStringLiteral(" · 평면 영상 준비 중…");
-  QFontMetricsF fm(fSmall);
+  QFontMetricsF fm(fSmall, p.device());
   QRectF cr(clip.left() + 1.5 * k, clip.top() + 1.0 * k,
             std::min(clip.width() - 3 * k, fm.horizontalAdvance(cap) + 3 * k),
             fm.height() + 1.0 * k);
@@ -743,11 +1042,14 @@ void MainWindow::paintPlanSheet(QPainter &p, const PlanSheetParams &sp,
   p.setPen(QPen(theme::Ink, std::max(0.6, 0.35 * k)));
   p.setBrush(Qt::NoBrush);
   p.drawRect(plot);
-  QFont fMono = theme::monoFont(std::max(6, int(std::lround(2.6 * k))));
-  QFont fCap = theme::uiFont(std::max(6, int(std::lround(2.3 * k))));
+  // 좌표 숫자 · 축 이름은 7 pt 고정(사용자 2026-10-16 「글자크기는 7pt 고정」)
+  const QFont fMono =
+      theme::paperFont(theme::monoFont(10), theme::kPaperTextPt, k, p.device());
+  const QFont fCap =
+      theme::paperFont(theme::uiFont(10), theme::kPaperTextPt, k, p.device());
   if (probe) {
     probe->plot = plot;
-    probe->fontPx = fMono.pixelSize();
+    probe->fontPx = theme::fontEmPx(fMono, p.device());
     probe->worldStep = pl.tickStep;
     probe->frame =
         QRectF(L.frameX * k, L.frameY * k, L.frameW * k, L.frameH * k);
@@ -900,16 +1202,16 @@ bool writePlanSheetDxf(const PlanSheetParams &sp, const QImage &img,
          Vec3(c.x - m.compassR * 0.35, c.y + m.compassR * 0.2, 0));
   d.line("COMPASS", Vec3(c.x, c.y + m.compassR, 0),
          Vec3(c.x + m.compassR * 0.35, c.y + m.compassR * 0.2, 0));
-  d.text("COMPASS", Vec3(c.x, c.y + m.compassR + 1.2, 0), 2.2, "N", 1, 0);
-  d.text("LEGEND", P(m.legendX + 1.5, m.legendY + 4), 2.4, "PLAN", 0, 0);
-  d.text("LEGEND", P(m.legendX + 1.5, m.legendY + 8), 2.2,
+  d.text("COMPASS", Vec3(c.x, c.y + m.compassR + 1.2, 0), kDxfTextMm, "N", 1, 0);
+  d.text("LEGEND", P(m.legendX + 1.5, m.legendY + 4), kDxfTextMm, "PLAN", 0, 0);
+  d.text("LEGEND", P(m.legendX + 1.5, m.legendY + 8), kDxfTextMm,
          ("1:" + std::to_string(int(std::lround(sp.spec.denom)))), 0, 0);
   for (double X = std::ceil(pl.visX0 / pl.tickStep - 1e-9) * pl.tickStep;
        X <= pl.visX1 + pl.tickStep * 1e-8; X += pl.tickStep) {
     double xmm = pl.xMm(X);
     if (xmm < L.plotX || xmm > L.plotX + L.plotW)
       continue;
-    d.text("COORD", P(xmm, L.plotY + L.plotH + 3.2), 1.8,
+    d.text("COORD", P(xmm, L.plotY + L.plotH + 3.2), kDxfTextMm,
            groupedCoord(X + origin.x, pl.tickStep).toStdString(), 1, 0);
   }
   for (double Y = std::ceil(pl.visYBot / pl.tickStep - 1e-9) * pl.tickStep;
@@ -917,7 +1219,7 @@ bool writePlanSheetDxf(const PlanSheetParams &sp, const QImage &img,
     double ymm = pl.yMm(Y);
     if (ymm < L.plotY || ymm > L.plotY + L.plotH)
       continue;
-    d.text("COORD", P(L.plotX - 1.2, ymm), 1.8,
+    d.text("COORD", P(L.plotX - 1.2, ymm), kDxfTextMm,
            groupedCoord(Y + origin.y, pl.tickStep).toStdString(), 2, 2);
   }
   if (!crop.isNull() && imgRes > 0) {
@@ -1018,7 +1320,7 @@ bool MainWindow::exportPlanSheet(MeshSource &src, const PlanSheetParams &p,
     gen.setResolution(int(dpi));
     gen.setTitle(sp.title);
     gen.setDescription(
-        QStringLiteral("DRAW_SOIL and DRAW_OUTLINE are empty drawing layers"));
+        QStringLiteral("Trench"));
     gen.setSize(QSize(std::max(1, int(std::lround(Wsvg.L.paperW * k))),
                       std::max(1, int(std::lround(Wsvg.L.paperH * k)))));
     gen.setViewBox(QRectF(0, 0, Wsvg.L.paperW * k, Wsvg.L.paperH * k));
@@ -1030,31 +1332,11 @@ bool MainWindow::exportPlanSheet(MeshSource &src, const PlanSheetParams &p,
     }
     paintPlanSheet(pt, sp, k, 0, img, x0, y1, res, src.srs.origin);
     pt.end();
-    QFile f(path);
-    if (!f.open(QIODevice::ReadOnly)) {
-      if (msg)
-        *msg = QStringLiteral("SVG 를 읽을 수 없습니다");
+    if (!layerSvgFile(path, msg))
       return false;
-    }
-    QString svg = QString::fromUtf8(f.readAll());
-    f.close();
-    int at = svg.indexOf(QStringLiteral("<svg"));
-    int gt = at < 0 ? -1 : svg.indexOf('>', at);
-    if (gt > 0)
-      svg.insert(gt + 1,
-                 QStringLiteral(
-                     "\n<g id=\"DRAW_SOIL\"/>\n<g id=\"DRAW_OUTLINE\"/>\n"));
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-      if (msg)
-        *msg = QStringLiteral("SVG 를 쓸 수 없습니다");
-      return false;
-    }
-    f.write(svg.toUtf8());
     if (msg)
-      *msg =
-          QStringLiteral(
-              "%1\n평면도 SVG · 빈 층 DRAW_SOIL · DRAW_OUTLINE · 단면선 없음")
-              .arg(QFileInfo(path).fileName());
+      *msg = QStringLiteral("%1\n평면도 SVG · 레이어 이미지 · 틀 · 글자 · 단면선 없음")
+                 .arg(QFileInfo(path).fileName());
     return true;
   }
   const PlanWindow W0 = planWindow(sp, 0);
@@ -1184,7 +1466,7 @@ bool MainWindow::exportSectionSvg(const SectionDoc &doc0, MeshSource &src,
   gen.setResolution(int(dpi));
   gen.setTitle(sp.title);
   gen.setDescription(
-      QStringLiteral("DRAW_SOIL and DRAW_OUTLINE are empty drawing layers"));
+      QStringLiteral("Trench"));
   gen.setSize(QSize(std::max(1, int(std::lround(G.L.paperW * k))),
                     std::max(1, int(std::lround(G.L.paperH * k)))));
   gen.setViewBox(QRectF(0, 0, G.L.paperW * k, G.L.paperH * k));
@@ -1196,29 +1478,10 @@ bool MainWindow::exportSectionSvg(const SectionDoc &doc0, MeshSource &src,
   }
   paintSheet(pt, doc0, sp, k, 0, img, geo, 1, 0, 0, nullptr, stripPtr);
   pt.end();
-  QFile f(path);
-  if (!f.open(QIODevice::ReadOnly)) {
-    if (msg)
-      *msg = QStringLiteral("SVG 를 읽을 수 없습니다");
+  if (!layerSvgFile(path, msg))
     return false;
-  }
-  QString svg = QString::fromUtf8(f.readAll());
-  f.close();
-  int at = svg.indexOf(QStringLiteral("<svg"));
-  int gt = at < 0 ? -1 : svg.indexOf('>', at);
-  if (gt > 0)
-    svg.insert(
-        gt + 1,
-        QStringLiteral("\n<g id=\"DRAW_SOIL\"/>\n<g id=\"DRAW_OUTLINE\"/>\n"));
-  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    if (msg)
-      *msg = QStringLiteral("SVG 를 쓸 수 없습니다");
-    return false;
-  }
-  f.write(svg.toUtf8());
-  f.close();
   if (msg)
-    *msg = QStringLiteral("%1\n빈 층 DRAW_SOIL · DRAW_OUTLINE")
+    *msg = QStringLiteral("%1\n레이어 0.8 · 0.5 · 0.2 · 글자 · 이미지 · 틀")
                .arg(QFileInfo(path).fileName());
   return true;
 }
@@ -1451,6 +1714,9 @@ public:
   std::function<bool(QPointF)> dialAt;
   std::function<void(QPointF)> onDialPress, onDialMove, onDialRelease;
   std::function<void()> onDialDoubleClick;
+  // 다이얼 한 칸(사용자 2026-10-16 「방향키로도 0.1도씩」): 다이얼 위 휠 · 미리보기에 초점이
+  // 있을 때 ←/→ = 0.1°, Shift = 1°(dir +1 = 시계)
+  std::function<void(int dir, bool coarse)> onDialStep;
   QPointF dialCenter; // 마지막으로 그린 다이얼 가운데(화면 px) · 각 — 점검용
   double dialDeg = 0;
   bool dialShown = false;
@@ -1545,6 +1811,15 @@ public:
       e->ignore();
       return;
     }
+    if (onDialStep && dialAt && !dialDrag_ && dialAt(e->position())) {
+      const int n = steps > 0 ? std::max(1, int(std::lround(steps)))
+                              : std::min(-1, int(std::lround(steps)));
+      for (int i = 0; i < std::abs(n); ++i)
+        onDialStep(n > 0 ? 1 : -1,
+                   e->modifiers().testFlag(Qt::ShiftModifier));
+      e->accept();
+      return;
+    }
     const double factor = std::exp(-std::log(0.85) * steps);
     if (editing) { // 조판편집: 칸 안 그림 배율 → 멈추면 축척 값으로
       zoom = std::clamp(zoom * factor, 0.35, 8.0);
@@ -1562,6 +1837,17 @@ public:
       update();
     }
     e->accept();
+  }
+  void keyPressEvent(QKeyEvent *e) override {
+    if ((e->key() == Qt::Key_Left || e->key() == Qt::Key_Right) &&
+        onDialStep && dialShown && !dialDrag_ && !handleDrag_ &&
+        !(e->modifiers() & (Qt::ControlModifier | Qt::AltModifier))) {
+      onDialStep(e->key() == Qt::Key_Right ? 1 : -1,
+                 e->modifiers().testFlag(Qt::ShiftModifier));
+      e->accept();
+      return;
+    }
+    QWidget::keyPressEvent(e);
   }
   void mouseDoubleClickEvent(QMouseEvent *e) override {
     if (e->button() == Qt::LeftButton && dialAt && dialAt(e->position())) {
@@ -2271,7 +2557,7 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
                 QStringLiteral("입면 영상 (뒤 %1 m) — 레벨선 위, 단면선 아래")
                     .arg((*docP).r.line.back, 0, 'g', 3));
   auto *tLine = sheetTile(QStringLiteral("pen-line"), QStringLiteral("단면선"),
-                          QStringLiteral("잘린 선 — 맨 위 · 빨강 0.35 mm"));
+                          QStringLiteral("잘린 선 — 맨 위 · 빨강 0.8 pt"));
   auto *tLev = sheetTile(QStringLiteral("levels"), QStringLiteral("레벨선"),
                          QStringLiteral("레벨선과 표고 숫자 — 맨 뒤"));
   auto *tTitle = sheetTile(
@@ -2406,7 +2692,6 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
   baseEl->setRange(-1000, 10000);
   baseEl->setDecimals(2);
   baseEl->setSingleStep(0.1);
-  baseEl->setPrefix("EL. ");
   baseEl->setSuffix(" m");
   baseEl->setValue(st->baselineEl);
   {
@@ -2510,7 +2795,7 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
     const double pxPerMm = 300 / 25.4, ui = pxPerMm * 25.4 / 96.0;
     LevelPlan lp =
         sectionLevelPlan(pxPerMm * 1000.0 / st->spec.denom, ui, true);
-    numLab->setText(QStringLiteral("%1 cm마다 · 해발 EL. · 선 %2 cm")
+    numLab->setText(QStringLiteral("%1 cm마다 · 해발 · 선 %2 cm")
                         .arg(lp.labelCm)
                         .arg(lp.lineCm));
     const double fitD = G.lenM > 0 && G.heightM > 0
@@ -2620,8 +2905,8 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
                        .arg(fmtName));
     bPdf->setVisible(st->format != 0);
     QString hn = st->format == 4
-                     ? QStringLiteral("그리기용 빈 층 DRAW_SOIL · DRAW_OUTLINE "
-                                      "2개 · 밑그림은 잠금. ")
+                     ? QStringLiteral("레이어 0.8(빨간 단면선) · 0.5 · 0.2(해발선) · "
+                                      "글자 · 이미지 · 틀. ")
                  : st->format == 1
                      ? QStringLiteral("DXF 는 모델 공간 %1 (용지 · 표제란 "
                                       "없이, 레벨선 · A/A′ 포함). 빈 층 2개. ")
@@ -2990,6 +3275,13 @@ QWidget *MainWindow::buildSheetSide() {
                      const int row = it->data(Qt::UserRole).toInt();
                      if (row == -1) // 절 이름 줄(-2 = 평·단면도 한 장)
                        return;
+                     if (row == -3) { // 「따로 뽑기」 접기 · 펼치기
+                       QTimer::singleShot(0, this, [this] {
+                         sheetSeparateOpen_ = !sheetSeparateOpen_;
+                         refreshSheetList();
+                       });
+                       return;
+                     }
                      QTimer::singleShot(0, this, [this, row] {
                        if (sheetHost_)
                          openSheetFromList(row);
@@ -3305,13 +3597,38 @@ void MainWindow::refreshSheetList() {
         "펼쳐 놓습니다(종이 = 내용 크기)"));
     sheetList_->setItemWidget(it, w);
     it->setSelected(sheetIsCombo_);
+    // 평면 · 단면 한 장씩은 「따로 뽑기」 아래로 접는다(사용자 2026-10-16 「한쌍으로 나오면
+    // 밑에 3개는 필요없지 않나」 — 지우지 않고 접음: 따로 뽑을 일이 있을 때 누르면 펼침)
+    auto *gi = new QListWidgetItem(sheetList_);
+    gi->setData(Qt::UserRole, -3);
+    gi->setSizeHint(QSize(10, 30));
+    auto *gw = new QWidget;
+    gw->setObjectName("sheetSeparateHead");
+    auto *gh = new QHBoxLayout(gw);
+    gh->setContentsMargins(6, 4, 6, 4);
+    gh->setSpacing(6);
+    auto *chev = lbl(sheetSeparateOpen_ ? QStringLiteral("\u25BE")   // ▾
+                                        : QStringLiteral("\u25B8"),  // ▸
+                     "listCaption");
+    chev->setFixedWidth(14);
+    gh->addWidget(chev);
+    gh->addWidget(lbl(QStringLiteral("따로 뽑기"), "listCaption"));
+    gh->addWidget(lbl(QStringLiteral("평면 1 · 단면 %1").arg(sections_.size()),
+                      "monoFaint"),
+                  1);
+    gw->setToolTip(sheetSeparateOpen_
+                       ? QStringLiteral("평면도 · 단면도를 한 장씩 — 누르면 접습니다")
+                       : QStringLiteral("평면도 · 단면도를 한 장씩 뽑을 때 — 누르면 펼칩니다"));
+    sheetList_->setItemWidget(gi, gw);
   }
-  caption(QStringLiteral("평면"));
-  rowItem(0, 46)->setSelected(sheetIsPlan_ && !sheetIsCombo_);
-  caption(QStringLiteral("단면"));
-  for (size_t i = 0; i < sections_.size(); ++i)
-    rowItem(int(i) + 1, sections_[i].note.empty() ? 46 : 60)
-        ->setSelected(!sheetIsPlan_ && !sheetIsCombo_ && int(i) == current_);
+  if (sections_.empty() || sheetSeparateOpen_) {
+    caption(QStringLiteral("평면"));
+    rowItem(0, 46)->setSelected(sheetIsPlan_ && !sheetIsCombo_);
+    caption(QStringLiteral("단면"));
+    for (size_t i = 0; i < sections_.size(); ++i)
+      rowItem(int(i) + 1, sections_[i].note.empty() ? 46 : 60)
+          ->setSelected(!sheetIsPlan_ && !sheetIsCombo_ && int(i) == current_);
+  }
   if (sheetCount_)
     sheetCount_->setText(QString::number(sections_.size()));
 }
@@ -3397,6 +3714,7 @@ void MainWindow::dlgSheet() {
   lastSheet_ = params;
   sheetIsPlan_ = false;
   sheetIsCombo_ = false;
+  sheetSeparateOpen_ = true; // 한 장씩 뽑는 중이면 그 줄이 보이게
   bool acc = false;
   QDialog *d = buildSheetDialog(*params, acc);
   auto src = src_;
@@ -4042,6 +4360,7 @@ void MainWindow::dlgPlanSheet() {
   lastPlanSheet_ = params;
   sheetIsPlan_ = true;
   sheetIsCombo_ = false;
+  sheetSeparateOpen_ = true; // 한 장씩 뽑는 중이면 그 줄이 보이게
   bool acc = false;
   QDialog *d = buildPlanSheetDialog(*params, s_cachedImg, s_cachedX0,
                                     s_cachedY1, s_cachedRes, acc);
@@ -4746,8 +5065,12 @@ constexpr double kComboMarginMm = 10.0; // 내용 바깥 여백(종이 = 내용 
 constexpr double kComboTitleMm = 16.0;  // 아래 축척 막대 · 도면명 띠
 constexpr double kComboPlanLineMm =
     0.18; // 평면 위 단면선(사용자 「단면선이 너무 두껍다 · 얇게」)
-constexpr double kComboElevFontMm = 2.1; // 표고 글자 크기
-constexpr double kComboElevLineMm = 2.4; // 표고 글자 한 줄(여유 포함)
+// 표고 숫자 한 줄 = 7 pt 의 em(2.469 mm, 사용자 2026-10-16 「글자크기는 7pt 고정」). 숫자만이라(위아래로 삐치는 획 없음 —
+// 숫자 높이 ≈ 0.72 em) em 을 한 줄로 잡으면 이웃 숫자 사이가 0.25 em 이상 빈다. 1:200 에서 50 cm = 2.5 mm ≥ 2.469 mm →
+// 1:20–1:200 은 줄이지도 솎지도 않는다(시험 test_combo.cpp)
+constexpr double kComboElevLineMm = theme::ptMm(theme::kPaperTextPt);
+/// 도면 탭 오른쪽 가운데 다이얼 띠(화면 px): 둘레 + 「N」(r + 16) 양쪽 · 바깥 여백 16 · 종이와 띄움 10
+const double kComboDialBand = 2 * (PlanView::dialRadius() + 16) + 16 + 10;
 
 /// 평·단면도 표고 글자 배치: 50 cm 마다가 원칙(사용자 2026-10-16 「0.5 m
 /// 마다 해발값은 꼭」), 좁으면 글자를 줄인다. 번갈아 쓸 오른쪽 여백이 없다
@@ -4758,7 +5081,7 @@ LevelLabelFit comboLabelFit(double mmPerM) {
 SheetSpec comboSpec(double denom) {
   SheetSpec s;
   s.denom = std::max(1.0, denom);
-  s.gutterLeftMm = 14.0; // 표고 글자 한 줄(「EL. 23.4 m」)
+  s.gutterLeftMm = 14.0; // 표고 글자 한 줄(「23.45 m」 7 pt)
   s.gutterRightMm = 3.0;
   s.gutterTopMm = 6.0; // A · A′ 글자
   s.gutterBottomMm = 2.0;
@@ -4854,7 +5177,7 @@ void paintComboSection(QPainter &p, const ComboSecAsset &a,
     p.setOpacity(1.0);
   }
   p.setPen(QPen(theme::ProfileRed,
-                std::max(minLinePx, exportLineMm(sp.lineWidthPx) * k),
+                std::max(minLinePx, exportLineMm() * k),
                 Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
   p.setBrush(Qt::NoBrush);
   for (const auto &pl0 : a.r.profile) {
@@ -4871,35 +5194,46 @@ void paintComboSection(QPainter &p, const ComboSecAsset &a,
       path.closeSubpath();
     p.drawPath(path);
   }
-  QFont fl = theme::uiFont(std::max(4, int(std::lround(3.0 * k))), true);
-  p.setFont(fl);
+  // 글자는 모두 종이 위 7 pt(사용자 2026-10-16 「글자크기는 7pt 고정」)
+  const double em = theme::ptMm(theme::kPaperTextPt); // 2.469 mm
+  p.setFont(theme::paperFont(theme::uiFont(10, true), theme::kPaperTextPt, k,
+                             p.device()));
   p.setPen(theme::Ink);
   p.drawText(QRectF(X(0) - 10 * k, -6.0 * k, 20 * k, 5.2 * k),
              Qt::AlignHCenter | Qt::AlignBottom, a.nameA);
   p.drawText(QRectF(X(L) - 10 * k, -6.0 * k, 20 * k, 5.2 * k),
              Qt::AlignHCenter | Qt::AlignBottom, a.nameB);
-  if (sp.withLevels) { // 표고 글자: 50 cm 선마다(사용자 2026-10-16 「해발선이 50cm마다」 · 「꼭」). 좁으면 글자를 줄인다
+  if (sp.withLevels) { // 표고 숫자: 50 cm 선마다(사용자 2026-10-16 「해발선이 50cm마다」 · 「꼭」). 「EL.」 없이 숫자 · m
     const LevelLabelFit lf = comboLabelFit(mmPerM);
-    QFont fe = theme::monoFont(
-        std::max(4, int(std::lround(kComboElevFontMm * lf.scale * k))));
-    p.setFont(fe);
+    const double sc = lf.scale; // 1:20–1:200 은 1(7 pt 그대로)
+    p.setFont(theme::paperFont(theme::monoFont(10), theme::kPaperTextPt * sc,
+                               k, p.device()));
     p.setPen(theme::LevelText);
     for (const LevelLabelSpot &el :
          levelLabelSpots(a.r.profile, a.r.zMin, a.r.zMax, oz, L,
                          lf.labelCm)) {
-      const QString t = QStringLiteral("EL. %1 m")
-                            .arg(qs8(formatElevation(el.zAbs, 1)));
+      const QString t =
+          QStringLiteral("%1 m").arg(qs8(formatElevation(el.zAbs, 1)));
       const double y = Y(el.zAbs);
-      const double sc = lf.scale;
       if (el.atStart) // A 끝에 닿는 선: 그림 칸 왼쪽 밖(표고 글자 여백 14 mm)
-        p.drawText(QRectF(-14.0 * k, y - 1.6 * sc * k, 13.0 * k, 3.2 * sc * k),
+        p.drawText(QRectF(-14.0 * k, y - 0.75 * em * sc * k, 13.0 * k,
+                          1.5 * em * sc * k),
                    Qt::AlignRight | Qt::AlignVCenter, t);
       else // 가운데에서 시작하는 선: 그 선의 시작 위(다음 50 cm 선 아래에 들어가게)
-        p.drawText(QRectF(X(el.s0) + 0.6 * k, y - (0.2 + 2.6 * sc) * k, 30 * k,
-                          2.6 * sc * k),
+        p.drawText(QRectF(X(el.s0) + 0.6 * k, y - (0.15 + 1.1 * em * sc) * k,
+                          30 * k, 1.1 * em * sc * k),
                    Qt::AlignLeft | Qt::AlignBottom, t);
     }
   }
+}
+
+/// 진북 자리(종이 mm): 평면 칸 오른쪽 위 안, 칸이 작으면 칸 오른쪽 밖. 사용자 2026-10-16 「나침반도 좀더 크게」 → 1.5 배
+/// (반지름 3.5 → 5.25 mm). SVG · PDF · 화면 · DXF 가 같은 자리
+struct ComboNorthSpot { double cx = 0, cy = 0, r = 0; };
+ComboNorthSpot comboNorthSpot(const ComboLayout &c) {
+  if (c.planW > 30 && c.planH > 30)
+    return {c.planX + c.planW - 10.5, c.planY + 10.5, 5.25};
+  return {c.planX + c.planW + 9.0, c.planY + 6.0, 4.5};
 }
 
 /// 진북(돌린 평면에 맞춰 deg 만큼 시계 방향). 글자는 똑바로
@@ -4920,10 +5254,11 @@ void paintComboNorth(QPainter &p, double cxMm, double cyMm, double rMm,
   p.drawPolygon(arrow);
   p.restore();
   const double a = deg * 3.14159265358979323846 / 180.0;
-  const QPointF tip = c + QPointF(std::sin(a), -std::cos(a)) * (R + 2.0 * k);
-  p.setFont(theme::uiFont(std::max(4, int(std::lround(2.4 * k))), true));
+  const QPointF tip = c + QPointF(std::sin(a), -std::cos(a)) * (R + 2.2 * k);
+  p.setFont(theme::paperFont(theme::uiFont(10, true), theme::kPaperTextPt, k,
+                             p.device()));
   p.setPen(theme::Ink);
-  p.drawText(QRectF(tip.x() - 3 * k, tip.y() - 1.6 * k, 6 * k, 3.2 * k),
+  p.drawText(QRectF(tip.x() - 3 * k, tip.y() - 1.8 * k, 6 * k, 3.6 * k),
              Qt::AlignCenter, QStringLiteral("N"));
 }
 
@@ -4944,7 +5279,8 @@ void paintComboPlanLine(QPainter &p, const QPointF &A, const QPointF &B,
   p.drawLine(a0, a1);
   p.drawLine(a1, a1 - n * (1.2 * k) + u * (0.8 * k));
   p.drawLine(a1, a1 - n * (1.2 * k) - u * (0.8 * k));
-  p.setFont(theme::uiFont(std::max(4, int(std::lround(2.8 * k))), true));
+  p.setFont(theme::paperFont(theme::uiFont(10, true), theme::kPaperTextPt, k,
+                             p.device()));
   p.setPen(theme::Ink);
   const QPointF ca = A - u * (2.8 * k), cb = B + u * (2.8 * k);
   p.drawText(QRectF(ca.x() - 6 * k, ca.y() - 1.8 * k, 12 * k, 3.6 * k),
@@ -4997,29 +5333,10 @@ void paintComboPlan(QPainter &p, const ComboLayout &c, const ComboAssets &a,
                        QPointF(c.xMm(pl.sB) * k, c.yMm(pl.tB) * k),
                        a.secs[i].nameA, a.secs[i].nameB, k, minLinePx);
   }
-  if (c.planW > 20 && c.planH > 20)
-    paintComboNorth(p, c.planX + c.planW - 7.0, c.planY + 7.0, 3.5,
-                    c.northDeg(), k);
-  else
-    paintComboNorth(p, c.planX + c.planW + 6.0, c.planY + 4.0, 3.0,
-                    c.northDeg(), k);
+  const ComboNorthSpot ns = comboNorthSpot(c);
+  paintComboNorth(p, ns.cx, ns.cy, ns.r, c.northDeg(), k);
 }
 
-void insertSvgEmptyLayers(const QString &path) {
-  QFile f(path);
-  if (!f.open(QIODevice::ReadOnly))
-    return;
-  QString svg = QString::fromUtf8(f.readAll());
-  f.close();
-  const int at = svg.indexOf(QStringLiteral("<svg"));
-  const int gt = at < 0 ? -1 : svg.indexOf('>', at);
-  if (gt <= 0)
-    return;
-  svg.insert(gt + 1,
-             QStringLiteral("\n<g id=\"DRAW_SOIL\"/>\n<g id=\"DRAW_OUTLINE\"/>\n"));
-  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-    f.write(svg.toUtf8());
-}
 
 /// DXF(종이 mm, 왼쪽 아래 원점 · y 위). 영상은 종이 방향으로 미리 돌려 별도 PNG
 bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
@@ -5035,8 +5352,7 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
   d.addLayer("PLAN_TEXT", 7, 18);
   d.addLayer("NORTH", 7, 18);
   d.addLayer("SECTION_IMAGE", 7);
-  d.addLayer("SECTION_PROFILE", 1,
-             dxfLineWeight(exportLineMm(sp.lineWidthPx) * 72.0 / 25.4));
+  d.addLayer("SECTION_PROFILE", 1, dxfLineWeight(asec::kCutLinePt));
   d.addLayer("LEVEL_10CM", 9, dxfLineWeight(sp.levelMinorPt));
   d.addLayer("LEVEL_50CM", 8, dxfLineWeight(sp.levelMajorPt));
   d.addLayer("LEVEL_TEXT", 7, 18);
@@ -5099,16 +5415,14 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
            P(t1x - nx * 1.2 + ux * 0.8, t1y - ny * 1.2 + uy * 0.8));
     d.line("PLAN_SECTION_LINE", P(t1x, t1y),
            P(t1x - nx * 1.2 - ux * 0.8, t1y - ny * 1.2 - uy * 0.8));
-    d.text("PLAN_TEXT", P(ax - ux * 2.8, ay - uy * 2.8), 2.8,
+    d.text("PLAN_TEXT", P(ax - ux * 2.8, ay - uy * 2.8), kDxfTextMm,
            dxfAscii(a.secs[i].nameA).toStdString(), 1, 2);
-    d.text("PLAN_TEXT", P(bx + ux * 2.8, by + uy * 2.8), 2.8,
+    d.text("PLAN_TEXT", P(bx + ux * 2.8, by + uy * 2.8), kDxfTextMm,
            dxfAscii(a.secs[i].nameB).toStdString(), 1, 2);
   }
   {
-    const bool inside = c.planW > 20 && c.planH > 20;
-    const double cx = inside ? c.planX + c.planW - 7.0 : c.planX + c.planW + 6.0;
-    const double cy = inside ? c.planY + 7.0 : c.planY + 4.0;
-    const double R = inside ? 3.5 : 3.0;
+    const ComboNorthSpot ns = comboNorthSpot(c);
+    const double cx = ns.cx, cy = ns.cy, R = ns.r;
     const double ang = c.northDeg() * 3.14159265358979323846 / 180.0;
     const double dx = std::sin(ang), dy = -std::cos(ang); // 종이(y 아래) 위 진북
     d.line("NORTH", P(cx - dx * R * 0.7, cy - dy * R * 0.7),
@@ -5117,7 +5431,7 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
            P(cx + dx * R * 0.45 - dy * R * 0.25, cy + dy * R * 0.45 + dx * R * 0.25));
     d.line("NORTH", P(cx + dx * R * 0.85, cy + dy * R * 0.85),
            P(cx + dx * R * 0.45 + dy * R * 0.25, cy + dy * R * 0.45 - dx * R * 0.25));
-    d.text("NORTH", P(cx + dx * (R + 2.0), cy + dy * (R + 2.0)), 2.4, "N", 1, 2);
+    d.text("NORTH", P(cx + dx * (R + 2.2), cy + dy * (R + 2.2)), kDxfTextMm, "N", 1, 2);
   }
   // 단면
   for (size_t i = 0; i < c.sections.size() && i < a.secs.size(); ++i) {
@@ -5152,11 +5466,11 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
           d.line(layer, Q(0, y), Q(X(L0), y));
       }
       const LevelLabelFit lf = comboLabelFit(mm);
-      const double th = 2.0 * lf.scale;
+      const double th = kDxfTextMm * lf.scale;
       for (const LevelLabelSpot &el :
            levelLabelSpots(as.r.profile, as.r.zMin, as.r.zMax, oz, L0,
                            lf.labelCm)) {
-        const std::string t = "EL. " + formatElevation(el.zAbs, 1) + " m";
+        const std::string t = formatElevation(el.zAbs, 1) + " m"; // 「EL.」 없음(사용자 2026-10-16)
         if (el.atStart)
           d.text("LEVEL_TEXT", Q(-1.0, Y(el.zAbs)), th, t, 2, 2, textRot);
         else
@@ -5198,12 +5512,12 @@ bool writeComboDxf(const ComboLayout &c, const ComboAssets &a,
         pts.push_back(Q2(X(pl0[j].x), Y(pl0[j].y + oz)));
       d.polyline2d("SECTION_PROFILE", pts, closed);
     }
-    d.text("SECTION_TEXT", Q(X(0), -1.0), 3.0, dxfAscii(as.nameA).toStdString(),
-           1, 1, textRot);
-    d.text("SECTION_TEXT", Q(X(L0), -1.0), 3.0,
+    d.text("SECTION_TEXT", Q(X(0), -1.0), kDxfTextMm,
+           dxfAscii(as.nameA).toStdString(), 1, 1, textRot);
+    d.text("SECTION_TEXT", Q(X(L0), -1.0), kDxfTextMm,
            dxfAscii(as.nameB).toStdString(), 1, 1, textRot);
   }
-  d.text("TITLE", P(L.frameX + 3.0, L.titleY + 6.0), 2.4,
+  d.text("TITLE", P(L.frameX + 3.0, L.titleY + 6.0), kDxfTextMm,
          "PLAN + SECTIONS  S=1:" + std::to_string(int(std::lround(sp.denom))),
          0, 2);
   std::string err;
@@ -5408,6 +5722,7 @@ void MainWindow::paintComboSheet(QPainter &p, const ComboAssets &a,
   ch.kind = QStringLiteral("평·단면도");
   ch.denom = sp.denom;
   ch.showTitle = true;
+  ch.barCenterMm = c.planX + c.planW * 0.5;
   paintSheetChrome(p, L, k, ch, false);
   p.restore();
 }
@@ -5448,7 +5763,7 @@ bool MainWindow::exportComboSheet(MeshSource &src,
     gen.setResolution(96);
     gen.setTitle(sp.title);
     gen.setDescription(
-        QStringLiteral("DRAW_SOIL and DRAW_OUTLINE are empty drawing layers"));
+        QStringLiteral("Trench"));
     gen.setSize(QSize(std::max(1, int(std::lround(L.paperW * k))),
                       std::max(1, int(std::lround(L.paperH * k)))));
     gen.setViewBox(QRectF(0, 0, L.paperW * k, L.paperH * k));
@@ -5460,7 +5775,8 @@ bool MainWindow::exportComboSheet(MeshSource &src,
     }
     paintComboSheet(pt, a, sp, k);
     pt.end();
-    insertSvgEmptyLayers(path);
+    if (!layerSvgFile(path, msg))
+      return false;
   } else if (sp.format == 0) {
     QPdfWriter w(path);
     w.setResolution(int(std::lround(sp.dpi)));
@@ -5552,6 +5868,138 @@ bool MainWindow::exportComboSheet(MeshSource &src,
   return true;
 }
 
+bool MainWindow::checkSvgLayers(const QString &path, QString *report,
+                                bool needLevels) {
+  QFile f(path);
+  if (!f.open(QIODevice::ReadOnly)) {
+    if (report)
+      *report = QStringLiteral("file=missing");
+    return false;
+  }
+  QXmlStreamReader r(&f);
+  double mmPerUnit = 0;
+  int depth = 0, layerIdx = -1, badLayer = 0, badLine = 0, badKind = 0, el = 0;
+  int count[6] = {0, 0, 0, 0, 0, 0};
+  double ptMin[6], ptMax[6];
+  for (int i = 0; i < 6; ++i) {
+    ptMin[i] = 1e9;
+    ptMax[i] = -1;
+  }
+  QStringList names;
+  // 상위 <g> 의 stroke · stroke-width · 변환 배율(레이어 안에서 되감싼 원래 <g>)
+  struct St { QString stroke; double sw, sc; };
+  std::vector<St> st;
+  auto mm = [](const QString &v) { return QString(v).remove(QStringLiteral("mm")).toDouble(); };
+  while (!r.atEnd()) {
+    r.readNext();
+    if (r.isEndElement()) {
+      if (r.name() == QLatin1String("g")) {
+        if (!st.empty())
+          st.pop_back();
+        if (--depth == 0)
+          layerIdx = -1;
+      }
+      continue;
+    }
+    if (!r.isStartElement())
+      continue;
+    const QXmlStreamAttributes a = r.attributes();
+    const QString n = r.name().toString();
+    if (n == QLatin1String("svg")) {
+      const QStringList vb = a.value(QLatin1String("viewBox")).toString().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+      if (vb.size() == 4 && vb[2].toDouble() > 0)
+        mmPerUnit = mm(a.value(QLatin1String("width")).toString()) / vb[2].toDouble();
+      continue;
+    }
+    if (n == QLatin1String("defs") || n == QLatin1String("title") || n == QLatin1String("desc")) {
+      r.skipCurrentElement();
+      continue;
+    }
+    if (n == QLatin1String("g")) {
+      if (depth == 0) { // 맨 위 <g> = 레이어
+        const QString label = a.value(QLatin1String("http://www.inkscape.org/namespaces/inkscape"),
+                                      QLatin1String("label")).toString();
+        layerIdx = -1;
+        for (int i = 0; i < 6; ++i)
+          if (label == QString::fromUtf8(kSvgLayerNames[i]))
+            layerIdx = i;
+        const bool okL = layerIdx >= 0 &&
+                         a.value(QLatin1String("http://www.inkscape.org/namespaces/inkscape"),
+                                 QLatin1String("groupmode")) == QLatin1String("layer") &&
+                         a.value(QLatin1String("id")) == svgLayerId(label) &&
+                         a.value(QLatin1String("data-name")) == label;
+        if (!okL)
+          ++badLayer;
+        names << (label.isEmpty() ? a.value(QLatin1String("id")).toString() : label);
+      }
+      St s = st.empty() ? St{QStringLiteral("none"), 1.0, 1.0} : st.back();
+      if (a.hasAttribute(QLatin1String("stroke")))
+        s.stroke = a.value(QLatin1String("stroke")).toString().toLower();
+      if (a.hasAttribute(QLatin1String("stroke-width")))
+        s.sw = a.value(QLatin1String("stroke-width")).toDouble();
+      s.sc *= svgTransformScale(a.value(QLatin1String("transform")).toString());
+      st.push_back(s);
+      ++depth;
+      continue;
+    }
+    // 그림 요소
+    if (depth == 0) { // 레이어 밖에 떨어진 요소
+      ++badLayer;
+      r.skipCurrentElement();
+      continue;
+    }
+    const QString stroke = a.hasAttribute(QLatin1String("stroke"))
+                               ? a.value(QLatin1String("stroke")).toString().toLower()
+                               : (st.empty() ? QStringLiteral("none") : st.back().stroke);
+    const double w = (a.hasAttribute(QLatin1String("stroke-width"))
+                          ? a.value(QLatin1String("stroke-width")).toDouble()
+                          : (st.empty() ? 1.0 : st.back().sw)) *
+                     (st.empty() ? 1.0 : st.back().sc);
+    const double pt = w * mmPerUnit * 72.0 / 25.4;
+    if (layerIdx >= 0) {
+      ++count[layerIdx];
+      const bool isText = n == QLatin1String("text"), isImg = n == QLatin1String("image");
+      if ((layerIdx == SvgLText) != isText)
+        ++badKind;
+      if (layerIdx == SvgLImage && !isImg && stroke != QLatin1String("none"))
+        ++badKind;
+      const double want = layerIdx == SvgL08 ? asec::kCutLinePt : layerIdx == SvgL05 ? 0.5 : layerIdx == SvgL02 ? 0.2 : -1;
+      const QString col = layerIdx == SvgL08 ? theme::ProfileRed.name()
+                          : layerIdx == SvgL05 ? theme::LevelMajor.name()
+                                               : theme::LevelMinor.name();
+      if (want > 0) {
+        ptMin[layerIdx] = std::min(ptMin[layerIdx], pt);
+        ptMax[layerIdx] = std::max(ptMax[layerIdx], pt);
+        if (stroke != col || std::abs(pt - want) > 0.01)
+          ++badLine;
+      }
+    }
+    if (n == QLatin1String("text")) {
+      const QString t = r.readElementText(QXmlStreamReader::IncludeChildElements);
+      if (t.contains(QLatin1String("EL.")) || t.contains(QRegularExpression(QStringLiteral("\\bEL\\b"))))
+        ++el;
+      continue;
+    }
+    r.skipCurrentElement();
+  }
+  auto ptText = [&](int i) {
+    return ptMax[i] < 0 ? QStringLiteral("-")
+                        : QStringLiteral("%1-%2").arg(ptMin[i], 0, 'f', 3).arg(ptMax[i], 0, 'f', 3);
+  };
+  const bool levelsOk = !needLevels || (count[SvgL08] > 0 && count[SvgL05] > 0 && count[SvgL02] > 0);
+  const bool ok = !r.hasError() && mmPerUnit > 0 && badLayer == 0 && badLine == 0 &&
+                  badKind == 0 && el == 0 && count[SvgLText] > 0 && levelsOk;
+  if (report)
+    *report = QStringLiteral("layers=[%1] n=0.2:%2,0.5:%3,image:%4,frame:%5,0.8:%6,text:%7 "
+                             "pt08=%8 pt05=%9 pt02=%10 bad-layer=%11 bad-line=%12 bad-kind=%13 el=%14 xml-error=%15")
+                  .arg(names.join(QLatin1Char(',')))
+                  .arg(count[0]).arg(count[1]).arg(count[2]).arg(count[3]).arg(count[4]).arg(count[5])
+                  .arg(ptText(SvgL08), ptText(SvgL05), ptText(SvgL02))
+                  .arg(badLayer).arg(badLine).arg(badKind).arg(el)
+                  .arg(r.hasError() ? 1 : 0);
+  return ok;
+}
+
 ComboSheetParams MainWindow::defaultComboSheetParams() const {
   ComboSheetParams sp;
   QSettings st;
@@ -5634,6 +6082,7 @@ void MainWindow::dlgComboSheet() {
   lastCombo_ = st;
   sheetIsPlan_ = false;
   sheetIsCombo_ = true;
+  sheetSeparateOpen_ = false; // 평·단면도를 보면 한 장씩 줄은 접는다
 
   auto *d = new QDialog(this);
   d->setWindowTitle(QStringLiteral("평·단면도"));
@@ -6107,6 +6556,8 @@ void MainWindow::dlgComboSheet() {
   // 없음. 두 번 누르면 북쪽 위
   struct ComboDial {
     bool valid = false, hot = false, drag = false, moved = false, self = false;
+    bool stepping = false; // 휠 · ←/→ 한 칸들 사이(멈추면 확정): 끄는 중처럼 화면을 붙든다
+    QTimer *stepTimer = nullptr;
     QPointF c;
     double rot0 = 0, ang0 = 0;
     // 끄는 동안 붙든 화면: 평면 칸 가운데 땅 점(wx, wy)이 화면 scr0 에 그대로, 배율 sc0
@@ -6139,17 +6590,50 @@ void MainWindow::dlgComboSheet() {
     }
     return on;
   };
+  auto dialPin = [=](const ComboLayout &c) { // 평면 칸 가운데 땅 점을 지금 화면 자리 · 배율에 붙든다
+    const double sm = (c.sMin + c.sMax) / 2, tm = (c.tMin + c.tMax) / 2;
+    c.toXY(sm, tm, dial->wx, dial->wy);
+    dial->sc0 = pv->fitPxPerMm;
+    dial->scr0 = pv->lastPaperO + QPointF(c.xMm(sm), c.yMm(tm)) * dial->sc0;
+  };
   pv->onDialPress = [=](QPointF pos) {
+    if (dial->stepping) { // 한 칸들을 먼저 확정
+      dial->stepTimer->stop();
+      dial->stepping = false;
+      dialSet(st->rotationDeg, true);
+    }
     const ComboLayout c = comboLayoutFor(*assets, *st);
     dial->drag = true;
     dial->moved = false;
     dial->rot0 = c.northDeg();
     dial->ang0 = PlanView::dialAngleAt(dial->c, pos);
-    const double sm = (c.sMin + c.sMax) / 2, tm = (c.tMin + c.tMax) / 2;
-    c.toXY(sm, tm, dial->wx, dial->wy);
-    dial->sc0 = pv->fitPxPerMm;
-    dial->scr0 = pv->lastPaperO + QPointF(c.xMm(sm), c.yMm(tm)) * dial->sc0;
+    dialPin(c);
     pv->update();
+  };
+  pv->onDialStep = [=](int dir, bool coarse) {
+    if (!dial->valid || assets->secs.empty() || dial->drag || drag->on ||
+        drag->settling)
+      return;
+    const ComboLayout c = comboLayoutFor(*assets, *st);
+    if (!dial->stepping) {
+      dialPin(c);
+      dial->stepping = true;
+    }
+    if (!dial->stepTimer) {
+      dial->stepTimer = new QTimer(pv);
+      dial->stepTimer->setSingleShot(true);
+      dial->stepTimer->setInterval(PlanView::kRotStepCommitMs);
+      QObject::connect(dial->stepTimer, &QTimer::timeout, pv,
+                       [dialSet, st, wd = std::weak_ptr<ComboDial>(dial)] {
+                         const auto d = wd.lock();
+                         if (!d || !d->stepping)
+                           return;
+                         d->stepping = false;
+                         dialSet(st->rotationDeg, true);
+                       });
+    }
+    dialSet(rotationStep(c.northDeg(), dir, coarse ? 1.0 : 0.1), false);
+    dial->stepTimer->start();
   };
   pv->onDialMove = [=](QPointF pos) {
     if (!dial->drag)
@@ -6221,20 +6705,20 @@ void MainWindow::dlgComboSheet() {
       o = drag->o0 + (QPointF(drag->c0.xMm(0), drag->c0.yMm(0)) -
                       QPointF(c.xMm(0), c.yMm(0))) *
                          sc;
-    } else if (dial->drag) { // 다이얼을 끄는 동안: 배율 그대로, 평면 칸 가운데를 축으로 돈다
+    } else if (dial->drag || dial->stepping) { // 다이얼을 끄는 동안: 배율 그대로, 평면 칸 가운데를 축으로 돈다
       sc = dial->sc0;
       double s0 = 0, t0 = 0;
       c.toST(dial->wx, dial->wy, s0, t0);
       o = dial->scr0 - QPointF(c.xMm(s0), c.yMm(t0)) * sc;
-    } else {
-      sc = std::min((rc.width() - 48.0) / c.L.paperW,
+    } else { // 종이는 가운데, 오른쪽 가운데 다이얼 띠만큼 양쪽을 비운다
+      sc = std::min((rc.width() - 2.0 * kComboDialBand) / c.L.paperW,
                     (rc.height() - 110.0) / c.L.paperH);
       if (sc <= 0.02)
         return;
       sc *= pv->pageZoom;
     }
     const QSizeF pz(c.L.paperW * sc, c.L.paperH * sc);
-    if (!pinned && !dial->drag)
+    if (!pinned && !dial->drag && !dial->stepping)
       o = QPointF(rc.left() + (rc.width() - pz.width()) / 2 + pv->viewPan.x(),
                   rc.top() + (rc.height() - pz.height()) / 2 + pv->viewPan.y());
     pv->lastPaperO = o;
@@ -6264,7 +6748,7 @@ void MainWindow::dlgComboSheet() {
     auto ring = [&](const QPointF &q, bool big) { // 손잡이(화면 전용 — 저장에는 없음)
       p.setPen(QPen(theme::SectionRed, 1.5));
       p.setBrush(Qt::white);
-      p.drawEllipse(q, big ? 5.0 : 4.0, big ? 5.0 : 4.0);
+      p.drawEllipse(q, big ? 6.0 : 4.5, big ? 6.0 : 4.5);
     };
     if (pinned && drag->asset >= 0 &&
         drag->asset < int(assets->secs.size())) { // 끄는 선: 마우스를 바로 따라감
@@ -6277,24 +6761,18 @@ void MainWindow::dlgComboSheet() {
       paintComboPlanLine(p, A, B, as.nameA, as.nameB, sc, 1.0);
       ring(A, !drag->endB);
       ring(B, drag->endB);
-    } else if (drag->hoverAsset >= 0 &&
-               drag->hoverAsset < int(c.sections.size())) {
-      const ComboPlaced &pl = c.sections[size_t(drag->hoverAsset)];
-      ring(QPointF(c.xMm(drag->hoverB ? pl.sB : pl.sA),
-                   c.yMm(drag->hoverB ? pl.tB : pl.tA)) *
-               sc,
-           true);
+    } else { // 끝 손잡이는 늘 보인다(사용자 2026-10-16 「단면선 끝도 둥글게 표시해서 사람들이 알수있게」) — 마우스가 위에 있으면 크게
+      for (const SheetHandle &h : pv->handles) {
+        const bool hot = h.asset == drag->hoverAsset && h.endB == drag->hoverB;
+        ring(h.at - o, hot);
+      }
     }
     p.restore();
     paintPaperFrame(p, o, pz);
-    { // 다이얼 자리: 종이 오른쪽 바깥 → 종이 위 바깥 → 그래도 없으면 미리보기 오른쪽 위 구석
-      const double R = PlanView::dialRadius(), ext = R + 17, gap = 14;
-      QPointF dc(o.x() + pz.width() + gap + ext, o.y() + ext);
-      if (dc.x() + ext > rc.right() - 6) {
-        dc = QPointF(o.x() + pz.width() - ext, o.y() - gap - (R + 19));
-        if (dc.y() - ext < rc.top() + 4)
-          dc = QPointF(rc.right() - 12 - ext, rc.top() + 12 + ext);
-      }
+    { // 다이얼 자리(사용자 2026-10-16 「오른쪽 중앙에 하라」): 미리보기 오른쪽 가장자리 · 세로 가운데.
+      // 종이를 맞출 때 이 띠(kComboDialBand)를 비우므로 처음 크기에서는 종이와 겹치지 않는다
+      const double R = PlanView::dialRadius();
+      QPointF dc(rc.right() - 16 - (R + 16), rc.top() + rc.height() / 2.0);
       if (dial->drag)
         dc = dial->c; // 끄는 동안 다이얼은 제자리(종이가 돌며 커져도)
       dial->c = dc;
@@ -6631,9 +7109,54 @@ bool MainWindow::comboDialTest(double deg, QString *log) {
   pump(100);
   const bool follows = lastCombo_->useRotation &&
                        std::abs(lastCombo_->rotationDeg - 12.5) < 1e-9;
+  // 오른쪽 가운데(사용자 2026-10-16 「오른쪽 중앙에」)
+  const QPointF c3 = pv->dialCenter;
+  const bool rightMid = std::abs(c3.y() - pv->height() / 2.0) < 1.0 &&
+                        c3.x() > pv->width() - kComboDialBand &&
+                        c3.x() + R + 3 < pv->width() - 8;
+  // 한 칸 0.1°: 다이얼 위 휠 한 칸 → ← → Shift+→ → 멈춘 뒤 되돌리기 한 칸 · 평면 화면도 같은 각
+  pump(PlanView::kRotStepCommitMs + 100);
+  const int undo2 = undo_->index();
+  send(QEvent::MouseMove, c3, Qt::NoButton, Qt::NoButton);
+  {
+    QWheelEvent we(c3, pv->mapToGlobal(c3), QPoint(), QPoint(0, 120),
+                   Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(pv, &we);
+  }
+  const double w1 = lastCombo_->rotationDeg;
+  auto key = [&](int k, Qt::KeyboardModifiers m) {
+    QKeyEvent ev(QEvent::KeyPress, k, m);
+    QApplication::sendEvent(pv, &ev);
+  };
+  key(Qt::Key_Left, Qt::NoModifier);
+  key(Qt::Key_Left, Qt::NoModifier);
+  const double l2 = lastCombo_->rotationDeg;
+  key(Qt::Key_Right, Qt::ShiftModifier);
+  const double r1 = lastCombo_->rotationDeg;
+  t.restart();
+  while (t.elapsed() < 120000 && (pv->handleBusy || undo_->index() == undo2))
+    pump(20);
+  pump(200);
+  const bool stepOk = std::abs(w1 - 12.6) < 1e-9 && std::abs(l2 - 12.4) < 1e-9 &&
+                      std::abs(r1 - 13.0) < 1e-9 &&
+                      std::abs(plan_->rotationDeg() - 13.0) < 1e-9 &&
+                      undo_->index() == undo2 + 1;
+  say(QStringLiteral("combo-dial: right-mid=%1 (%2,%3 of %4x%5) step wheel=%6 "
+                     "left2=%7 shift=%8 plan=%9 undo-one=%10 %11")
+          .arg(rightMid ? 1 : 0)
+          .arg(c3.x(), 0, 'f', 0)
+          .arg(c3.y(), 0, 'f', 0)
+          .arg(pv->width())
+          .arg(pv->height())
+          .arg(w1, 0, 'f', 2)
+          .arg(l2, 0, 'f', 2)
+          .arg(r1, 0, 'f', 2)
+          .arg(plan_->rotationDeg(), 0, 'f', 2)
+          .arg(undo_->index() - undo2)
+          .arg(rightMid && stepOk ? QStringLiteral("ok") : QStringLiteral("FAIL")));
   const bool ok = outside && liveMid && same &&
                   std::abs(turned - normDeg180(deg)) < 0.5 && undone &&
-                  north && follows;
+                  north && follows && rightMid && stepOk;
   say(QStringLiteral("combo-dial: deg=%1 auto-before=%2 turned=%3 plan=%4 "
                      "outside-paper=%5 live=%6 same=%7 undo=%8 north-dbl=%9 "
                      "follows-plan=%10 %11")

@@ -410,8 +410,7 @@ void MainWindow::updateEnabled() {
       c->setEnabled(sc && elevCtx);
   if (depthBox_)
     depthBox_->setEnabled(sc && elevCtx);
-  for (QWidget *wd :
-       {elevRow2_, static_cast<QWidget *>(opacityMenu_), lineWidthMenu_})
+  for (QWidget *wd : {elevRow2_, static_cast<QWidget *>(opacityMenu_)})
     if (wd)
       wd->setEnabled(
           sc && elevCtx); // 입면 아래 줄 · 입면 ▾ 안의 같은 칸도 입면 칸과 같이

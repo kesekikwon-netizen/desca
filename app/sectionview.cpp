@@ -96,7 +96,8 @@ SectionDoc SectionView::doc() const {
 LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport, LevelLabelFit* fit) {
     QFont small(theme::fontFamily()); small.setPixelSize(std::max(8, int(std::lround(11.5 * ui))));
     const double minLinePx = forExport ? 0.5 / 25.4 * 96.0 * ui : 8.0 * ui;   // 인쇄 0.5 mm / 화면 8 px(더 촘촘하면 50 cm 선만 — 회색 면처럼 보이지 않게, 검토 UI 1)
-    const double textH = QFontMetricsF(small).height() * 1.35;
+    // 도면 · 내보내기: 표고 숫자 7 pt 의 em 한 줄(평·단면도와 같은 규칙 — 숫자뿐이라 em 간격이면 겹치지 않는다. 1:200 의 50 cm = 2.5 mm ≥ 2.469 mm)
+    const double textH = forExport ? theme::ptMm(theme::kPaperTextPt) / 25.4 * 96.0 * ui : QFontMetricsF(small).height() * 1.35;
     LevelPlan lp = planLevels(ppm, minLinePx, textH, 10);
     // 숫자는 50 cm 마다(사용자 2026-10-16 「축척이 80 이상이 되면 해발값이 사라진다 · 0.5 m 마다 해발값은 꼭」): 옛 규칙은 글자가 겹치면
     // 1 m 로 솎아 1:100 근처에서 50 cm 숫자가 사라졌다. 이제 글자를 줄이고 · 양쪽 번갈아 써서 50 cm 를 지키고, 그 선도 언제나 긋는다
@@ -123,7 +124,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         const QTransform tr = p.worldTransform();
         probe->uniform = std::abs(tr.m11() - tr.m22()) < 1e-4 && std::abs(tr.m12()) < 1e-4 && std::abs(tr.m21()) < 1e-4;
         probe->plot = pr;
-        probe->fontPx = std::max(8, int(std::lround(11 * ui)));
+        probe->fontPx = forExport ? theme::ptMm(theme::kPaperTextPt) / 25.4 * 96.0 * ui : std::max(8, int(std::lround(11 * ui)));
     }
     const double oz = r_.srs.origin.z;
     const SectionFrame f(r_.line);
@@ -143,9 +144,15 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     const double zVis1 = xf.zTop, zVis0 = xf.zTop - pr.height() / ppmZ;
     QFont small = theme::uiFont(std::max(8, int(std::lround(11.5 * ui))));
     QFont mono = theme::monoFont(std::max(8, int(std::lround(11 * ui))));
-    QFont monoBold = mono; monoBold.setBold(true);
     QFont title = theme::uiFont(std::max(6, int(std::lround(14 * ui))), true);
-    QFontMetricsF fm(small);
+    if (forExport) {   // 도면 · 내보내기 글자는 전부 7 pt(사용자 2026-10-16 「글자크기는 7pt 고정」 · 「글자 전부」). 화면은 그대로
+        const double pxPerMmDoc = ui * 96.0 / 25.4;
+        small = theme::paperFont(small, theme::kPaperTextPt, pxPerMmDoc, p.device());
+        mono = theme::paperFont(mono, theme::kPaperTextPt, pxPerMmDoc, p.device());
+        title = theme::paperFont(title, theme::kPaperTextPt, pxPerMmDoc, p.device());
+    }
+    QFont monoBold = mono; monoBold.setBold(true);
+    QFontMetricsF fm(small, p.device());
 
     // 1) 거리 눈금의 간격(레벨선 · 영상 · 눈금 그리기가 함께 씀) — 아래 거리 숫자도 같은 간격
     double dStep = niceStep(std::max(1e-3, sVis1 - sVis0), std::max(2, int(pr.width() / (90 * ui))));
@@ -224,13 +231,13 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         p.drawLine(QPointF(X(0), pr.top()), QPointF(X(0), pr.bottom()));
         p.drawLine(QPointF(X(f.L), pr.top()), QPointF(X(f.L), pr.bottom()));
     }
-    // 5b) 기준선 EL(점선, 맨 위)
+    // 5b) 기준선 표고(점선, 맨 위)
     if (st_.showBaseline && st_.baselineEl > zVis0 && st_.baselineEl < zVis1) {
         double y = Y(st_.baselineEl);
         p.setPen(QPen(theme::Ink2, 1.0 * ui, Qt::DashLine));
         p.drawLine(QPointF(pr.left(), y), QPointF(pr.right(), y));
         p.setFont(small);
-        QString bt = QStringLiteral("기준선 EL. %1 m").arg(st_.baselineEl, 0, 'f', 2);
+        QString bt = QStringLiteral("기준선 %1 m").arg(st_.baselineEl, 0, 'f', 2);
         QRectF br(pr.left() + 6 * ui, y - fm.height() - 2 * ui, fm.horizontalAdvance(bt) + 8 * ui, fm.height());
         p.setPen(Qt::NoPen); p.setBrush(QColor(255, 255, 255, 220)); p.drawRect(br);
         p.setPen(theme::Ink2); p.drawText(br, Qt::AlignCenter, bt);
@@ -264,12 +271,12 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         p.setPen(theme::Ink); p.drawText(b, Qt::AlignCenter, QStringLiteral("최종 계산 중…"));
     }
     // 5) 단면선(잘린 면): 그림 칸 안에서 맨 마지막 — 입면 배경·기준선·축척 막대·안내 상자가 절대 가리지 않음.
-    //    순수 빨강 약 2 px(인쇄 0.35 mm), 안티에일리어싱, 둥근 이음. 닫힌 고리(나무·돌 덩어리)는 닫아서 그림
+    //    순수 빨강 약 2 px(인쇄 0.8 pt), 안티에일리어싱, 둥근 이음. 닫힌 고리(나무·돌 덩어리)는 닫아서 그림
     if (st_.showLine) {
         if (probe) probe->drewCutLine = true;
         p.setBrush(Qt::NoBrush);
-        // 화면: 설정 굵기(기본 2 px) / 인쇄: 0.35 mm
-        const double lw = forExport ? exportLineMm(st_.lineWidthPx) / 25.4 * 96.0 * ui : std::clamp(st_.lineWidthPx, 1.0, 4.0) * ui;
+        // 화면: 설정 굵기(기본 2 px) / 인쇄 · 내보내기: 0.8 pt
+        const double lw = forExport ? exportLineMm() / 25.4 * 96.0 * ui : std::clamp(st_.lineWidthPx, 1.0, 4.0) * ui;
         p.setPen(QPen(theme::ProfileRed, lw, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         // 화면만: 0.1 px 보다 작은 굴곡은 그려도 보이지 않으므로 화면 좌표 0.1 px 허용으로 점을 솎아 그림(모든 꼭짓점이 선 중심에서 0.1 px 안 —
         // 화소 단위로 같은 그림, 끌기 중 다시 그리기가 빨라짐). 내보내기(PDF·DXF·영상)는 꼭짓점 전부 그대로
@@ -307,8 +314,8 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         // 좁으면 글자를 줄이고(lf.scale) · 왼쪽 · 오른쪽 번갈아(lf.alternate — 짝수 번째 cm 는 왼쪽, 홀수 번째는 오른쪽: 끌어도 자리가 안 바뀜)
         QFont lMono = mono, lMonoBold = monoBold;
         if (lf.scale < 1.0) {
-            lMono.setPixelSize(std::max(6, int(std::lround(mono.pixelSize() * lf.scale))));
-            lMonoBold.setPixelSize(lMono.pixelSize());
+            lMono = theme::scaledFont(mono, lf.scale, 6);
+            lMonoBold = theme::scaledFont(monoBold, lf.scale, 6);
         }
         const double lh = fm.height() * lf.scale;
         for (auto& lv : levels) {
@@ -325,10 +332,9 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
             // 여백 칸보다 긴 숫자는 그 칸에 들어가게 글자만 줄인다(오른쪽 여백 9 mm 에서 「45.5」 끝이 잘리던 것 — 번갈아 쓰면 오른쪽에만 있는 숫자가 생긴다)
             auto fitText = [&](const QRectF& r, int align) {
                 const QFont f0 = p.font();
-                const double tw = QFontMetricsF(f0).horizontalAdvance(t);
+                const double tw = QFontMetricsF(f0, p.device()).horizontalAdvance(t);
                 if (tw > r.width() && r.width() > 1) {
-                    QFont f1 = f0; f1.setPixelSize(std::max(6, int(std::floor(f0.pixelSize() * r.width() / tw))));
-                    p.setFont(f1); p.drawText(r, align, t); p.setFont(f0);
+                    p.setFont(theme::scaledFont(f0, r.width() / tw, 6)); p.drawText(r, align, t); p.setFont(f0);
                 } else p.drawText(r, align, t);
             };
             if (onL) fitText(labL, Qt::AlignRight | Qt::AlignVCenter);
@@ -338,7 +344,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
                 if (probe->neighborPx <= 0 && probe->labels.size() >= 2)
                     probe->neighborPx = std::abs(probe->labels.back().center().y() - probe->labels[probe->labels.size() - 2].center().y());
                 probe->worldStep = lab / 100.0;
-                probe->fontPx = p.font().pixelSize();
+                probe->fontPx = theme::fontEmPx(p.font(), p.device());
             }
             p.setPen(QPen(theme::LevelMajor, 1.0 * ui));
             p.drawLine(QPointF(pr.left() - 5 * ui, ys), QPointF(pr.left(), ys));
@@ -389,7 +395,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     QString t2 = QStringLiteral("길이 %1 m  ·  두께 앞 %2 / 뒤 %3 m  ·  %4%5  ·  가로:세로 1:1")
                      .arg(f.L, 0, 'f', 2).arg(r_.line.front, 0, 'f', 2).arg(r_.line.back, 0, 'f', 2)
                      .arg(QString::fromStdString(r_.srs.describe().horizontalLabelKo()), lvText);   // 높이 글 없음(T8)
-    p.drawText(QRectF(area.left() + 12 * ui + QFontMetricsF(title).horizontalAdvance(t1) + 12 * ui, area.top() + 8 * ui, area.width(), 20 * ui), Qt::AlignLeft | Qt::AlignVCenter, t2);
+    p.drawText(QRectF(area.left() + 12 * ui + QFontMetricsF(title, p.device()).horizontalAdvance(t1) + 12 * ui, area.top() + 8 * ui, area.width(), 20 * ui), Qt::AlignLeft | Qt::AlignVCenter, t2);
     }
     if (!footer.isEmpty()) {
         p.setPen(theme::Idle);

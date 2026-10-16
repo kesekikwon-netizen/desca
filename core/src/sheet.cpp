@@ -351,6 +351,13 @@ ComboLayout comboFrameForRotation(double rotDeg, double ax, double ay) {
     return c;
 }
 
+double rotationStep(double deg, int dir, double step) {
+    if (!(step > 0) || dir == 0) return normDeg180(deg);
+    const double k = normDeg180(deg) / step;
+    const double n = dir > 0 ? std::floor(k + 1e-6) + 1 : std::ceil(k - 1e-6) - 1;
+    return normDeg180(std::round(n * step / 1e-9) * 1e-9);   // 0.1 × n 의 부동소수 꼬리(33.700000000000003)를 지움
+}
+
 double rotationToAlign(double px, double py, double qx, double qy, bool vertical) {
     const double dx = qx - px, dy = qy - py;
     if (std::hypot(dx, dy) < 1e-12) return 0;

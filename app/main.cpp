@@ -254,6 +254,7 @@ int main(int argc, char** argv) {
     double sheetBack = -1;    // --sheet-back m: 도면 탭이 열린 채 리본 「뒤」 깊이를 바꿔 단면 재계산 → 조판이 따라오는지 점검(2026-10-11)
     QString file, shot, logPath, perfPath, depthFade, dialogShot, ctxShot, paperArg, startShot, sheetCheck, splashShot, openSheet, uiAuditDir, sheetBatch;
     QString iconSheetPng; bool iconSheet = false;
+    QStringList svgLayerChecks;   // --svg-layers-check f.svg: 저장한 SVG 의 레이어 · 선 굵기 · 「EL」 점검(모델 없이도, 실패 종료 코드 17)
     int splashEsc = -1;   // --splash-esc N: 여는 화면을 띄우고 N ms 에 Esc 를 눌러 건너뛰는지 잰다(종료 6 = 늦게 닫힘)
     QString cursorSheetPng;   // --cursor-sheet f.png: 도구 커서 전부 × 배율 1 · 2 · 3 을 격자 PNG 로 쓰고 눈 검사(실패 종료 코드 11)
     QString appIconDir;   // --app-icon DIR: 앱 아이콘 PNG 다섯 장을 쓰고 눈 검사(실패 종료 코드 12)
@@ -304,6 +305,7 @@ int main(int argc, char** argv) {
         else if (s == "--app-icon") appIconDir = nx();
         else if (s == "--cursor-sheet") cursorSheetPng = nx();
         else if (s == "--splash-esc") splashEsc = nx().toInt();
+        else if (s == "--svg-layers-check") svgLayerChecks << nx();
         else if (s == "--icon-sheet") { iconSheet = true; iconSheetPng = nx(); }   // v5 A3: 아이콘 이름 검사 + 격자 캡처(실패 종료 코드 10)
         else if (s == "--lod-shot") lodShot = nx();
         else if (s == "--section-scale") sectionScale = nx().toDouble();
@@ -392,6 +394,13 @@ int main(int argc, char** argv) {
         if (logOk) { logF.write(b); logF.flush(); }
         fputs(b.constData(), stdout); fflush(stdout);
     };
+    for (const QString& f : svgLayerChecks) {   // 해발선이 있는 그림(이름에 plan 이 없는 것)은 0.8 · 0.5 · 0.2 가 다 있어야
+        QString rep;
+        const bool ok = MainWindow::checkSvgLayers(f, &rep, !QFileInfo(f).fileName().contains(QLatin1String("plan")));
+        log(QStringLiteral("svg-layers %1 %2 %3").arg(QFileInfo(f).fileName(), rep, ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
+        if (!ok) rc = 17;
+    }
+    if (!svgLayerChecks.isEmpty() && file.isEmpty() && quit) return rc;
     if (iconSheet) {   // v5 A3: 모델 없이도 돈다 — 모든 Ico 이름에 SVG 가 있는지 + 격자 캡처
         QString rep;
         const bool ok = w.iconSheet(iconSheetPng, &rep);

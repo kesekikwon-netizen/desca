@@ -25,7 +25,7 @@ struct DxfExportOptions {
     bool levelsBelowGround = false;   // 레벨선을 땅속에만(지면 위 공기에는 없음, levelLineSpans, 2026-10-16). 기본 false = 옛 동작(통째로 한 줄)
     double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기 pt(10 cm · 50 cm = 1 m 포함) — 디자인 v5 결정 L. 레이어 370 값은 dxfLineWeight()
     double scaleDenom = 20;   // 문자 크기 계산용(1/20 → 2 mm 글자 = 0.04 m)
-    double textMm = 2.0;
+    double textMm = 7.0 * 25.4 / 72.0;   // 글자 7 pt(사용자 2026-10-16 「글자크기는 7pt 고정」)
     std::string title = "A-A'";
     // 래스터(선택)
     bool image = false;

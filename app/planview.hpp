@@ -104,7 +104,11 @@ public:
     void startAlignTwoPoints();
     void cancelAlign();
     bool aligning() const { return alignStage_ >= 0; }
-    static double dialRadius() { return 19.0; }
+    static double dialRadius() { return 28.5; }   // 1.5 배(사용자 2026-10-16 「나침반도 좀더 크게」)
+    /// 다이얼 한 칸(사용자 2026-10-16 「방향키로도 0.1도씩」): 다이얼 위 휠 · ←/→ = 0.1°, Shift = 1°(dir +1 = 시계).
+    /// 끄는 중과 같이 바로 돌고(onRotate final=false), 연달아 누르는 동안은 기다렸다가 멈춘 뒤 한 번 확정(되돌리기 한 칸)
+    void stepRotation(int dir, bool coarse);
+    static constexpr int kRotStepCommitMs = 400;
     /// 다이얼 그리기(평면 화면 · 도면 탭 종이 바깥이 같이 쓴다). c = 가운데, rotDeg = 방향 각, hot = 마우스가 위에 · 끄는 중
     static void paintRotationDial(QPainter& p, const QPointF& c, double r, double rotDeg, bool hot, const QString& caption);
     /// 다이얼 가운데 → 점의 각(위 0°, 시계 방향, 도)
@@ -206,6 +210,7 @@ private:
     double zoomPending_ = 0;            // 남은 확대량(log, 음수 = 확대)
     QPointF zoomAnchor_;
     class QTimer* zoomTimer_ = nullptr;
+    class QTimer* rotStepTimer_ = nullptr;   // 휠 · 방향키 한 칸들을 멈춘 뒤 한 번 확정
     void applyZoomAt(const QPointF& at, double factor);
     QMatrix4x4 proj_, view_;
     // 단면선(로컬 XY)

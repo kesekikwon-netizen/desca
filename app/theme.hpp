@@ -8,6 +8,9 @@
 #include <QIcon>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPaintDevice>
+#include <algorithm>
+#include <cmath>
 #include <QPixmap>
 #include <QString>
 #include <QStringList>
@@ -19,6 +22,8 @@ inline const QColor Ground{0xFA, 0xF9, 0xF5}, Card{0xFF, 0xFF, 0xFF}, Wash{0xF5,
 inline const QColor Ink{0x14, 0x14, 0x13}, Hand{0x30, 0x30, 0x2E}, Ink2{0x3D, 0x3D, 0x3A}, Muted{0x5E, 0x5D, 0x59}, Faint{0x73, 0x72, 0x6C};
 inline const QColor Line{0xDE, 0xDC, 0xD1}, Edge{0xC2, 0xC0, 0xB6}, Ring{0xB0, 0xAE, 0xA5}, CheckEdge{0x87, 0x86, 0x7F};
 inline const QColor Action{0xB5, 0x57, 0x3A}, ActionHover{0xA4, 0x4D, 0x32}, ChipPressed{0xE3, 0xE0, 0xD4}, ClayText{0x9C, 0x4A, 0x2F}, Block{0xA3, 0x3B, 0x3B}, BlockWash{0xF3, 0xDE, 0xDA}, Caution{0x7A, 0x5A, 0x00}, Done{0x3F, 0x6B, 0x31};
+// 연한 주황(사용자 2026-10-16 「내보내기 도면만 주황색으로 연하게」): 리본 「도면」 칩 바탕 · 마우스 위. 글자 · 아이콘은 ClayText(대비 4.5:1)
+inline const QColor ActionWash{0xF6, 0xDC, 0xC8}, ActionWashHover{0xF0, 0xCD, 0xB4};
 inline const QColor LevelMinor{0xDE, 0xDC, 0xD1}, LevelMajor{0x9C, 0x9A, 0x92}, LevelText{0x3D, 0x3D, 0x3A};
 // 옛 이름(다른 파일 호환)
 inline const QColor Bg = Ground, InkSub = Muted, Chip = Desk, Idle = Faint, Outline = CheckEdge, Brand = Action, BrandSoft = Wash, Ok = Done;
@@ -32,6 +37,28 @@ inline QString fontFamily() {
 #else
     return QStringLiteral("Noto Sans CJK KR");
 #endif
+}
+// ---- 도면 글자(사용자 2026-10-16 「글자크기는 7pt 고정」): 도면 · 내보내기(SVG · PDF · PNG · DXF)의 글자는 종이 위 7 pt 하나
+constexpr double kPaperTextPt = 7.0;
+constexpr double ptMm(double pt) { return pt * 25.4 / 72.0; }   // 7 pt = 2.469 mm(글자 em)
+/// 종이 위 pt 그대로의 글꼴: pxPerMm = 장치 px / 종이 mm. 장치의 논리 dpi 로 pt 를 환산하므로(정수 px 반올림 없음)
+/// SVG(96 dpi → font-size 9.333 = 7 pt) · PDF · PNG · 화면 미리보기 어디서나 종이 위 크기가 같다
+inline QFont paperFont(QFont f, double pt, double pxPerMm, const QPaintDevice* dev) {
+    const double dpi = dev && dev->logicalDpiY() > 0 ? dev->logicalDpiY() : 96.0;
+    f.setPointSizeF(std::max(0.25, pt * pxPerMm * 25.4 / dpi));
+    return f;
+}
+/// 글꼴의 글자 em 을 장치 px 로(px 로 정했든 pt 로 정했든)
+inline double fontEmPx(const QFont& f, const QPaintDevice* dev) {
+    if (f.pixelSize() > 0) return f.pixelSize();
+    const double dpi = dev && dev->logicalDpiY() > 0 ? dev->logicalDpiY() : 96.0;
+    return f.pointSizeF() * dpi / 72.0;
+}
+/// 글꼴 크기만 s 배(px 로 정했든 pt 로 정했든)
+inline QFont scaledFont(QFont f, double s, int minPx = 1) {
+    if (f.pixelSize() > 0) f.setPixelSize(std::max(minPx, int(std::lround(f.pixelSize() * s))));
+    else f.setPointSizeF(std::max(0.25, f.pointSizeF() * s));
+    return f;
 }
 inline QFont uiFont(int px, bool bold = false) { QFont f; f.setFamilies(fontFamilies()); f.setPixelSize(px); f.setBold(bold); return f; }
 inline QFont monoFont(int px) {
@@ -99,7 +126,7 @@ QToolButton#ribbonChip { margin: 0; padding: 1px; background: transparent; color
 QToolButton#ribbonChip:hover { background: transparent; border: 1px solid transparent; }
 QToolButton#ribbonChip:pressed { background: #E8E6DC; border-color: #DEDCD1; }
 QToolButton#ribbonChip:checked, QToolButton#ribbonChip:checked:hover { background: transparent; color: #141413; font-weight: 700; border: 1px solid transparent; }
-QToolButton#ribbonChip[primary="true"] { font-weight: 700; }
+QToolButton#ribbonChip[primary="true"] { font-weight: 700; color: #9C4A2F; }
 QToolButton#ribbonChip:disabled { color: #696862; }
 QToolButton#ribbonChip:checked:disabled, QToolButton#ribbonChip[primary="true"]:disabled { font-weight: 400; color: #696862; }
 QPushButton#aboutLink { border: 0; background: transparent; color: #5E5D59; font-size: 12px; padding: 4px 0; text-align: left; }
@@ -368,7 +395,7 @@ inline kerf::ChipColors chipColors() {
     c.tile = Desk; c.tileHover = Press; c.tilePressed = ChipPressed; c.tileDisabled = Wash; c.glyph = Hand;
     c.tileOn = Hand; c.borderOn = Hand; c.glyphOn = Ground;
     c.tileShown = Oat; c.borderShown = Ring;
-    c.tilePrimary = Action; c.tilePrimaryHover = ActionHover; c.glyphPrimary = Card;
+    c.tilePrimary = ActionWash; c.tilePrimaryHover = ActionWashHover; c.glyphPrimary = ClayText;
     return c;
 }
 

@@ -453,13 +453,13 @@ void PlanView::paintRotationDial(QPainter& p, const QPointF& c, double r, double
     {
         const double shown = std::abs(rotDeg) < 0.05 ? 0.0 : rotDeg;
         const QString txt = QStringLiteral("%1°").arg(shown, 0, 'f', 1);
-        QFont fm = theme::monoFont(10);
-        for (int px : {10, 9, 8}) {
+        QFont fm = theme::monoFont(12);
+        for (int px : {12, 11, 10, 9, 8}) {
             fm = theme::monoFont(px);
             if (QFontMetricsF(fm).horizontalAdvance(txt) <= 2 * r - 2) break;
         }
         const double tw = QFontMetricsF(fm).horizontalAdvance(txt);
-        const QRectF tr(c.x() - tw / 2 - 2, c.y() - 7, tw + 4, 14);
+        const QRectF tr(c.x() - tw / 2 - 2, c.y() - 8, tw + 4, 16);
         p.setPen(Qt::NoPen); p.setBrush(theme::Card); p.drawRect(tr);
         p.setFont(fm); p.setPen(theme::Ink);
         p.drawText(tr, Qt::AlignCenter, txt);
@@ -1153,11 +1153,28 @@ void PlanView::drawSectionPlane() {
     glDeleteBuffers(1, &vbo);
 }
 
-QPointF PlanView::compassCenter() const { return QPointF(width() - 38, height() - 52); }   // 오른쪽 아래, 바깥 여백 16
+// 오른쪽 아래, 바깥 여백 16: 둘레(r + 3) 오른쪽 · 아래 글 「진북」(r + 5 … r + 19) 아래가 여백 16 에 닿게
+QPointF PlanView::compassCenter() const { const double r = dialRadius(); return QPointF(width() - 16 - (r + 3), height() - 16 - (r + 19)); }
 
 bool PlanView::compassHit(const QPointF& p) const {
     const QPointF c = compassCenter();
-    return QRectF(c.x() - 28, c.y() - 42, 56, 80).contains(p);
+    const double r = dialRadius();   // 위 「N」(r + 11 ± 6) · 아래 「진북」(r + 19)까지
+    return QRectF(c.x() - (r + 9), c.y() - (r + 18), 2 * (r + 9), 2 * r + 37).contains(p);
+}
+
+void PlanView::stepRotation(int dir, bool coarse) {
+    if (!hasScene_ || dir == 0) return;
+    yaw_ = rotationStep(rotationDeg(), dir, coarse ? 1.0 : 0.1);
+    fitted_ = false;
+    updateMatrices(); update();
+    if (onRotate) onRotate(rotationDeg(), false);
+    if (!rotStepTimer_) {
+        rotStepTimer_ = new QTimer(this);
+        rotStepTimer_->setSingleShot(true);
+        rotStepTimer_->setInterval(kRotStepCommitMs);
+        QObject::connect(rotStepTimer_, &QTimer::timeout, this, [this] { if (onRotate) onRotate(rotationDeg(), true); });
+    }
+    rotStepTimer_->start();
 }
 
 void PlanView::mousePressEvent(QMouseEvent* e) {
@@ -1377,6 +1394,12 @@ void PlanView::wheelEvent(QWheelEvent* e) {
     if (!hasScene_) return;
     double notches = e->angleDelta().y() / 120.0;
     if (notches == 0 && !e->pixelDelta().isNull()) notches = e->pixelDelta().y() / 60.0;  // 터치패드
+    if (compassHit(e->position()) && alignStage_ < 0 && !dialDrag_) {   // 다이얼 위 휠 = 한 칸 0.1°(Shift 1°), 위로 굴리면 시계 방향
+        const int n = notches > 0 ? std::max(1, int(std::lround(notches))) : notches < 0 ? std::min(-1, int(std::lround(notches))) : 0;
+        for (int i = 0; i < std::abs(n); ++i) stepRotation(n > 0 ? 1 : -1, e->modifiers().testFlag(Qt::ShiftModifier));
+        e->accept();
+        return;
+    }
     wheelZoom(e->position(), notches);
     e->accept();
 }
@@ -1420,6 +1443,11 @@ void PlanView::keyPressEvent(QKeyEvent* e) {
     if (e->key() == Qt::Key_Escape && alignStage_ >= 0) { cancelAlign(); return; }
     if (e->key() == Qt::Key_Escape && drawStage_ >= 0) { drawStage_ = -1; useShape(Qt::ArrowCursor); if (onDrawModeChanged) onDrawModeChanged(false); update(); return; }
     if (e->key() == Qt::Key_Shift && drawStage_ == 1) { useTool(kerf::ToolCursor::DrawB, true); return; }   // Shift = 축 맞춤: 십자가 축 색 · 굵게
+    if ((e->key() == Qt::Key_Left || e->key() == Qt::Key_Right) && hasScene_ && alignStage_ < 0 && drawStage_ < 0 && !dialDrag_
+        && !(e->modifiers() & (Qt::ControlModifier | Qt::AltModifier))) {   // 평면에 초점이 있으면 ←/→ = 다이얼 0.1°(Shift 1°)
+        stepRotation(e->key() == Qt::Key_Right ? 1 : -1, e->modifiers().testFlag(Qt::ShiftModifier));
+        return;
+    }
     QOpenGLWidget::keyPressEvent(e);
 }
 

@@ -3,6 +3,7 @@
 #include <sstream>
 #include "catch_amalgamated.hpp"
 #include "asec/engine.hpp"
+#include "asec/export.hpp"
 #include "asec/raster.hpp"
 #include "asec/sheet.hpp"
 
@@ -334,18 +335,25 @@ TEST_CASE("표고 숫자 배치: 50 cm 가 원칙 — 줄이기 · 번갈아 · 
     CHECK(same(fitLevelLabels(0, 5), 50, false, 1.0));      // 나쁜 입력은 기본값
 }
 
-TEST_CASE("표고 숫자: 1:20 ~ 1:200 은 화면 · 도면 · 평·단면도 · DXF 모두 50 cm 마다", "[combo][levels]") {
+TEST_CASE("표고 숫자: 1:20 ~ 1:200 은 화면 · 도면 · 평·단면도 · DXF 모두 50 cm 마다 · 도면 글자는 7 pt 그대로", "[combo][levels]") {
+    const double em7 = 7.0 * 25.4 / 72.0;   // 7 pt 의 em(mm) — 사용자 2026-10-16 「글자크기는 7pt 고정」
     for (int d = 20; d <= 200; d += 5) {
         INFO("1:" << d);
-        // 평·단면도(종이 mm): 글자 2.1 mm 한 줄 2.4 mm, 번갈아 쓸 곳 없음
-        CHECK(fitLevelLabels(0.5 * 1000.0 / d, 2.4, false).labelCm == 50);
-        // 단면 DXF(도면 m): 글자 높이 th = 2 mm × 축척, 한 줄 = th × 1.8(core exportSectionDxf)
-        const double th = 2.0 / 1000.0 * d;
+        // 평·단면도 · 단면 도면(종이 mm): 숫자 한 줄 = 7 pt 의 em, 번갈아 쓸 곳 없음 → 줄이지도 번갈지도 솎지도 않는다
+        const LevelLabelFit fc = fitLevelLabels(0.5 * 1000.0 / d, em7, false);
+        CHECK(fc.labelCm == 50);
+        CHECK(fc.scale == 1.0);
+        CHECK_FALSE(fc.alternate);
+        // 단면 DXF(도면 m): 글자 높이 th = 7 pt em × 축척, 한 줄 = th × 1.8(core exportSectionDxf — 좁으면 좌우 번갈아)
+        const double th = DxfExportOptions{}.textMm / 1000.0 * d;
+        CHECK(th == Approx(em7 / 1000.0 * d));
         CHECK(fitLevelLabels(0.5, th * 1.8).labelCm == 50);
         // 단면 화면 · 단면 도면(96 dpi 기준 px): 글꼴 11.5 px 의 줄 높이를 크게 잡아도(맑은 고딕 1.33 배 × 여유 1.35 ≈ 20.7 px)
         const double ppm = 96.0 / 25.4 * 1000.0 / d;
         CHECK(fitLevelLabels(0.5 * ppm, 11.5 * 1.33 * 1.35).labelCm == 50);
     }
+    // 1:200 보다 작은 축척에서야 7 pt 숫자가 50 cm 간격(2.5 mm)에 빠듯해져 글자를 줄이기 시작한다(경계 확인)
+    CHECK(fitLevelLabels(0.5 * 1000.0 / 210, em7, false).scale < 1.0);
 }
 
 TEST_CASE("한 장 조판: 끄는 동안 틀을 붙들면 평면이 돌지 않고 종이 ↔ 로컬 변환이 그대로", "[combo][sheet]") {
@@ -407,6 +415,27 @@ TEST_CASE("평면 방향: 각 정리 · 방향 틀 · 두 점 맞춤", "[combo][
     CHECK(c.northDeg() == Approx(0).margin(1e-9));
     CHECK(c.sections[0].slot == ComboSlot::Left);   // 북쪽으로 그은 선은 서쪽(왼쪽 법선)을 본다 → 평면 왼쪽 세로 칸
     CHECK(layoutCombo(sp, secs, 1.0).northDeg() != Approx(0).margin(1e-6));
+}
+
+TEST_CASE("다이얼 한 칸(사용자 2026-10-16 「방향키로도 0.1도씩」): 휠 · ←/→ 0.1°, Shift 1°", "[combo][rotation]") {
+    CHECK(rotationStep(0, +1) == 0.1);                       // 꼬리 없이 정확히(33.700000000000003 아님)
+    CHECK(rotationStep(0.1, +1) == 0.2);
+    CHECK(rotationStep(0.2, -1) == 0.1);
+    CHECK(rotationStep(33.6, +1) == 33.7);
+    CHECK(rotationStep(33.63, +1) == 33.7);                  // 끌어서 격자 밖이면 그 방향의 가장 가까운 칸
+    CHECK(rotationStep(33.63, -1) == 33.6);
+    CHECK(rotationStep(-0.1, +1) == 0.0);
+    CHECK(rotationStep(-33.63, -1) == -33.7);
+    CHECK(rotationStep(179.95, +1) == Approx(180).margin(1e-9));      // 180 까지, 넘으면 반대쪽으로 감기
+    CHECK(rotationStep(180, +1) == Approx(-179.9).margin(1e-9));
+    CHECK(rotationStep(-179.9, -1) == Approx(180).margin(1e-9));
+    CHECK(rotationStep(33.63, +1, 1.0) == 34.0);             // Shift = 1°
+    CHECK(rotationStep(-0.1, +1, 1.0) == 0.0);
+    CHECK(rotationStep(12.5, 0) == 12.5);                    // 방향 없음 · 나쁜 간격은 그대로
+    CHECK(rotationStep(12.5, +1, 0.0) == 12.5);
+    double d = 0;                                            // 열 번 = 1°(쌓이지 않음)
+    for (int i = 0; i < 10; ++i) d = rotationStep(d, +1);
+    CHECK(d == 1.0);
 }
 
 TEST_CASE("단면선 방향 스냅: 화면 가로 · 세로와 다른 단면에 직각 · 평행, 3° 안에서만", "[combo][rotation]") {

@@ -14,6 +14,9 @@ struct LineWeights {
   double minorPt = 0.2;
   double majorPt = 0.5;
 };
+/// 빨간 잘린 선(단면선) 인쇄 · 내보내기 굵기 = 0.8 pt 고정(사용자 2026-10-16
+/// 「단면선 빨간선은 0.8pt고정」) — SVG · PDF · PNG · DXF 모두. 화면 굵기와 무관
+constexpr double kCutLinePt = 0.8;
 /// pt → 종이 위 mm (1 pt = 25.4 / 72 mm)
 double ptToMm(double pt);
 /// 입력값을 0.05–3.0 pt 로 자른다. NaN 은 기본 0.2
@@ -242,6 +245,9 @@ double normDeg180(double deg);
 /// 평면 방향의 돌린 틀: s 축 u = (cos, sin)(종이 오른쪽) · t 축 n = (−sin, cos)(종이 위), 원점 (ax, ay).
 /// layoutCombo 의 keepFrame 으로 넘기면 첫 단면 기준 자동 회전 대신 이 방향으로 놓는다. northDeg() == normDeg180(rotDeg)
 ComboLayout comboFrameForRotation(double rotDeg, double ax = 0, double ay = 0);
+/// 다이얼 한 칸(사용자 2026-10-16 「방향키로도 0.1도씩」): dir 쪽(+ = 시계)으로 step 격자의 다음 칸.
+/// 격자 위면 정확히 step 만큼, 격자 밖(끌어서 33.63°)이면 그 방향의 가장 가까운 격자(33.7°)로. 결과는 (−180, 180]
+double rotationStep(double deg, int dir, double step = 0.1);
 /// 두 점 맞춤: p → q 가 화면 가로(오른쪽으로)가 되는 방향 각. vertical 이면 세로(위로)
 double rotationToAlign(double px, double py, double qx, double qy, bool vertical);
 /// 단면선 방향 스냅: dirDeg(동 0°, 반시계)를 refsDeg 각각의 ref + k·90° 중 tolDeg 안에서 가장 가까운 것에 붙인다.

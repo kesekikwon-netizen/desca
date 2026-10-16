@@ -35,7 +35,7 @@ bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const f
     d.addLayer("LEVEL_50CM", 8, dxfLineWeight(o.levelMajorPt));
     d.addLayer("LEVEL_1M", 8, dxfLineWeight(o.levelMajorPt));
     d.addLayer("SECTION_IMAGE", 7, -3);
-    d.addLayer("SECTION_PROFILE", 1, 50);
+    d.addLayer("SECTION_PROFILE", 1, dxfLineWeight(kCutLinePt));   // 0.8 pt → 0.30 mm
     d.addLayer("LEVEL_TEXT", 7, 18);
     d.addLayer("SECTION_AXIS", 7, 18);
     d.addLayer("SECTION_TITLE", 7, 25);

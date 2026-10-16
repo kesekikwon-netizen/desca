@@ -349,6 +349,11 @@ public:
                                QString *msg,
                                const std::atomic<bool> *cancel = nullptr,
                                const std::function<void(double)> &progress = {});
+  /// 저장한 SVG 의 레이어 점검(시험 장치 — --ui-audit · --sheet-check): 맨 위 <g> 가 모두 레이어(0.2 · 0.5 · 이미지 · 틀 ·
+  /// 0.8 · 글자, inkscape · 일러스트레이터 이름), 0.8 · 0.5 · 0.2 안의 선이 빨강 0.8 pt · 해발선 0.5 · 0.2 pt(종이 위), 「EL」 글자
+  /// 없음. needLevels 면 0.8 · 0.5 · 0.2 가 비면 안 된다. report 에 레이어별 개수 · 잰 pt
+  static bool checkSvgLayers(const QString &path, QString *report,
+                             bool needLevels);
   QDialog *buildSheetDialog(SheetParams &io,
                             bool &accepted); // 자동화(창 캡처)에서도 씀
   QDialog *buildPlanSheetDialog(PlanSheetParams &io, const QImage &preview,
@@ -505,6 +510,7 @@ private:
   QPointer<class QListWidget> sheetList_;
   bool sheetIsPlan_ = false;
   bool sheetIsCombo_ = false; // 지금 조판 = 평·단면도 한 장(목록 맨 위 줄)
+  bool sheetSeparateOpen_ = false; // 평·단면도가 있을 때 「따로 뽑기」(평면 · 단면 한 장씩) 펼침
   std::shared_ptr<ComboSheetParams> lastCombo_;
   std::shared_ptr<SheetParams>
       lastSheet_; // 지금 조판의 단면도 설정(다른 단면으로 갈 때 용지·넣을
@@ -642,13 +648,7 @@ private:
   QWidget *elevRow2_ =
       nullptr; // 리본 입면 아래 줄: 영상 불투명도 · 단면선 굵기(사용자 지시
                // 2026-10-10 「더보기 안의 … 입면 밑으로」)
-  QWidget *lineWidthMenu_ = nullptr; // 더보기 안의 단면선 굵기 칩
-  QAction *opacityMenuAct_ = nullptr,
-          *lineWidthMenuAct_ =
-              nullptr; // 더보기 안의 두 칸(아래 줄이 보이면 숨김)
-  std::vector<QToolButton *>
-      lineWidthChips_; // 단면선 굵기 칩 전부(아래 줄 · 더보기) — 하나를 누르면
-                       // 함께 맞춤
+  QAction *opacityMenuAct_ = nullptr; // 입면 ▾ 안의 불투명도 칸(아래 줄이 보이면 숨김)
   void setSectionLineWidth(double px);
   bool drawEnded_ = false; // 방금 그리기를 마침(다음 단면 결과를 맞춤으로)
   bool highContrast_ = false;
