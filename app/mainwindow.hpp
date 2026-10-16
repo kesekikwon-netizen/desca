@@ -821,6 +821,21 @@ private:
                       const QString &filter);
   SectionStyle secStyle() const;
   void report(bool ok, const QString &m);
+  // ---- vector(VectorCraft/Trowel — 사용자의 다른 앱)로 도면 넘기기(2026-10-16 「ui버튼추가 누르면
+  // 내보내기를 이앱으로 들어가게」 · 「내보내기 경로나 바로가기를 지정할 수 있게」). 순수 계산은 core
+  // asec/handoff.hpp. vector 는 파일 경로를 위치 인자로 받아 SVG 를 대화 상자 없이 연다
+  /// 도면을 SVG 로 보낼 폴더에 내보낸(작업 스레드) 뒤 vector 를 그 파일과 함께 실행. title = 파일 이름에 쓸 도면명
+  void sendSheetToVector(const QString &what, const QString &title,
+                         std::function<bool(const QString &, QString *)> exportSvg);
+  /// vector 실행 파일: 설정(handoff/vectorExe) → 앱 옆 → 옆 폴더(vector · VectorCraft · Trowel). 없으면 ask 일 때
+  /// 한 번 고르게 하고(실행 파일 또는 바로가기 .lnk — 대상으로 푼다) 설정에 저장. 못 찾으면 ""
+  QString vectorExePath(bool ask);
+  /// 사용자가 vector 실행 파일 · 바로가기를 고른다(설정에 저장). 취소면 ""
+  QString pickVectorExe();
+  /// 보낼 폴더: 설정(handoff/outDir), 비면 projects 옆 exports(앱 폴더 · --settings 면 그 폴더)
+  QString handoffDir() const;
+  /// 조판 판 「vector 로 보내기」 절: 실행 파일 · 보낼 폴더를 보여 주고 바꾼다
+  QWidget *handoffSettingsWidget();
   void applySrsReport();
   void refreshSrs();
 };
