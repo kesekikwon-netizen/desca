@@ -48,6 +48,7 @@
 #include <QTabBar>
 #include <QDoubleSpinBox>
 #include "asec/pick.hpp"
+#include "asec/export.hpp"
 #include "mainwindow.hpp"
 #include "guideband.hpp"
 #include "cursors.hpp"
@@ -259,6 +260,7 @@ int main(int argc, char** argv) {
     QString iconSheetPng; bool iconSheet = false;
     QString comboCheck;   // --combo-check DIR: 평·단면도 표고 글자 자리 · 영상 해상도 점검(모델과, 실패 종료 코드 18)
     QStringList svgLayerChecks;   // --svg-layers-check f.svg: 저장한 SVG 의 레이어 · 선 굵기 · 「EL」 점검(모델 없이도, 실패 종료 코드 17)
+    QStringList dxfLayerChecks;   // --dxf-layers-check f.dxf: 저장한 단면 · 평·단면도 DXF 의 레이어 0.8 · 0.5 · 0.2 점검(모델 없이도, 실패 종료 코드 19)
     int splashEsc = -1;   // --splash-esc N: 여는 화면을 띄우고 N ms 에 Esc 를 눌러 건너뛰는지 잰다(종료 6 = 늦게 닫힘)
     QString cursorSheetPng;   // --cursor-sheet f.png: 도구 커서 전부 × 배율 1 · 2 · 3 을 격자 PNG 로 쓰고 눈 검사(실패 종료 코드 11)
     QString appIconDir;   // --app-icon DIR: 앱 아이콘 PNG 다섯 장을 쓰고 눈 검사(실패 종료 코드 12)
@@ -310,6 +312,7 @@ int main(int argc, char** argv) {
         else if (s == "--cursor-sheet") cursorSheetPng = nx();
         else if (s == "--splash-esc") splashEsc = nx().toInt();
         else if (s == "--svg-layers-check") svgLayerChecks << nx();
+        else if (s == "--dxf-layers-check") dxfLayerChecks << nx();
         else if (s == "--icon-sheet") { iconSheet = true; iconSheetPng = nx(); }   // v5 A3: 아이콘 이름 검사 + 격자 캡처(실패 종료 코드 10)
         else if (s == "--lod-shot") lodShot = nx();
         else if (s == "--section-scale") sectionScale = nx().toDouble();
@@ -444,7 +447,14 @@ int main(int argc, char** argv) {
         log(QStringLiteral("svg-layers %1 %2 %3").arg(QFileInfo(f).fileName(), rep, ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
         if (!ok) rc = 17;
     }
-    if (!svgLayerChecks.isEmpty() && file.isEmpty() && quit) return rc;
+    for (const QString& f : dxfLayerChecks) {   // 사용자 2026-10-16 「0.2 0.5 0.8로 레이어를 잡아 내보내기」 — DXF 도 SVG 와 같은 이름
+        QFile in(f);
+        std::string rep = "열 수 없음";
+        const bool ok = in.open(QIODevice::ReadOnly) && asec::checkDrawingDxfLayers(in.readAll().toStdString(), true, &rep);
+        log(QStringLiteral("dxf-layers %1 %2 %3").arg(QFileInfo(f).fileName(), QString::fromStdString(rep), ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
+        if (!ok) rc = 19;
+    }
+    if ((!svgLayerChecks.isEmpty() || !dxfLayerChecks.isEmpty()) && file.isEmpty() && quit) return rc;
     if (iconSheet) {   // v5 A3: 모델 없이도 돈다 — 모든 Ico 이름에 SVG 가 있는지 + 격자 캡처
         QString rep;
         const bool ok = w.iconSheet(iconSheetPng, &rep);

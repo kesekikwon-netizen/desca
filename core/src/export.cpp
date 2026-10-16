@@ -2,7 +2,10 @@
 #include "asec/sheet.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
+#include <map>
+#include <sstream>
 #include "json.hpp"
 
 namespace asec {
@@ -11,6 +14,62 @@ Vec3 sectionToWorld(const SectionResult& r, double s, double z) {
     SectionFrame f(r.line);
     Vec2 p = f.planXY(s, 0);
     return r.srs.toWorld(Vec3(p.x, p.y, z));
+}
+
+bool checkDrawingDxfLayers(const std::string& txt, bool withLevels, std::string* report) {
+    struct Lay { int lw = -99, color = 0; };
+    std::map<std::string, Lay> layers;
+    std::map<std::string, int> lines, polys, texts;   // 레이어별 개체 수
+    std::istringstream in(txt);
+    std::string c, v, kind, layName;
+    auto trim = [](std::string& t) {
+        while (!t.empty() && (t.back() == '\r' || t.back() == ' ')) t.pop_back();
+        size_t i = 0;
+        while (i < t.size() && t[i] == ' ') ++i;
+        t.erase(0, i);
+    };
+    auto flush = [&] {
+        if (kind == "LINE") ++lines[layName];
+        else if (kind == "LWPOLYLINE" || kind == "POLYLINE") ++polys[layName];
+        else if (kind == "TEXT" || kind == "MTEXT") ++texts[layName];
+    };
+    bool inLayerRec = false;
+    std::string recName;
+    while (std::getline(in, c) && std::getline(in, v)) {
+        trim(c); trim(v);
+        int code = 0;
+        try { code = std::stoi(c); } catch (...) { continue; }
+        if (code == 0) {
+            flush();
+            kind = v; layName.clear();
+            inLayerRec = v == "LAYER";
+            recName.clear();
+            continue;
+        }
+        if (inLayerRec) {
+            if (code == 2) { recName = v; layers.emplace(recName, Lay{}); }
+            else if (code == 370 && !recName.empty()) layers[recName].lw = std::atoi(v.c_str());
+            else if (code == 62 && !recName.empty()) layers[recName].color = std::atoi(v.c_str());
+        } else if (code == 8) layName = v;
+    }
+    flush();
+    const int wantCut = dxfLineWeight(kCutLinePt), wantMajor = dxfLineWeight(0.5), wantMinor = dxfLineWeight(0.2);
+    auto lwOf = [&](const char* n) { auto it = layers.find(n); return it == layers.end() ? -99 : it->second.lw; };
+    int old = 0;
+    for (const char* n : {"SECTION_PROFILE", "LEVEL_10CM", "LEVEL_50CM", "LEVEL_1M"})
+        old += int(layers.count(n)) + lines[n] + polys[n];
+    const int cut = polys[kLayerCut], lv05 = lines[kLayerLevelMajor], lv02 = lines[kLayerLevelMinor];
+    const int textOnLines = texts[kLayerCut] + texts[kLayerLevelMajor] + texts[kLayerLevelMinor];
+    const bool ok = lwOf(kLayerCut) == wantCut && lwOf(kLayerLevelMajor) == wantMajor && lwOf(kLayerLevelMinor) == wantMinor &&
+                    old == 0 && cut > 0 && textOnLines == 0 && (!withLevels || (lv05 > 0 && lv02 > 0));
+    if (report) {
+        char b[256];
+        std::snprintf(b, sizeof b, "0.8=lw%d(%d) 0.5=lw%d(%d) 0.2=lw%d(%d) cut=%d lv05=%d lv02=%d old=%d text=%d",
+                      lwOf(kLayerCut), wantCut, lwOf(kLayerLevelMajor), wantMajor, lwOf(kLayerLevelMinor), wantMinor,
+                      cut, lv05, lv02, old, textOnLines);
+        *report = b;
+    }
+    return ok;
 }
 
 bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const fs::path& out, std::string* err, std::string* dxfText) {
@@ -31,11 +90,12 @@ bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const f
     DxfWriter d;
     d.addLayer("DRAW_SOIL", 7, 25);      // 빈 층 · 토층선 0.25 mm
     d.addLayer("DRAW_OUTLINE", 7, 35);   // 빈 층 · 유구 윤곽 0.35 mm
-    d.addLayer("LEVEL_10CM", 9, dxfLineWeight(o.levelMinorPt));   // 디자인 v5 결정 L: 10 cm 0.2 pt(→ 0.09 mm) · 50 cm = 1 m 0.5 pt(→ 0.18 mm)
-    d.addLayer("LEVEL_50CM", 8, dxfLineWeight(o.levelMajorPt));
-    d.addLayer("LEVEL_1M", 8, dxfLineWeight(o.levelMajorPt));
+    // 레이어 이름 0.2 · 0.5 · 0.8(사용자 2026-10-16 「0.2 0.5 0.8로 레이어를 잡아 내보내기」, SVG 와 같음).
+    // 디자인 v5 결정 L: 10 cm 0.2 pt(→ 0.09 mm) · 50 cm = 1 m 0.5 pt(→ 0.18 mm) — 1 m 선도 0.5 레이어
+    d.addLayer(kLayerLevelMinor, 9, dxfLineWeight(o.levelMinorPt));
+    d.addLayer(kLayerLevelMajor, 8, dxfLineWeight(o.levelMajorPt));
     d.addLayer("SECTION_IMAGE", 7, -3);
-    d.addLayer("SECTION_PROFILE", 1, dxfLineWeight(kCutLinePt));   // 0.8 pt → 0.30 mm
+    d.addLayer(kLayerCut, 1, dxfLineWeight(kCutLinePt));   // 빨간 잘린 선 0.8 pt → 0.30 mm
     d.addLayer("LEVEL_TEXT", 7, 18);
     d.addLayer("SECTION_AXIS", 7, 18);
     d.addLayer("SECTION_TITLE", 7, 25);
@@ -50,7 +110,7 @@ bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const f
     const double lth = th * lf.scale;
     const auto levels = o.levels ? levelLines(zlo, zhi, o.levelStepCm) : std::vector<LevelLine>{};
     for (auto& lv : levels) {
-        const char* layer = lv.cls == LevelClass::Master ? "LEVEL_1M" : lv.cls == LevelClass::Major ? "LEVEL_50CM" : "LEVEL_10CM";
+        const char* layer = lv.cls == LevelClass::Minor ? kLayerLevelMinor : kLayerLevelMajor;
         if (o.levelsBelowGround) {   // 지면 위(공기)에는 없음 — 보고서 도면 관례(2026-10-16). 레벨선 z 는 로컬이므로 잘린 선(로컬 z)과 바로 비교
             for (const SGap& g : levelLineSpans(r.profile, lv.z - oz, s0, s1)) d.line(layer, P(g.s0, lv.z), P(g.s1, lv.z));
         } else d.line(layer, P(s0, lv.z), P(s1, lv.z));
@@ -69,11 +129,11 @@ bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const f
         if (!w3) {
             std::vector<Vec2> v;
             for (size_t i = 0; i < n; ++i) v.emplace_back(pl[i].x, pl[i].y + oz);
-            d.polyline2d("SECTION_PROFILE", v, closed);
+            d.polyline2d(kLayerCut, v, closed);
         } else {
             std::vector<Vec3> v;
             for (size_t i = 0; i < n; ++i) v.push_back(P(pl[i].x, pl[i].y + oz));
-            d.polyline3d("SECTION_PROFILE", v, closed);
+            d.polyline3d(kLayerCut, v, closed);
         }
     }
     auto TL = [&](double s, double zAbs, const std::string& txt, int ha) {   // 표고 글자(줄인 높이 lth)

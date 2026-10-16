@@ -17,6 +17,11 @@ struct LineWeights {
 /// 빨간 잘린 선(단면선) 인쇄 · 내보내기 굵기 = 0.8 pt 고정(사용자 2026-10-16
 /// 「단면선 빨간선은 0.8pt고정」) — SVG · PDF · PNG · DXF 모두. 화면 굵기와 무관
 constexpr double kCutLinePt = 0.8;
+/// 내보내기 레이어 이름(사용자 2026-10-16 「내보내기할때 0.2 0.5 0.8로 레이어를 잡아 내보내기」) — SVG · DXF
+/// 같은 이름. 0.8 = 빨간 잘린 선, 0.5 = 50 cm(1 m 포함) 해발선, 0.2 = 10 cm 해발선. 나머지 레이어는 형식마다 따로
+constexpr const char *kLayerCut = "0.8";
+constexpr const char *kLayerLevelMajor = "0.5";
+constexpr const char *kLayerLevelMinor = "0.2";
 /// pt → 종이 위 mm (1 pt = 25.4 / 72 mm)
 double ptToMm(double pt);
 /// 입력값을 0.05–3.0 pt 로 자른다. NaN 은 기본 0.2

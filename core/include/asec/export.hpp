@@ -37,6 +37,11 @@ struct DxfExportOptions {
 /// 로컬 (s,z) → 실좌표 XYZ
 Vec3 sectionToWorld(const SectionResult& r, double s, double zLocal);
 bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const fs::path& out, std::string* err, std::string* dxfText = nullptr);
+/// 도면 DXF 레이어 점검(--dxf-layers-check · 시험, 사용자 2026-10-16 「0.2 0.5 0.8로 레이어를 잡아 내보내기」):
+/// 레이어 표에 0.8(선 굵기 = kCutLinePt) · 0.5 · 0.2(각 pt 의 dxfLineWeight)가 있고, 옛 이름(SECTION_PROFILE ·
+/// LEVEL_10CM · LEVEL_50CM · LEVEL_1M)이 없으며, 잘린 선(폴리선)이 0.8 에 있는가. withLevels 면 해발선(LINE)이
+/// 0.5 · 0.2 에 하나 이상씩. 줄 끝 CRLF 도 읽는다. report 에 한 줄 요약
+bool checkDrawingDxfLayers(const std::string& dxfText, bool withLevels, std::string* report);
 
 /// 평면 정사영상 GeoTIFF 기준: 왼쪽 위(로컬 x0, y1) + 해상도 → 실좌표 EPSG
 GeoRef planGeoRef(const SrsInfo& srs, double x0Local, double y1Local, double res);
