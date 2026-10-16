@@ -196,12 +196,22 @@ public:
       motion::kSplash; // 여는 화면 전체 길이(ms) — 한 곳. OpeningSplash::run ·
                        // --splash-live · --splash-shot 판정이 같은 값을 쓴다
                        // (T3: 1000)
+  // 여는 화면 창 크기(논리 px — 배율 150–200 % 에서는 Qt 가 그만큼 키운다). 처음
+  // 960×600 의 절반(사용자 2026-10-16 「로딩 모션그래픽 화면 50% 축소」)
+  static constexpr int kOpeningSplashW = 480, kOpeningSplashH = 300;
+  static constexpr int kSplashMinTextPx = 11; // 줄여도 글자는 이 크기 밑으로 안 내려감(앱 글자 체계의 가장 작은 11)
+  struct SplashTextProbe { // --splash-shot 이 글자 잘림 · 겹침 · 크기를 재는 기록
+    QList<QRectF> rects;   // 실제 글자 상자(논리 px)
+    QList<int> px;         // 글자 크기(px)
+    double bandTop = 0;    // 아래 띠 위 끝 — 본문 글은 이 위에
+    int bodyCount = 0;     // rects 앞쪽 bodyCount 개가 본문(띠 위) 글
+  };
   static QImage renderOpeningSplash(
-      const QSize &size,
-      double t = 1.0); // t 0~1: 선 그림이 그려지는 정도(1 = 완성)
+      const QSize &size, double t = 1.0, double dpr = 1.0,
+      SplashTextProbe *probe = nullptr); // t 0~1: 선 그림이 그려지는 정도(1 = 완성). size = 논리 px
   static void paintOpeningSplash(
-      QPainter &p, const QSize &size,
-      double t); // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs, 1 초)
+      QPainter &p, const QSize &size, double t,
+      SplashTextProbe *probe = nullptr); // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs)
   static QString resolveModelPath(
       const QString &path); // 폴더 경로면 내부 .3mx/.3sm/.obj 를 찾아 돌려줌
   static QString modelDisplayName(

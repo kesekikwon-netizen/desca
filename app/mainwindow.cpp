@@ -1664,9 +1664,12 @@ void MainWindow::dlgInfo() {
 // 단면선이 벽면을 따라 그어지고 → 「rench」 가 들어와 Trench 가 완성된다. t 0~1
 // = 전체 길이. 시간표(t): 타일 0–.14 · 지표선 .02–.14 · 파기 .12–.50 · 단면선
 // .45–.85 · 「rench」 .55–.80 · 부제 .80–1.0 (모두 OutCubic). 값은 960×600
-// 기준을 k = 너비/960 으로 키운다. 끝 장면(t ≥ .85)의 타일은 앱 아이콘
-// 그림(kerf::appPixmap) 그대로 — 아이콘과 한 SVG 에서 나온다.
-void MainWindow::paintOpeningSplash(QPainter &p, const QSize &sz, double t) {
+// 기준을 k = 너비/960 으로 맞춘다(창은 그 절반 480×300). 글자는
+// kSplashMinTextPx 밑으로 줄지 않고, 글 줄은 실제 글자 높이만큼 내려 쌓는다
+// (줄여도 잘림 · 겹침 없음 — --splash-shot 이 잰다). 끝 장면(t ≥ .85)의 타일은 앱
+// 아이콘 그림(kerf::appPixmap) 그대로 — 아이콘과 한 SVG 에서 나온다.
+void MainWindow::paintOpeningSplash(QPainter &p, const QSize &sz, double t,
+                                    SplashTextProbe *probe) {
   t = std::clamp(t, 0.0, 1.0);
   // 그림 움직임은 전체 5 초 중 앞 2 초(tm 0→1)에 끝나고, 그 뒤는 끝 장면 +
   // 저작권 줄을 보인다. 진행 막대·상태 글의 시계는 t(실제 시간)
@@ -1771,57 +1774,97 @@ void MainWindow::paintOpeningSplash(QPainter &p, const QSize &sz, double t) {
                QStringLiteral("rench"));
     p.setOpacity(1.0);
   }
-  // 3) 부제(마지막 .2 초에 나타남)
+  // 글자: 960 기준 크기 × k, 하지만 kSplashMinTextPx 밑으로는 안 줄인다. 줄 높이는
+  // 디자인 높이와 실제 글자 높이 중 큰 것(480×300 에서 줄끼리 겹치지 않게)
+  auto textFont = [&](int base) {
+    return theme::uiFont(
+        std::max(kSplashMinTextPx, int(std::lround(base * k))));
+  };
+  auto lineH = [&](const QFont &f, double designH) {
+    return std::max(designH, QFontMetricsF(f).height());
+  };
+  auto text = [&](const QRectF &r, int flags, const QString &s) {
+    QRectF br;
+    p.drawText(r, flags, s, &br);
+    if (probe) {
+      probe->rects << br;
+      probe->px << p.font().pixelSize();
+    }
+  };
+  // 4) 아래 기반암 띠 높이(글자가 최소 크기로 커지면 띠도 커진다). 960 에서 72
+  const QFont fStatus = textFont(14), fFoot = textFont(12);
+  const double statusH = lineH(fStatus, 24 * k), footH = lineH(fFoot, 22 * k);
+  const double bandH = 8 * k + statusH + 2 * k + footH + 16 * k;
+  const double bandTop = im.height() - bandH;
+  // 3) 부제(마지막 .2 초에 나타남) · 저작권 · 외부 구성요소(사용자 요청
+  // 2026-10-11) — 위에서부터 쌓고, 구성요소 줄은 폭이 모자라면 줄을 바꾼다
   if (sub > 0) {
     p.setOpacity(sub);
-    p.setFont(theme::uiFont(int(std::lround(16 * k))));
+    const QFont fSub = textFont(16), fSmall = textFont(12);
+    const double hSub = lineH(fSub, 24 * k), hCopy = lineH(fSmall, 20 * k);
+    const QString parts = QStringLiteral("사용 구성요소: ") + thirdPartyLine();
+    const double wParts = im.width() - 110 * k - 24 * k;
+    const double hParts = std::max(
+        lineH(fSmall, 20 * k),
+        QFontMetricsF(fSmall)
+            .boundingRect(QRectF(0, 0, wParts, 1e4),
+                          Qt::AlignLeft | Qt::TextWordWrap, parts)
+            .height());
+    // 960 에서는 392 그대로. 글이 커져 띠에 닿으면 위로 올리되 타일 아래(340)는
+    // 넘지 않는다
+    const double bodyH = hSub + 4 * k + hCopy + hParts;
+    double y = std::max(348 * k, std::min(392 * k, bandTop - 8 * k - bodyH));
+    p.setFont(fSub);
     p.setPen(theme::Muted);
-    p.drawText(QRectF(110 * k, 392 * k, 780 * k, 24 * k),
-               Qt::AlignLeft | Qt::AlignVCenter,
-               QStringLiteral("발굴 평·단면 · 3MX · 3SM · OBJ 실사 메시 · %1")
-                   .arg(QString::fromUtf8(kVersion)));
-    // 저작권 · 가져다 쓴 외부 구성요소(사용자 요청 2026-10-11)
-    p.setFont(theme::uiFont(int(std::lround(12 * k))));
+    text(QRectF(110 * k, y, 780 * k, hSub), Qt::AlignLeft | Qt::AlignVCenter,
+         QStringLiteral("발굴 평·단면 · 3MX · 3SM · OBJ 실사 메시 · %1")
+             .arg(QString::fromUtf8(kVersion)));
+    y += hSub + 4 * k;
+    p.setFont(fSmall);
     p.setPen(theme::Faint);
-    p.drawText(QRectF(110 * k, 420 * k, 800 * k, 20 * k),
-               Qt::AlignLeft | Qt::AlignVCenter,
-               copyrightLine() + QStringLiteral(" · 모든 권리 보유"));
-    p.drawText(QRectF(110 * k, 440 * k, 800 * k, 20 * k),
-               Qt::AlignLeft | Qt::AlignVCenter,
-               QStringLiteral("사용 구성요소: ") + thirdPartyLine());
+    text(QRectF(110 * k, y, 800 * k, hCopy), Qt::AlignLeft | Qt::AlignVCenter,
+         copyrightLine() + QStringLiteral(" · 모든 권리 보유"));
+    y += hCopy;
+    text(QRectF(110 * k, y, wParts, hParts),
+         Qt::AlignLeft | Qt::AlignVCenter | Qt::TextWordWrap, parts);
     p.setOpacity(1.0);
+  }
+  if (probe) {
+    probe->bandTop = bandTop;
+    probe->bodyCount = int(probe->rects.size());
   }
   // 4) 아래 기반암 띠 + 상태 글(.30 · .85 에서 바뀜) + 진행 막대(맨 위 3 px, 1
   // 초 시계)
-  p.fillRect(QRectF(0, im.height() - 72 * k, im.width(), 72 * k),
-             QColor(0x26, 0x26, 0x24));
+  p.fillRect(QRectF(0, bandTop, im.width(), bandH), QColor(0x26, 0x26, 0x24));
   p.setPen(theme::Ground);
-  p.setFont(theme::uiFont(int(std::lround(14 * k))));
+  p.setFont(fStatus);
   const QString status = tm >= 0.85 ? QStringLiteral("준비 완료")
                          : tm >= 0.30
                              ? QStringLiteral("잠시 후 화면이 열립니다")
                              : QStringLiteral("앱을 준비하고 있습니다");
-  p.drawText(QRectF(48 * k, im.height() - 64 * k, 500 * k, 24 * k),
-             Qt::AlignLeft | Qt::AlignVCenter, status);
+  const double statusTop = bandTop + 8 * k, footTop = statusTop + statusH + 2 * k;
+  text(QRectF(48 * k, statusTop, 500 * k, statusH),
+       Qt::AlignLeft | Qt::AlignVCenter, status);
   p.setPen(theme::Edge);
-  p.setFont(theme::uiFont(int(std::lround(12 * k))));
-  p.drawText(QRectF(48 * k, im.height() - 38 * k, 700 * k, 22 * k),
-             Qt::AlignLeft | Qt::AlignVCenter,
-             QStringLiteral("원본 파일은 바꾸지 않습니다 · Esc = 건너뜀"));
-  p.drawText(
-      QRectF(im.width() - 420 * k, im.height() - 38 * k, 372 * k, 22 * k),
-      Qt::AlignRight | Qt::AlignVCenter,
-      copyrightLine() + QStringLiteral(" · Trench · Qt %1")
-                            .arg(QString::fromLatin1(qVersion())
-                                     .section(QLatin1Char('.'), 0, 1)));
-  p.fillRect(QRectF(0, im.height() - 72 * k, im.width() * t, 3 * k),
-             theme::Action);
+  p.setFont(fFoot);
+  text(QRectF(48 * k, footTop, 700 * k, footH), Qt::AlignLeft | Qt::AlignVCenter,
+       QStringLiteral("원본 파일은 바꾸지 않습니다 · Esc = 건너뜀"));
+  text(QRectF(im.width() - 420 * k, footTop, 372 * k, footH),
+       Qt::AlignRight | Qt::AlignVCenter,
+       copyrightLine() + QStringLiteral(" · Trench · Qt %1")
+                             .arg(QString::fromLatin1(qVersion())
+                                      .section(QLatin1Char('.'), 0, 1)));
+  p.fillRect(QRectF(0, bandTop, im.width() * t, 3 * k), theme::Action);
 }
 
-QImage MainWindow::renderOpeningSplash(const QSize &size, double t) {
-  QImage im(size.isEmpty() ? QSize(960, 600) : size, QImage::Format_RGB32);
+QImage MainWindow::renderOpeningSplash(const QSize &size, double t, double dpr,
+                                       SplashTextProbe *probe) {
+  const QSize logical =
+      size.isEmpty() ? QSize(kOpeningSplashW, kOpeningSplashH) : size;
+  QImage im(logical * dpr, QImage::Format_RGB32);
+  im.setDevicePixelRatio(dpr);
   QPainter p(&im);
-  paintOpeningSplash(p, im.size(), t);
+  paintOpeningSplash(p, logical, t, probe);
   return im;
 }
 

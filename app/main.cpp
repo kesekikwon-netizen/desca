@@ -154,7 +154,7 @@ static void runCutCheck(MainWindow& w, LogFn log) {
 class OpeningSplash : public QWidget {
 public:
     OpeningSplash() : QWidget(nullptr, Qt::SplashScreen | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint) {
-        setFixedSize(960, 600);
+        setFixedSize(MainWindow::kOpeningSplashW, MainWindow::kOpeningSplashH);   // 480×300 논리 px(배율만큼 Qt 가 키움)
         setAttribute(Qt::WA_OpaquePaintEvent);
         if (QScreen* sc = QGuiApplication::primaryScreen()) move(sc->availableGeometry().center() - rect().center());
     }
@@ -356,18 +356,33 @@ int main(int argc, char** argv) {
         return ok ? 0 : 6;
     }
     if (!splashLive.isEmpty()) { QDir().mkpath(splashLive); OpeningSplash sp; sp.run(MainWindow::kOpeningSplashMs, splashLive); return 0; }
-    if (!splashShot.isEmpty() && file.isEmpty()) {   // 장면 네 장(t = .12 · .40 · .70 · 1.0 — 끝 장면이 splashShot, 나머지는 이름 뒤 _tNN) + 길이 판정(T3: 네 장 · 1000 ms, 아니면 종료 6)
+    if (!splashShot.isEmpty() && file.isEmpty()) {   // 장면 네 장(t = .12 · .40 · .70 · 1.0 — 끝 장면이 splashShot, 나머지는 이름 뒤 _tNN, 끝 장면 배율 2 는 _x2) + 길이 · 크기 · 글자 판정(아니면 종료 6)
         const double times[] = {0.12, 0.40, 0.70, 1.0};
+        const QSize logical(MainWindow::kOpeningSplashW, MainWindow::kOpeningSplashH);
+        auto named = [&](const QString& tag) { QString f = splashShot; f.insert(f.lastIndexOf('.') < 0 ? f.size() : f.lastIndexOf('.'), tag); return f; };
         bool ok = true; int frames = 0; QSize sz;
+        int clipped = 0, overlap = 0, intoBand = 0, minPx = 1 << 30, texts = 0;
         for (double tt : times) {
-            const QImage im = MainWindow::renderOpeningSplash(QSize(960, 600), tt);
-            QString f = splashShot;
-            if (tt < 1.0) f.insert(f.lastIndexOf('.') < 0 ? f.size() : f.lastIndexOf('.'), QStringLiteral("_t%1").arg(std::lround(tt * 100)));
-            ok = im.save(f) && ok; ++frames; sz = im.size();
+            MainWindow::SplashTextProbe probe;
+            const QImage im = MainWindow::renderOpeningSplash(logical, tt, 1.0, &probe);
+            ok = im.save(tt < 1.0 ? named(QStringLiteral("_t%1").arg(std::lround(tt * 100))) : splashShot) && ok; ++frames; sz = im.size();
+            const QRectF area(QPointF(0, 0), QSizeF(logical));
+            for (int i = 0; i < probe.rects.size(); ++i) {
+                const QRectF& r = probe.rects[i];
+                ++texts; minPx = std::min(minPx, probe.px[i]);
+                if (!area.contains(r)) ++clipped;                                  // 창 밖으로 나간 글(잘림)
+                if (i < probe.bodyCount && r.bottom() > probe.bandTop + 0.5) ++intoBand;   // 본문 글이 아래 띠를 덮음
+                for (int j = i + 1; j < probe.rects.size(); ++j)
+                    if (r.adjusted(0.5, 0.5, -0.5, -0.5).intersects(probe.rects[j].adjusted(0.5, 0.5, -0.5, -0.5))) ++overlap;
+            }
         }
+        const QImage hi = MainWindow::renderOpeningSplash(logical, 1.0, 2.0);   // 배율 200 %(4K) — 같은 논리 크기, 화소는 두 배
+        ok = hi.save(named(QStringLiteral("_x2"))) && ok;
         const bool timing = frames == 4 && MainWindow::kOpeningSplashMs == motion::kSplash && motion::kSplash == 5000;
-        fprintf(stdout, "splash-shot %s: %s (%dx%d) frames=%d total-ms=%d%s\n", ok ? "ok" : "FAILED", splashShot.toUtf8().constData(), sz.width(), sz.height(), frames, MainWindow::kOpeningSplashMs, timing ? "" : "  FAIL");
-        return ok && timing ? 0 : 6;
+        const bool size = sz == logical && hi.size() == logical * 2 && logical == QSize(480, 300);
+        const bool textOk = texts > 0 && clipped == 0 && overlap == 0 && intoBand == 0 && minPx >= MainWindow::kSplashMinTextPx;
+        fprintf(stdout, "splash-shot %s: %s (%dx%d) x2=%dx%d frames=%d total-ms=%d texts=%d text-min-px=%d clipped=%d overlap=%d into-band=%d%s\n", ok ? "ok" : "FAILED", splashShot.toUtf8().constData(), sz.width(), sz.height(), hi.width(), hi.height(), frames, MainWindow::kOpeningSplashMs, texts, texts ? minPx : 0, clipped, overlap, intoBand, timing && size && textOk ? "" : "  FAIL");
+        return ok && timing && size && textOk ? 0 : 6;
     }
     // 자동화(감사 · 캡처 · 내보내기 · 시험)는 늘 움직임 없이 돈다 — 시각이 결과를 흔들지 않게. 여는 화면은 이 아래에서 따로 판단한다
     motion::setForcedOff(quit || !uiAuditDir.isEmpty() || !shot.isEmpty() || !startShot.isEmpty() || !sheetCheck.isEmpty() || !exports.isEmpty() || !sheetBatch.isEmpty() || undoTest || !ctxShot.isEmpty() || !dialogShot.isEmpty() || haveLine);
