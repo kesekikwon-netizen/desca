@@ -463,6 +463,42 @@ std::vector<SGap> levelLineSpans(const std::vector<Polyline>& profile, double z,
     return out;
 }
 
+std::vector<LevelLabelSpot> levelLabelSpots(const std::vector<Polyline>& profile, double zMinLocal, double zMaxLocal, double oz, double L,
+                                            int everyCm) {
+    std::vector<LevelLabelSpot> out;
+    if (everyCm <= 0 || !(L > 0)) return out;
+    bool open = false;   // levelLineSpans 와 같은 지면 판정 — 닫힌 고리만 있으면 선은 통째로 그어진다
+    for (const auto& pl : profile)
+        if (pl.size() >= 2 && !(pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9)) { open = true; break; }
+    for (const LevelLine& lv : levelLines(zMinLocal + oz - 1e-9, zMaxLocal + oz + 1e-9, everyCm)) {
+        LevelLabelSpot sp;
+        sp.cm = lv.cm;
+        sp.zAbs = lv.z;
+        if (!open) { sp.atStart = true; out.push_back(sp); continue; }
+        const std::vector<SGap> g = levelLineSpans(profile, lv.z - oz, 0.0, L);
+        if (g.empty()) continue;
+        sp.s0 = g.front().s0;
+        sp.atStart = sp.s0 <= 1e-3;
+        if (sp.atStart) sp.s0 = 0;
+        out.push_back(sp);
+    }
+    return out;
+}
+
+LevelLabelFit fitLevelLabels(double gap50, double textH, bool allowAlternate, double minScale) {
+    if (!(textH > 0) || !(gap50 > 0)) return {50, false, 1.0};
+    minScale = std::clamp(minScale, 0.1, 1.0);
+    for (int cm : {50, 100, 500, 1000}) {
+        const double gap = gap50 * cm / 50.0;
+        if (gap >= textH) return {cm, false, 1.0};
+        if (gap >= textH * std::max(0.8, minScale)) return {cm, false, gap / textH};
+        if (allowAlternate && 2 * gap >= textH) return {cm, true, 1.0};
+        if (allowAlternate && 2 * gap >= textH * minScale) return {cm, true, 2 * gap / textH};
+        if (!allowAlternate && gap >= textH * minScale) return {cm, false, gap / textH};
+    }
+    return {1000, allowAlternate, minScale};
+}
+
 std::vector<SGap> profileGaps(const std::vector<Polyline>& profile, double length, double minGap) {
     // 잘린 선 하나하나가 덮는 s 범위(점 순서와 무관)를 [0, length] 안으로 자른 뒤, 정렬해 이어 붙이며 사이의 틈을 모은다
     std::vector<std::pair<double, double>> cover;

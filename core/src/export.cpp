@@ -44,7 +44,10 @@ bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const f
     const double s0 = 0, s1 = f.L;
     const double zlo = r.zMin + oz, zhi = r.zMax + oz;
     // 그리기 순서 = 개체 순서: ① 레벨선(맨 아래) → ② 입면 영상 → ③ 빨간 단면선 → ④ 라벨·축
-    const int lab = std::max(labelStepCm(1.0, th * 1.8), std::max(50, o.levelStepCm));  // 숫자 라벨 50 cm 마다
+    // 숫자 라벨 50 cm 마다(사용자 2026-10-16 「0.5 m 마다 해발값은 꼭」): 좁으면 글자를 줄이고 · 왼쪽 · 오른쪽 번갈아(fitLevelLabels)
+    const LevelLabelFit lf = fitLevelLabels(0.5, th * 1.8);
+    const int lab = std::max(lf.labelCm, std::max(50, o.levelStepCm));
+    const double lth = th * lf.scale;
     const auto levels = o.levels ? levelLines(zlo, zhi, o.levelStepCm) : std::vector<LevelLine>{};
     for (auto& lv : levels) {
         const char* layer = lv.cls == LevelClass::Master ? "LEVEL_1M" : lv.cls == LevelClass::Major ? "LEVEL_50CM" : "LEVEL_10CM";
@@ -73,10 +76,15 @@ bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const f
             d.polyline3d("SECTION_PROFILE", v, closed);
         }
     }
+    auto TL = [&](double s, double zAbs, const std::string& txt, int ha) {   // 표고 글자(줄인 높이 lth)
+        if (w3) d.textOnPlane("LEVEL_TEXT", P(s, zAbs), ext, lth, txt, ha, 2);
+        else d.text("LEVEL_TEXT", P(s, zAbs), lth, txt, ha, 2);
+    };
     for (auto& lv : levels)
         if (lv.cm % lab == 0) {
-            T(d, "LEVEL_TEXT", s0 - th * 0.6, lv.z, formatElevation(lv.z), 2, 2);
-            T(d, "LEVEL_TEXT", s1 + th * 0.6, lv.z, formatElevation(lv.z), 0, 2);
+            const long kth = lv.cm / lab;   // 번갈아 쓸 때: 짝수 번째는 왼쪽, 홀수 번째는 오른쪽
+            if (!lf.alternate || kth % 2 == 0) TL(s0 - th * 0.6, lv.z, formatElevation(lv.z), 2);
+            if (!lf.alternate || kth % 2 != 0) TL(s1 + th * 0.6, lv.z, formatElevation(lv.z), 0);
         }
     // 거리 축
     const double zb = zlo - th * 1.5;

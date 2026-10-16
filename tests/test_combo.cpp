@@ -297,3 +297,131 @@ TEST_CASE("돌린 평면을 바로 그림: A→A′ 가 북쪽이면 판이 종�
     CHECK_FALSE(at(1.0, 0.5));    // t > 0 밖(동쪽 = 오른쪽 법선 쪽)
     CHECK_FALSE(at(1.0, -4.5));   // t < −4 밖
 }
+
+TEST_CASE("표고 글자 50 cm 마다(사용자 2026-10-16 「해발선이 50cm마다 표시」): 땅속 구간이 있는 선만, A 끝에 닿으면 왼쪽 밖", "[combo]") {
+    // 둔덕: 지면 0.3 → 둔덕 1.2(s 3–5) → 0.3. 원점 높이 20 → 표고 범위 19.7–21.3 의 50 cm 선 = 20.0 · 20.5 · 21.0
+    std::vector<Polyline> pr = {{{0, 0.3}, {2, 0.3}, {3, 1.2}, {5, 1.2}, {6, 0.3}, {8, 0.3}}};
+    auto v = levelLabelSpots(pr, -0.3, 1.3, 20.0, 8.0);
+    REQUIRE(v.size() == 3);
+    CHECK(v[0].cm == 2000); CHECK(v[0].atStart); CHECK(v[0].s0 == Approx(0));
+    CHECK(v[1].cm == 2050); CHECK_FALSE(v[1].atStart); CHECK(v[1].s0 == Approx(2 + 0.2 / 0.9));
+    CHECK(v[2].cm == 2100); CHECK_FALSE(v[2].atStart); CHECK(v[2].s0 == Approx(2 + 0.7 / 0.9));
+    CHECK(v[1].zAbs == Approx(20.5));
+    // 지면 위(땅속 구간 없음) 선은 뺀다
+    v = levelLabelSpots({{{0, 0.3}, {8, 0.3}}}, -0.3, 1.3, 20.0, 8.0);
+    REQUIRE(v.size() == 1);
+    CHECK(v[0].cm == 2000);
+    // 간격을 넓히면(1 m) 그 배수만
+    v = levelLabelSpots({{{0, 1.3}, {8, 1.3}}}, -0.3, 1.3, 20.0, 8.0, 100);
+    REQUIRE(v.size() == 2);
+    CHECK(v[0].cm == 2000); CHECK(v[1].cm == 2100);
+    // 열린 잘린 선이 없으면(레벨선을 통째로 긋는 경우) 모두 A 끝 왼쪽 밖
+    v = levelLabelSpots({{{2, 0}, {3, 0}, {3, 1}, {2, 1}, {2, 0}}}, -0.3, 1.3, 20.0, 8.0);
+    REQUIRE(v.size() == 3);
+    for (const auto& x : v) CHECK(x.atStart);
+    CHECK(levelLabelSpots(pr, -0.3, 1.3, 20.0, 0.0).empty());
+}
+
+TEST_CASE("표고 숫자 배치: 50 cm 가 원칙 — 줄이기 · 번갈아 · 그래도 안 되면만 솎음", "[combo][levels]") {
+    auto same = [](LevelLabelFit f, int cm, bool alt, double sc) { return f.labelCm == cm && f.alternate == alt && std::abs(f.scale - sc) < 1e-9; };
+    CHECK(same(fitLevelLabels(10, 5), 50, false, 1.0));     // 넉넉함
+    CHECK(same(fitLevelLabels(4.5, 5), 50, false, 0.9));    // 조금 모자람 → 글자만 조금 줄여 양쪽 그대로
+    CHECK(same(fitLevelLabels(3, 5), 50, true, 1.0));       // 더 모자람 → 왼쪽 · 오른쪽 번갈아(같은 쪽 간격 1 m)
+    CHECK(same(fitLevelLabels(2, 5), 50, true, 0.8));       // 번갈아도 모자람 → 더 줄임
+    CHECK(same(fitLevelLabels(1, 5), 100, true, 0.8));      // 50 cm 로는 물리적으로 안 들어감 → 1 m
+    CHECK(same(fitLevelLabels(2, 2.4, false), 50, false, 2 / 2.4));     // 번갈아 쓸 곳이 없으면 줄이기만
+    CHECK(same(fitLevelLabels(1, 2.4, false), 100, false, 2 / 2.4));
+    CHECK(same(fitLevelLabels(0, 5), 50, false, 1.0));      // 나쁜 입력은 기본값
+}
+
+TEST_CASE("표고 숫자: 1:20 ~ 1:200 은 화면 · 도면 · 평·단면도 · DXF 모두 50 cm 마다", "[combo][levels]") {
+    for (int d = 20; d <= 200; d += 5) {
+        INFO("1:" << d);
+        // 평·단면도(종이 mm): 글자 2.1 mm 한 줄 2.4 mm, 번갈아 쓸 곳 없음
+        CHECK(fitLevelLabels(0.5 * 1000.0 / d, 2.4, false).labelCm == 50);
+        // 단면 DXF(도면 m): 글자 높이 th = 2 mm × 축척, 한 줄 = th × 1.8(core exportSectionDxf)
+        const double th = 2.0 / 1000.0 * d;
+        CHECK(fitLevelLabels(0.5, th * 1.8).labelCm == 50);
+        // 단면 화면 · 단면 도면(96 dpi 기준 px): 글꼴 11.5 px 의 줄 높이를 크게 잡아도(맑은 고딕 1.33 배 × 여유 1.35 ≈ 20.7 px)
+        const double ppm = 96.0 / 25.4 * 1000.0 / d;
+        CHECK(fitLevelLabels(0.5 * ppm, 11.5 * 1.33 * 1.35).labelCm == 50);
+    }
+}
+
+TEST_CASE("한 장 조판: 끄는 동안 틀을 붙들면 평면이 돌지 않고 종이 ↔ 로컬 변환이 그대로", "[combo][sheet]") {
+    SheetSpec sp; sp.denom = 30;
+    const std::vector<ComboSection> secs0 = {{0, 0, 4, 0, 1.0}, {2, -2, 2, 2, 0.8}};
+    const ComboLayout c0 = layoutCombo(sp, secs0, 1.0);
+    // 기준 단면의 A′ 를 (4, 1) 로 끌었다
+    const std::vector<ComboSection> secs1 = {{0, 0, 4, 1, 1.0}, {2, -2, 2, 2, 0.8}};
+    const ComboLayout c1 = layoutCombo(sp, secs1, 1.0, 6.0, 3.0, &c0);
+    CHECK(c1.ux == Approx(c0.ux)); CHECK(c1.uy == Approx(c0.uy));
+    CHECK(c1.ax == Approx(c0.ax)); CHECK(c1.ay == Approx(c0.ay));
+    REQUIRE(c1.sections.size() == 2);
+    CHECK(c1.sections[0].slot == ComboSlot::Top);
+    CHECK(c1.sections[0].sB == Approx(4)); CHECK(c1.sections[0].tB == Approx(1));
+    // 붙들지 않으면 새 기준 방향으로 돈다
+    const ComboLayout c2 = layoutCombo(sp, secs1, 1.0);
+    CHECK(std::fabs(c2.uy) > 0.2);
+    // 종이 mm ↔ 돌린 좌표 ↔ 로컬 XY 왕복
+    double s, t, x, y;
+    c1.toST(3.0, 0.5, s, t);
+    const double mx = c1.xMm(s), my = c1.yMm(t);
+    double s2, t2;
+    c1.paperToST(mx, my, s2, t2);
+    c1.toXY(s2, t2, x, y);
+    CHECK(x == Approx(3.0)); CHECK(y == Approx(0.5));
+}
+
+TEST_CASE("평면 방향: 각 정리 · 방향 틀 · 두 점 맞춤", "[combo][rotation]") {
+    CHECK(normDeg180(0) == 0);
+    CHECK(normDeg180(190) == Approx(-170));
+    CHECK(normDeg180(-180) == Approx(180));
+    CHECK(normDeg180(540) == Approx(180));
+    CHECK(normDeg180(-30.5) == Approx(-30.5));
+    // 방향 틀: 진북의 종이 각(northDeg) = 방향 각, u · n 은 오른손 직교
+    for (double r : {0.0, 30.0, 90.0, -45.0, 179.0}) {
+        const ComboLayout f = comboFrameForRotation(r, 5, 6);
+        CHECK(f.northDeg() == Approx(normDeg180(r)).margin(1e-9));
+        CHECK(f.ux * f.nx + f.uy * f.ny == Approx(0).margin(1e-12));
+        CHECK(f.ux * f.ny - f.uy * f.nx == Approx(1));
+        CHECK(f.ax == 5); CHECK(f.ay == 6);
+    }
+    const ComboLayout r90 = comboFrameForRotation(90);   // 진북이 오른쪽 → 종이 오른쪽 = 북
+    CHECK(r90.ux == Approx(0).margin(1e-12)); CHECK(r90.uy == Approx(1));
+    // 두 점 맞춤: p → q 가 종이 오른쪽(가로) / 위(세로)
+    for (bool vert : {false, true}) {
+        const double r = rotationToAlign(1, 1, 4, 5, vert);
+        const ComboLayout f = comboFrameForRotation(r);
+        double s, t; f.toST(4 - 1, 5 - 1, s, t);   // p → q 벡터의 돌린 좌표
+        if (!vert) { CHECK(s == Approx(5)); CHECK(t == Approx(0).margin(1e-9)); }
+        else { CHECK(s == Approx(0).margin(1e-9)); CHECK(t == Approx(5)); }
+    }
+    CHECK(rotationToAlign(2, 2, 2, 2, false) == 0);   // 같은 점은 그대로
+    // 방향 틀로 놓으면 단면이 가로 · 세로 칸에 바로 놓이고 첫 단면 기준 자동 회전을 쓰지 않는다
+    SheetSpec sp; sp.denom = 50;
+    const std::vector<ComboSection> secs = {{0, 0, 0, 4, 1.0}};   // 북쪽으로 4 m(자동이면 이 선이 가로)
+    const ComboLayout north = comboFrameForRotation(0);
+    const ComboLayout c = layoutCombo(sp, secs, 1.0, 6.0, 3.0, &north);
+    REQUIRE(c.sections.size() == 1);
+    CHECK(c.northDeg() == Approx(0).margin(1e-9));
+    CHECK(c.sections[0].slot == ComboSlot::Left);   // 북쪽으로 그은 선은 서쪽(왼쪽 법선)을 본다 → 평면 왼쪽 세로 칸
+    CHECK(layoutCombo(sp, secs, 1.0).northDeg() != Approx(0).margin(1e-6));
+}
+
+TEST_CASE("단면선 방향 스냅: 화면 가로 · 세로와 다른 단면에 직각 · 평행, 3° 안에서만", "[combo][rotation]") {
+    // 기준 0 = 화면 축(방향 각 20°), 기준 1 = 다른 단면(방향 각 63°)
+    const std::vector<double> refs = {20.0, 63.0};
+    AngleSnap a = snapAngle(21.5, refs);   // 화면 가로에 1.5°
+    CHECK(a.snapped); CHECK(a.source == 0); CHECK(!a.perpendicular); CHECK(a.angleDeg == Approx(20));
+    a = snapAngle(151.0, refs);            // 63 + 90 = 153 에 2° → 다른 단면에 직각
+    CHECK(a.snapped); CHECK(a.source == 1); CHECK(a.perpendicular); CHECK(a.angleDeg == Approx(153));
+    a = snapAngle(-26.0, refs);            // 63 − 90 = −27 에 1° (20 − 45 = 20−90 = −70 은 멀다)
+    CHECK(a.snapped); CHECK(a.source == 1); CHECK(a.perpendicular); CHECK(a.angleDeg == Approx(-27));
+    a = snapAngle(40.0, refs);             // 어느 것에도 3° 밖
+    CHECK(!a.snapped); CHECK(a.source == -1); CHECK(a.angleDeg == Approx(40));
+    a = snapAngle(64.0, refs, 0.5);        // 허용 각을 줄이면 안 붙음
+    CHECK(!a.snapped);
+    a = snapAngle(-178.5, {0.0});          // 180 을 넘는 쪽도
+    CHECK(a.snapped); CHECK(std::fabs(normDeg180(a.angleDeg - 180.0)) < 1e-9);
+}

@@ -33,6 +33,9 @@ struct ProjectDoc {
     double lineWidthPx = 2.0;   // 단면선 굵기(화면 px: 1.5 · 2 · 3)
     bool smooth = false, depthFade = false;
     bool hasCamera = false; double camX = 0, camY = 0, metersPerPixel = 0;   // 평면 카메라(실좌표)
+    // 평면 방향(진북이 화면 위에서 시계 방향으로 돈 각, 사용자 2026-10-16). 표시 회전일 뿐 좌표는 그대로.
+    // hasPlanRotation = 사용자가 방향을 정함(평·단면도가 이 방향을 쓴다). 없으면 첫 단면 기준 자동
+    bool hasPlanRotation = false; double planRotationDeg = 0;
     ProjectSheet sectionSheet, planSheet;
     std::string savedAt;        // ISO 8601(앱이 채움)
 };

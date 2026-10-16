@@ -18,6 +18,7 @@ static ProjectDoc sample() {
     p.hasLine = true; p.ax = 153530; p.ay = 356971; p.bx = 153538; p.by = 356980;
     p.opacity = 70; p.lineWidthPx = 3.0; p.smooth = true; p.depthFade = false;
     p.hasCamera = true; p.camX = 153534.5; p.camY = 356975.25; p.metersPerPixel = 0.0123;
+    p.hasPlanRotation = true; p.planRotationDeg = -32.5;
     p.sectionSheet.present = true; p.sectionSheet.paper = 1; p.sectionSheet.landscape = false; p.sectionSheet.denom = 60; p.sectionSheet.format = 2;
     p.sectionSheet.dpi = 150; p.sectionSheet.split = true; p.sectionSheet.withImage = false; p.sectionSheet.withLine = true; p.sectionSheet.withLevels = false;
     p.sectionSheet.withTicks = false; p.sectionSheet.withTitle = true; p.sectionSheet.withPlan = false; p.sectionSheet.levelMinorPt = 0.25; p.sectionSheet.levelMajorPt = 0.7;
@@ -50,6 +51,7 @@ TEST_CASE("프로젝트 파일: 쓰고 읽으면 모든 값이 그대로", "[pro
     CHECK(q.hasLine == true); CHECK(q.ax == Catch::Approx(153530)); CHECK(q.ay == Catch::Approx(356971)); CHECK(q.bx == Catch::Approx(153538)); CHECK(q.by == Catch::Approx(356980));
     CHECK(q.opacity == 70); CHECK(q.lineWidthPx == Catch::Approx(3.0)); CHECK(q.smooth == true); CHECK(q.depthFade == false);
     CHECK(q.hasCamera == true); CHECK(q.camX == Catch::Approx(153534.5)); CHECK(q.camY == Catch::Approx(356975.25)); CHECK(q.metersPerPixel == Catch::Approx(0.0123));
+    CHECK(q.hasPlanRotation == true); CHECK(q.planRotationDeg == Catch::Approx(-32.5));   // 평면 방향(2026-10-16)
     CHECK(q.sectionSheet.present == true); CHECK(q.sectionSheet.paper == 1); CHECK(q.sectionSheet.landscape == false); CHECK(q.sectionSheet.denom == Catch::Approx(60));
     CHECK(q.sectionSheet.format == 2); CHECK(q.sectionSheet.dpi == Catch::Approx(150)); CHECK(q.sectionSheet.split == true);
     CHECK(q.sectionSheet.withImage == false); CHECK(q.sectionSheet.withLine == true); CHECK(q.sectionSheet.withLevels == false);
@@ -81,6 +83,7 @@ TEST_CASE("프로젝트 파일: 최소 내용(형식 + 모델)만 있어도 읽�
     CHECK(q.current == -1);
     CHECK(q.hasLine == false);
     CHECK(q.hasCamera == false);
+    CHECK(q.hasPlanRotation == false);   // 옛 파일 = 방향을 정하지 않음(평·단면도는 첫 단면 기준 자동)
     CHECK(q.back == Catch::Approx(kDefaultBackDepth));
     CHECK(q.opacity == 100);
     CHECK(q.lineWidthPx == Catch::Approx(2.0));

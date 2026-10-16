@@ -248,16 +248,21 @@ double ComboLayout::northDeg() const {
     return std::atan2(uy, ny) * 180.0 / 3.14159265358979323846;
 }
 
-ComboLayout layoutCombo(const SheetSpec& spec, const std::vector<ComboSection>& secs, double planMarginM, double gapMm, double stackGapMm) {
+ComboLayout layoutCombo(const SheetSpec& spec, const std::vector<ComboSection>& secs, double planMarginM, double gapMm, double stackGapMm,
+                        const ComboLayout* keepFrame) {
     ComboLayout c;
     c.L = layoutSheet(spec, 0.1, 0.1);
     c.mmPerM = 1000.0 / std::max(1e-9, spec.denom);
     if (secs.empty()) return c;
-    const LineFrame f0 = lineFrame(secs[0].ax, secs[0].ay, secs[0].bx, secs[0].by);
-    c.ux = f0.ux; c.uy = f0.uy; c.nx = f0.nx; c.ny = f0.ny; c.ax = f0.ax; c.ay = f0.ay;
+    if (keepFrame) {   // 끄는 동안: 틀을 붙든다(평면이 돌지 않음)
+        c.ux = keepFrame->ux; c.uy = keepFrame->uy; c.nx = keepFrame->nx; c.ny = keepFrame->ny; c.ax = keepFrame->ax; c.ay = keepFrame->ay;
+    } else {
+        const LineFrame f0 = lineFrame(secs[0].ax, secs[0].ay, secs[0].bx, secs[0].by);
+        c.ux = f0.ux; c.uy = f0.uy; c.nx = f0.nx; c.ny = f0.ny; c.ax = f0.ax; c.ay = f0.ay;
+    }
     const double gL = spec.gutterLeftMm, gR = spec.gutterRightMm, gT = spec.gutterTopMm, gB = spec.gutterBottomMm;
     const double mg = std::max(0.0, planMarginM);
-    bool first = true;
+    bool first = true, firstT = true;
     for (const ComboSection& sc : secs) {
         ComboPlaced p;
         const LineFrame f = lineFrame(sc.ax, sc.ay, sc.bx, sc.by);
@@ -266,7 +271,7 @@ ComboLayout layoutCombo(const SheetSpec& spec, const std::vector<ComboSection>& 
         c.toST(sc.ax, sc.ay, p.sA, p.tA);
         c.toST(sc.bx, sc.by, p.sB, p.tB);
         for (double s : {p.sA, p.sB}) { c.sMin = first ? s : std::min(c.sMin, s); c.sMax = first ? s : std::max(c.sMax, s); first = false; }
-        for (double t : {p.tA, p.tB}) { c.tMin = std::min(c.tMin, t); c.tMax = std::max(c.tMax, t); }
+        for (double t : {p.tA, p.tB}) { c.tMin = firstT ? t : std::min(c.tMin, t); c.tMax = firstT ? t : std::max(c.tMax, t); firstT = false; }
         // 돌린 평면에서의 방향: 바라보는 쪽(왼쪽 법선)이 위면 Top …
         const double dirS = f.ux * c.ux + f.uy * c.uy, dirT = f.ux * c.nx + f.uy * c.ny;
         const double ang = std::atan2(dirT, dirS) * 180.0 / 3.14159265358979323846;   // 0 = →, 90 = ↑
@@ -327,6 +332,49 @@ ComboLayout layoutCombo(const SheetSpec& spec, const std::vector<ComboSection>& 
         }
     }
     return c;
+}
+
+double normDeg180(double deg) {
+    if (!std::isfinite(deg)) return 0;
+    double d = std::fmod(deg, 360.0);
+    if (d <= -180.0) d += 360.0;
+    if (d > 180.0) d -= 360.0;
+    return d;
+}
+
+ComboLayout comboFrameForRotation(double rotDeg, double ax, double ay) {
+    ComboLayout c;
+    const double r = normDeg180(rotDeg) * 3.14159265358979323846 / 180.0;
+    c.ux = std::cos(r); c.uy = std::sin(r);
+    c.nx = -c.uy; c.ny = c.ux;
+    c.ax = ax; c.ay = ay;
+    return c;
+}
+
+double rotationToAlign(double px, double py, double qx, double qy, bool vertical) {
+    const double dx = qx - px, dy = qy - py;
+    if (std::hypot(dx, dy) < 1e-12) return 0;
+    const double phi = std::atan2(dy, dx) * 180.0 / 3.14159265358979323846;   // p → q 의 방향(동 0°, 반시계)
+    return normDeg180(vertical ? phi - 90.0 : phi);   // 종이 오른쪽 u 의 방향 = rotDeg, 종이 위 n = rotDeg + 90
+}
+
+AngleSnap snapAngle(double dirDeg, const std::vector<double> &refsDeg, double tolDeg) {
+    AngleSnap best;
+    double bestErr = std::max(0.0, tolDeg) + 1e-12;
+    for (size_t i = 0; i < refsDeg.size(); ++i) {
+        const double rel = normDeg180(dirDeg - refsDeg[i]);
+        const double k = std::round(rel / 90.0);
+        const double err = std::fabs(rel - k * 90.0);
+        if (err < bestErr) {
+            bestErr = err;
+            best.snapped = true;
+            best.angleDeg = normDeg180(refsDeg[i] + k * 90.0);
+            best.source = int(i);
+            best.perpendicular = (long(k) % 2) != 0;
+        }
+    }
+    if (!best.snapped) best.angleDeg = normDeg180(dirDeg);
+    return best;
 }
 
 double fitComboDenomStep10(const SheetSpec& spec, const std::vector<ComboSection>& secs, double planMarginM) {

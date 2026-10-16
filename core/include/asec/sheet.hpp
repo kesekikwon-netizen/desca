@@ -212,16 +212,43 @@ struct ComboLayout {
     s = (x - ax) * ux + (y - ay) * uy;
     t = (x - ax) * nx + (y - ay) * ny;
   }
+  /// 돌린 좌표 → 로컬 XY
+  void toXY(double s, double t, double &x, double &y) const {
+    x = ax + ux * s + nx * t;
+    y = ay + uy * s + ny * t;
+  }
   double xMm(double s) const { return planX + (s - sMin) * mmPerM; }
   double yMm(double t) const { return planY + (tMax - t) * mmPerM; }
+  /// 종이 mm → 돌린 좌표(xMm · yMm 의 거꾸로)
+  void paperToST(double mmX, double mmY, double &s, double &t) const {
+    s = sMin + (mmX - planX) / mmPerM;
+    t = tMax - (mmY - planY) / mmPerM;
+  }
   /// 진북 화살표의 종이 각(도, 시계 방향, 0 = 위)
   double northDeg() const;
 };
-/// 단면들(첫 것이 기준)과 평면 여유(단면선 끝에서 m)로 배치. 단면이 없으면 fits=false
+/// 단면들(첫 것이 기준)과 평면 여유(단면선 끝에서 m)로 배치. 단면이 없으면 fits=false.
+/// keepFrame 이 있으면 돌린 틀(원점 · s · t 축)을 그것에서 그대로 가져온다 — 도면에서 단면선 끝을 끄는 동안
+/// 평면이 돌지 않게(2026-10-16 「도면 안에서 빨간선 끝단을 움직여」). 놓으면 붙들지 않고 다시 배치한다
 ComboLayout layoutCombo(const SheetSpec &spec,
                         const std::vector<ComboSection> &secs,
                         double planMarginM, double gapMm = 6.0,
-                        double stackGapMm = 3.0);
+                        double stackGapMm = 3.0,
+                        const ComboLayout *keepFrame = nullptr);
+// ---- 평면 방향(사용자 2026-10-16 「사용자가 평면을 어떻게 놓을지 생각을 해야 단면을 만들 수 있다」 · 「다이얼을 돌리면 평면도가 돌아가게」)
+// 방향 각 rotDeg = 화면 · 종이에서 진북이 위에서 시계 방향으로 돈 각(0 = 북쪽 위). 표시 회전일 뿐 좌표 · Z · 단면 계산은 그대로
+/// 각을 (−180, 180] 으로
+double normDeg180(double deg);
+/// 평면 방향의 돌린 틀: s 축 u = (cos, sin)(종이 오른쪽) · t 축 n = (−sin, cos)(종이 위), 원점 (ax, ay).
+/// layoutCombo 의 keepFrame 으로 넘기면 첫 단면 기준 자동 회전 대신 이 방향으로 놓는다. northDeg() == normDeg180(rotDeg)
+ComboLayout comboFrameForRotation(double rotDeg, double ax = 0, double ay = 0);
+/// 두 점 맞춤: p → q 가 화면 가로(오른쪽으로)가 되는 방향 각. vertical 이면 세로(위로)
+double rotationToAlign(double px, double py, double qx, double qy, bool vertical);
+/// 단면선 방향 스냅: dirDeg(동 0°, 반시계)를 refsDeg 각각의 ref + k·90° 중 tolDeg 안에서 가장 가까운 것에 붙인다.
+/// source = 붙은 refs 자리(-1 = 안 붙음), perpendicular = 그 기준과 직각(k 홀수)
+struct AngleSnap { bool snapped = false; double angleDeg = 0; int source = -1; bool perpendicular = false; };
+AngleSnap snapAngle(double dirDeg, const std::vector<double> &refsDeg, double tolDeg = 3.0);
+
 /// 한 장에 들어가는 가장 작은 10 단위 분모(fitDenomStep10 와 같은 규칙), 최대 2000
 double fitComboDenomStep10(const SheetSpec &spec,
                            const std::vector<ComboSection> &secs,
