@@ -236,6 +236,120 @@ PlanStripXf planStripTransform(double ax, double ay, double bx, double by, doubl
     return T;
 }
 
+// ---- 평·단면도 한 장 조판
+void ComboPlaced::toPaper(double x, double y, double &px, double &py) const {
+    if (rotDeg == -90) { px = originX + y; py = originY - x; }        // rotate(-90): +x → 위, +y → 오른쪽
+    else if (rotDeg == 90) { px = originX - y; py = originY + x; }    // rotate(90): +x → 아래, +y → 왼쪽
+    else { px = originX + x; py = originY + y; }
+}
+
+double ComboLayout::northDeg() const {
+    // 북 (0,1) 의 돌린 좌표: s = uy, t = ny → 종이 (uy, -ny)(y 아래). 위에서 시계 방향 각
+    return std::atan2(uy, ny) * 180.0 / 3.14159265358979323846;
+}
+
+ComboLayout layoutCombo(const SheetSpec& spec, const std::vector<ComboSection>& secs, double planMarginM, double gapMm, double stackGapMm) {
+    ComboLayout c;
+    c.L = layoutSheet(spec, 0.1, 0.1);
+    c.mmPerM = 1000.0 / std::max(1e-9, spec.denom);
+    if (secs.empty()) return c;
+    const LineFrame f0 = lineFrame(secs[0].ax, secs[0].ay, secs[0].bx, secs[0].by);
+    c.ux = f0.ux; c.uy = f0.uy; c.nx = f0.nx; c.ny = f0.ny; c.ax = f0.ax; c.ay = f0.ay;
+    const double gL = spec.gutterLeftMm, gR = spec.gutterRightMm, gT = spec.gutterTopMm, gB = spec.gutterBottomMm;
+    const double mg = std::max(0.0, planMarginM);
+    bool first = true;
+    for (const ComboSection& sc : secs) {
+        ComboPlaced p;
+        const LineFrame f = lineFrame(sc.ax, sc.ay, sc.bx, sc.by);
+        p.lenM = f.L;
+        p.heightM = std::max(0.0, sc.heightM);
+        c.toST(sc.ax, sc.ay, p.sA, p.tA);
+        c.toST(sc.bx, sc.by, p.sB, p.tB);
+        for (double s : {p.sA, p.sB}) { c.sMin = first ? s : std::min(c.sMin, s); c.sMax = first ? s : std::max(c.sMax, s); first = false; }
+        for (double t : {p.tA, p.tB}) { c.tMin = std::min(c.tMin, t); c.tMax = std::max(c.tMax, t); }
+        // 돌린 평면에서의 방향: 바라보는 쪽(왼쪽 법선)이 위면 Top …
+        const double dirS = f.ux * c.ux + f.uy * c.uy, dirT = f.ux * c.nx + f.uy * c.ny;
+        const double ang = std::atan2(dirT, dirS) * 180.0 / 3.14159265358979323846;   // 0 = →, 90 = ↑
+        if (std::fabs(ang) <= 45.0) { p.slot = ComboSlot::Top; p.rotDeg = 0; }
+        else if (std::fabs(ang - 90.0) <= 45.0) { p.slot = ComboSlot::Left; p.rotDeg = -90; }
+        else if (std::fabs(ang + 90.0) <= 45.0) { p.slot = ComboSlot::Right; p.rotDeg = 90; }
+        else { p.slot = ComboSlot::Bottom; p.rotDeg = 0; }
+        p.plotW = p.lenM * c.mmPerM;
+        p.plotH = p.heightM * c.mmPerM;
+        p.areaX = -gL; p.areaY = -gT; p.areaW = p.plotW + gL + gR; p.areaH = p.plotH + gT + gB;
+        c.sections.push_back(p);
+    }
+    if (c.sections.size() == 1 && c.sections[0].lenM <= 0) return c;
+    c.sMin -= mg; c.sMax += mg; c.tMin -= mg; c.tMax += mg;
+    c.planW = (c.sMax - c.sMin) * c.mmPerM;
+    c.planH = (c.tMax - c.tMin) * c.mmPerM;
+    // 띠 크기
+    double band[4] = {0, 0, 0, 0};
+    int cnt[4] = {0, 0, 0, 0};
+    double bottomW = 0;
+    for (const ComboPlaced& p : c.sections) {
+        const int k = int(p.slot);
+        band[k] += p.areaH + (cnt[k] ? stackGapMm : gapMm);
+        ++cnt[k];
+        if (p.slot == ComboSlot::Bottom) bottomW = std::max(bottomW, p.areaW);
+    }
+    const bool horiz = cnt[0] + cnt[1] > 0, vert = cnt[2] + cnt[3] > 0;
+    const double extraL = std::max(band[2], horiz ? gL : 0.0), extraR = std::max(band[3], horiz ? gR : 0.0);
+    const double extraT = std::max(band[0], vert ? gR : 0.0), extraB = std::max(band[1], vert ? gL : 0.0);
+    c.contentW = std::max(extraL + c.planW + extraR, bottomW);
+    c.contentH = extraT + c.planH + extraB;
+    c.fits = c.contentW <= c.L.plotW + 1e-6 && c.contentH <= c.L.plotH + 1e-6;
+    const double cx = c.L.plotX + (c.L.plotW - c.contentW) * 0.5, cy = c.L.plotY + (c.L.plotH - c.contentH) * 0.5;
+    c.planX = cx + extraL;
+    c.planY = cy + extraT;
+    double curTop = c.planY - gapMm, curBot = c.planY + c.planH + gapMm;
+    double curLeft = c.planX - gapMm, curRight = c.planX + c.planW + gapMm;
+    for (ComboPlaced& p : c.sections) {
+        switch (p.slot) {
+        case ComboSlot::Top:
+            p.originX = c.xMm(p.sA); p.originY = curTop - p.areaH + gT;   // 단면 좌표 (0,0) = A · 높이 위
+            curTop -= p.areaH + stackGapMm;
+            break;
+        case ComboSlot::Bottom: {
+            const double mid = 0.5 * (c.xMm(p.sA) + c.xMm(p.sB));
+            p.originX = mid - p.plotW * 0.5; p.originY = curBot + gT;
+            curBot += p.areaH + stackGapMm;
+            break;
+        }
+        case ComboSlot::Left:   // rotate(-90): 종이 x = originX + y(높이 아래로) → 오른쪽 끝(= 낮은 높이 + 아래 여백)이 평면에 닿음
+            p.originX = curLeft - (p.plotH + gB); p.originY = c.yMm(p.tA);
+            curLeft -= p.areaH + stackGapMm;
+            break;
+        case ComboSlot::Right:  // rotate(90): 종이 x = originX - y → 왼쪽 끝이 평면에 닿음
+            p.originX = curRight + (p.plotH + gB); p.originY = c.yMm(p.tA);
+            curRight += p.areaH + stackGapMm;
+            break;
+        }
+    }
+    return c;
+}
+
+double fitComboDenomStep10(const SheetSpec& spec, const std::vector<ComboSection>& secs, double planMarginM) {
+    SheetSpec t = spec;
+    for (double d = 10; d <= 2000; d += 10) {
+        t.denom = d;
+        if (layoutCombo(t, secs, planMarginM).fits) return d;
+    }
+    return 2000;
+}
+
+PlanStripArea comboPlanArea(const ComboLayout& c) {
+    PlanStripArea a;
+    bool first = true;
+    for (double s : {c.sMin, c.sMax})
+        for (double t : {c.tMin, c.tMax}) {
+            const double x = c.ax + c.ux * s + c.nx * t, y = c.ay + c.uy * s + c.ny * t;
+            if (first) { a.x0 = a.x1 = x; a.y0 = a.y1 = y; first = false; }
+            a.x0 = std::min(a.x0, x); a.x1 = std::max(a.x1, x); a.y0 = std::min(a.y0, y); a.y1 = std::max(a.y1, y);
+        }
+    return a;
+}
+
 std::string formatAzimuth(double az) {
     az = std::fmod(az, 360.0); if (az < 0) az += 360.0;
     char b[48];

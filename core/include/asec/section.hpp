@@ -115,6 +115,11 @@ double profileRelief(const std::vector<Polyline>& profile);
 /// minGap(m) 이하의 아주 짧은 틈은 버린다. 결과는 s 오름차순.
 struct SGap { double s0 = 0, s1 = 0; };
 std::vector<SGap> profileGaps(const std::vector<Polyline>& profile, double length, double minGap = 0.02);
+/// 레벨선 정리(2026-10-16, 사용자 샘플 보고서 도면 9장): 레벨선은 잘린 선(발굴된 지면) 아래 땅속에만 긋는다.
+/// 높이 z 의 선은 열린 잘린 선의 높이가 z 이상인 s 구간에만 — 지면 위 공기와 파낸 수혈 속(빨간 선 위)에는 없음,
+/// 수혈 바닥보다 깊은 선은 끝까지 이어짐. 닫힌 고리(돌 · 덤불)는 보지 않는다. 잘린 선이 없는 빈 구간에도 긋지 않는다.
+/// 결과는 [s0, s1] 안, s 오름차순 · 겹침 없음
+std::vector<SGap> levelLineSpans(const std::vector<Polyline>& profile, double z, double s0, double s1);
 /// 화면 세로 과장 추천(1·2·5·10): 기복이 보이는 높이 visibleZ(m, 1:1 일 때)의 15% 이상 차지하는 가장 작은 배율.
 /// 기복 없음·보이는 높이 없음이면 1. 화면 보기 전용 — 도면·내보내기는 언제나 1:1
 int suggestVerticalExaggeration(double relief, double visibleZ);

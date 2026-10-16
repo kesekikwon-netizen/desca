@@ -175,6 +175,60 @@ PlanStripXf planStripTransform(double ax, double ay, double bx, double by,
                                double pageXAtS0, double pageYAtT0,
                                double mmPerM);
 
+// ---- 평·단면도 한 장 조판(2026-10-16, 사용자 요청 「샘플 도면처럼 한 장에 축척·방향을 맞춰」):
+//      첫 단면(기준)의 A→A′ 가 종이 가로(왼쪽→오른쪽)가 되게 평면을 돌린다. 단면도는 저마다
+//      「잘린 면을 바라보는 쪽」(A→A′ 의 왼쪽 법선 = 입면 뒤쪽, facingKo 와 같은 규약)에 놓는다:
+//      돌린 평면에서 A→A′ 가 →(기준과 같은 방향)이면 위, ←이면 아래, ↑이면 왼쪽(90° 돌려 A 아래 · A′ 위),
+//      ↓이면 오른쪽(A 위 · A′ 아래). 위 · 왼쪽 · 오른쪽은 평면의 A 자리와 거리(s)를 맞추고, 아래(반대 방향)는
+//      글자를 뒤집지 않으려고 보통 방향으로 두되 선의 가운데를 맞춘다. 같은 축척. 좌표 · 높이 값은 바꾸지 않는다.
+struct ComboSection {
+  double ax = 0, ay = 0, bx = 0, by = 0; // 단면선 A · A′(로컬 XY, m)
+  double heightM = 0;                    // 단면 표시 높이(m, 위아래 여유 포함)
+};
+enum class ComboSlot { Top = 0, Bottom = 1, Left = 2, Right = 3 };
+struct ComboPlaced {
+  ComboSlot slot = ComboSlot::Top;
+  int rotDeg = 0; // 0 · -90(왼쪽: 반시계 — A 아래 · A′ 위 · 높은 쪽이 왼쪽) · 90(오른쪽: 시계 — A 위 · A′ 아래 · 높은 쪽이 오른쪽)
+  double lenM = 0, heightM = 0;
+  double sA = 0, tA = 0, sB = 0, tB = 0; // 돌린 평면 좌표(m)의 A · A′
+  // 단면 자체 좌표(mm, 돌리기 전: x = 거리 s 오른쪽, y = 아래로 = 높이 낮아짐)의 그림 칸과 글자 여백.
+  // 종이에 놓을 때: translate(originX, originY) → rotate(rotDeg) → 이 좌표로 그린다
+  double originX = 0, originY = 0;
+  double plotX = 0, plotY = 0, plotW = 0, plotH = 0;
+  double areaX = 0, areaY = 0, areaW = 0, areaH = 0;
+  /// 단면 좌표(mm) → 종이(mm)
+  void toPaper(double x, double y, double &px, double &py) const;
+};
+struct ComboLayout {
+  SheetLayout L;
+  double mmPerM = 0;
+  double ux = 1, uy = 0, nx = 0, ny = 1, ax = 0, ay = 0; // 돌린 틀: 원점 = 기준 A, s 축 u(종이 오른쪽), t 축 n(종이 위)
+  double planX = 0, planY = 0, planW = 0, planH = 0;     // 평면 칸(mm)
+  double sMin = 0, sMax = 0, tMin = 0, tMax = 0;         // 평면 칸이 비추는 돌린 좌표(m)
+  double contentW = 0, contentH = 0;                     // 전체(평면 + 단면 띠 + 여백, mm)
+  bool fits = false;
+  std::vector<ComboPlaced> sections;
+  void toST(double x, double y, double &s, double &t) const {
+    s = (x - ax) * ux + (y - ay) * uy;
+    t = (x - ax) * nx + (y - ay) * ny;
+  }
+  double xMm(double s) const { return planX + (s - sMin) * mmPerM; }
+  double yMm(double t) const { return planY + (tMax - t) * mmPerM; }
+  /// 진북 화살표의 종이 각(도, 시계 방향, 0 = 위)
+  double northDeg() const;
+};
+/// 단면들(첫 것이 기준)과 평면 여유(단면선 끝에서 m)로 배치. 단면이 없으면 fits=false
+ComboLayout layoutCombo(const SheetSpec &spec,
+                        const std::vector<ComboSection> &secs,
+                        double planMarginM, double gapMm = 6.0,
+                        double stackGapMm = 3.0);
+/// 한 장에 들어가는 가장 작은 10 단위 분모(fitDenomStep10 와 같은 규칙), 최대 2000
+double fitComboDenomStep10(const SheetSpec &spec,
+                           const std::vector<ComboSection> &secs,
+                           double planMarginM);
+/// 평면 영상을 만들 로컬 XY 외접 상자(돌린 평면 칸 네 모서리)
+PlanStripArea comboPlanArea(const ComboLayout &c);
+
 /// 방위각(북 0°, 시계 방향) → "N 90.4° E" (180° 넘으면 "N 45.0° W")
 std::string formatAzimuth(double azDeg);
 /// 단면 보기가 바라보는 쪽(A→A′ 왼쪽 법선 = 두께 '뒤' 쪽): A→A′ 방위각 →

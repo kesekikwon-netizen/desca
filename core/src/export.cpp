@@ -48,7 +48,9 @@ bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const f
     const auto levels = o.levels ? levelLines(zlo, zhi, o.levelStepCm) : std::vector<LevelLine>{};
     for (auto& lv : levels) {
         const char* layer = lv.cls == LevelClass::Master ? "LEVEL_1M" : lv.cls == LevelClass::Major ? "LEVEL_50CM" : "LEVEL_10CM";
-        d.line(layer, P(s0, lv.z), P(s1, lv.z));
+        if (o.levelsBelowGround) {   // 지면 위(공기)에는 없음 — 보고서 도면 관례(2026-10-16). 레벨선 z 는 로컬이므로 잘린 선(로컬 z)과 바로 비교
+            for (const SGap& g : levelLineSpans(r.profile, lv.z - oz, s0, s1)) d.line(layer, P(g.s0, lv.z), P(g.s1, lv.z));
+        } else d.line(layer, P(s0, lv.z), P(s1, lv.z));
     }
     if (o.image && !o.imageFile.empty() && o.imageW > 0 && o.imageH > 0) {
         if (!w3) d.image("SECTION_IMAGE", o.imageFile, o.imageW, o.imageH, Vec3(o.imageS0, o.imageZ0 + oz, 0), Vec3(o.imageRes, 0, 0), Vec3(0, o.imageRes, 0));

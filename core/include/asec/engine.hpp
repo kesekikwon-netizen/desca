@@ -62,6 +62,9 @@ struct SectionRequest {
     double imageRes = 0.004;   // m/px
     size_t maxImagePixels = size_t(24) << 20;
     double zMargin = 0.25;     // 표시 범위 위아래 여유
+    /// 표시 범위(result.zMin · zMax)를 잘린 선 높이만으로(± zMargin, 10 cm 단위). false = 옛 동작: 두께 띠(뒤 깊이) 안 메시 전체 높이까지 —
+    /// 뒤 10 m 배경이 있으면 단면 0.7 m 에 화면 5 m 가 되던 것(사용자 2026-10-16). 입면 영상도 이 범위만 그린다
+    bool zRangeFromProfile = false;
     double depthFade = 0;      // 입면 깊이 음영(0 = 끔). 먼 면일수록 옅게
     double meshRes = 0;        // >0: 미리보기 — 입면 영상은 이 해상도(m)에 충분한 거친 LOD(빠름). 0: 최고 해상도 잎(최종)
     /// 잘린 면(단면선)은 미리보기에서도 최고 해상도 잎으로 자름(단면 평면 ±1 mm 얇은 띠의 잎만 모음 — 뒤 3 m 배경과 무관).

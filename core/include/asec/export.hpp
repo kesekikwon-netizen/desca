@@ -12,6 +12,7 @@ struct SectionResult {
     SrsInfo srs;
     std::vector<Polyline> profile;  // (s, z로컬) 정리된 단면선
     double zMin = 0, zMax = 0;      // 로컬 z 표시 범위
+    double zMinCut = 0, zMaxCut = 0; // 잘린 선만의 로컬 z 범위(여유 없음). zMaxCut < zMinCut 이면 없음(옛 결과 · 손으로 만든 결과)
     size_t rawSegments = 0, triangles = 0, tiles = 0;
 };
 
@@ -21,6 +22,7 @@ struct DxfExportOptions {
     DxfCoordMode mode = DxfCoordMode::Drawing2D;  // 2D: X=A 기준 거리, Y=절대표고 / 3D: 실좌표(EPSG), 단면 수직면
     bool levels = true;
     int levelStepCm = 10;
+    bool levelsBelowGround = false;   // 레벨선을 땅속에만(지면 위 공기에는 없음, levelLineSpans, 2026-10-16). 기본 false = 옛 동작(통째로 한 줄)
     double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기 pt(10 cm · 50 cm = 1 m 포함) — 디자인 v5 결정 L. 레이어 370 값은 dxfLineWeight()
     double scaleDenom = 20;   // 문자 크기 계산용(1/20 → 2 mm 글자 = 0.04 m)
     double textMm = 2.0;

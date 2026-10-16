@@ -427,6 +427,37 @@ double profileRelief(const std::vector<Polyline>& profile) {
     return q(0.95) - q(0.05);
 }
 
+std::vector<SGap> levelLineSpans(const std::vector<Polyline>& profile, double z, double s0, double s1) {
+    if (s1 < s0) std::swap(s0, s1);
+    std::vector<SGap> v;
+    for (const auto& pl : profile) {
+        if (pl.size() < 2) continue;
+        if (pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9) continue;   // 닫힌 고리는 지면이 아님
+        for (size_t i = 1; i < pl.size(); ++i) {
+            const Vec2& a = pl[i - 1];
+            const Vec2& b = pl[i];
+            const bool ua = a.y >= z, ub = b.y >= z;
+            if (!ua && !ub) continue;
+            double xa = a.x, xb = b.x;
+            if (ua != ub) {   // 교차점(정확한 s)에서 자름
+                const double dz = b.y - a.y;
+                const double sx = std::fabs(dz) > 1e-15 ? a.x + (b.x - a.x) * (z - a.y) / dz : b.x;
+                if (ua) xb = sx; else xa = sx;
+            }
+            double lo = std::max(s0, std::min(xa, xb)), hi = std::min(s1, std::max(xa, xb));
+            if (hi > lo) v.push_back({lo, hi});
+        }
+    }
+    std::sort(v.begin(), v.end(), [](const SGap& p, const SGap& q) { return p.s0 < q.s0; });
+    std::vector<SGap> out;
+    for (auto& g : v) {
+        if (!out.empty() && g.s0 <= out.back().s1 + 1e-9) out.back().s1 = std::max(out.back().s1, g.s1);
+        else out.push_back(g);
+    }
+    out.erase(std::remove_if(out.begin(), out.end(), [](const SGap& g) { return g.s1 - g.s0 <= 1e-9; }), out.end());
+    return out;
+}
+
 std::vector<SGap> profileGaps(const std::vector<Polyline>& profile, double length, double minGap) {
     // 잘린 선 하나하나가 덮는 s 범위(점 순서와 무관)를 [0, length] 안으로 자른 뒤, 정렬해 이어 붙이며 사이의 틈을 모은다
     std::vector<std::pair<double, double>> cover;
