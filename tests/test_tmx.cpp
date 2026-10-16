@@ -62,6 +62,20 @@ TEST_CASE("손상된 3MXB 는 오류로 거절") {
     CHECK_FALSE(readTmxTile(dir / "y.3mxb", t, &err));
 }
 
+TEST_CASE("3SM(SQLite)·큰 비-3MX 파일은 통째로 읽지 않고 알맞은 오류로 거절") {
+    auto dir = tmpDir("not3mx");
+    // 3SM(ScalableMesh) 은 SQLite 파일 — 머리 16바이트만 보고 거절해야 한다(수 GB 를 메모리에 올리지 않음)
+    { std::ofstream f(dir / "a.3sm", std::ios::binary); f.write("SQLite format 3\0", 16); f << std::string(4096, '\0'); }
+    TmxScene sc; std::string err;
+    CHECK_FALSE(readTmxScene(dir / "a.3sm", sc, &err));
+    CHECK(err.find("3SM") != std::string::npos);
+    // 3MX 장면 파일(JSON)은 수 KB — 64 MB 를 넘는 파일은 읽기 전에 거절
+    { std::ofstream f(dir / "big.3mx", std::ios::binary); f.seekp((64ll << 20) + 1); f.put('\0'); }
+    err.clear();
+    CHECK_FALSE(readTmxScene(dir / "big.3mx", sc, &err));
+    CHECK(err.find("3MX") != std::string::npos);
+}
+
 TEST_CASE("3MX 루트: SRS·SRSOrigin 읽기, 로컬+원점=실좌표") {
     auto dir = tmpDir("scene");
     synth::Params p; p.dir = dir; p.leafSpacing = 0.1; p.texSize = 32;

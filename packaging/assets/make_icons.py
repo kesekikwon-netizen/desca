@@ -1,32 +1,23 @@
-# 발굴 단면뷰어 아이콘: 아이보리 스퀴클 + 격자 바탕에 단면선(먹색)·흙(테라코타)·레벨선
-import io, struct
-from PIL import Image, ImageDraw, ImageFilter
-import os
-SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src') + '/'  # 원본 바탕·마스크 사본(이 저장소 안에 포함)
-S = 1024
-bg = Image.open(SRC + 'icon_B_bg_1024.png').convert('RGBA').resize((S, S))
-mask = Image.open(SRC + 'icon_B_mask_squircle_512.png').convert('RGBA').split()[3].resize((S, S), Image.LANCZOS)
-im = Image.new('RGBA', (S, S), (0, 0, 0, 0)); im.paste(bg, (0, 0), mask)
-d = ImageDraw.Draw(im)
-INK, TC, TCS = (17, 17, 17, 255), (198, 97, 63, 255), (232, 160, 132, 255)
-# 레벨선(가는 회색)
-for y in (300, 420, 540, 660):
-    d.line([(150, y), (874, y)], fill=(150, 150, 146, 255), width=6)
-# 단면선(수혈 + 주혈)
-prof = [(150, 470), (330, 450), (372, 455), (410, 640), (450, 668), (560, 668), (585, 668), (600, 735), (640, 735), (655, 668), (640, 668), (655, 668), (700, 666), (735, 640), (770, 445), (874, 425)]
-prof = [p for i, p in enumerate(prof) if i not in (10, 11)]
-soil = prof + [(874, 860), (150, 860)]
-d.polygon(soil, fill=TCS)
-# 흙 속 층 줄무늬
-for k, y in enumerate((760, 820)):
-    d.line([(150, y), (874, y - 12)], fill=TC, width=10)
-d.line(prof, fill=(211, 47, 47, 255), width=30, joint='curve')
-for p in (prof[0], prof[-1]):
-    d.ellipse([p[0] - 15, p[1] - 15, p[0] + 15, p[1] + 15], fill=(211, 47, 47, 255))
-# 단면 표시 A–A' (테라코타 화살 머리)
-for x in (150, 874):
-    d.line([(x, 190), (x, 250)], fill=TC, width=22)
-im.putalpha(Image.composite(im.split()[3], Image.new('L', (S, S), 0), mask))
+# 발굴 단면뷰어 아이콘(C안): 남색 스퀴클 + 수혈이 파인 흰 지면 + 호박색 레벨 표식. 32 px 이하는 굵은 단순화판
+import io, struct, os
+from PIL import Image, ImageDraw
+SS = 4; N = 1024 * SS  # 초과 표본
+NAVY, GROUND, AMBER = (22, 52, 84, 255), (246, 244, 238, 255), (245, 176, 65, 255)
+P = lambda pts: [(x * SS, y * SS) for x, y in pts]
+def master(small):
+    im = Image.new('RGBA', (N, N), NAVY); d = ImageDraw.Draw(im)
+    d.polygon(P([(0, 470), (300, 470), (360, 700), (664, 700), (724, 470), (1024, 470), (1024, 1024), (0, 1024)]), fill=GROUND)
+    y, t = 330, (110 if small else 70)
+    d.line(P([(150, y), (800, y)]), fill=AMBER, width=(70 if small else 30) * SS)
+    d.polygon(P([(874 - t, y - t * 0.8), (874 + t * 0.2, y - t * 0.8), (874 - t * 0.4, y + t * 0.1)]), fill=AMBER)
+    m = Image.new('L', (N, N), 0); R = int(N * 0.225)
+    ImageDraw.Draw(m).rounded_rectangle([0, 0, N - 1, N - 1], radius=R, fill=255)
+    out = Image.new('RGBA', (N, N), (0, 0, 0, 0)); out.paste(im, (0, 0), m); od = ImageDraw.Draw(out)
+    od.rounded_rectangle([0, 0, N - 1, N - 1], radius=R, outline=(0, 0, 0, 34), width=5 * SS)   # 밝은 바탕 가장자리
+    od.rounded_rectangle([5 * SS, 5 * SS, N - 1 - 5 * SS, N - 1 - 5 * SS], radius=R - 5 * SS, outline=(255, 255, 255, 30), width=6 * SS)  # 어두운 바탕 가장자리
+    return out
+BIG, SMALL = master(False), master(True)
+im = BIG.resize((1024, 1024), Image.LANCZOS)
 im.save('app_1024.png')
 
 def bmp_entry(im):
@@ -50,12 +41,12 @@ def write_ico(path, imgs):
     for i, dd in zip(imgs, datas):
         w = i.size[0]; out += struct.pack('<BBBBHHII', w % 256, w % 256, 0, 0, 1, 32, len(dd), off); off += len(dd)
     open(path, 'wb').write(out + b''.join(datas))
-rs = lambda s: im.resize((s, s), Image.LANCZOS)
+rs = lambda s: (SMALL if s <= 32 else BIG).resize((s, s), Image.LANCZOS)
 write_ico('app.ico', [rs(s) for s in (16, 20, 24, 32, 40, 48, 64, 128, 256)])
 rs(256).save('app_256.png'); rs(64).save('app_64.png')
-# NSIS 마법사 그림(164x314) · 머리 그림(150x57): 아이보리 바탕 + 아이콘 + 테라코타 띠
+# NSIS 마법사 그림(164x314) · 머리 그림(150x57): 아이보리 바탕 + 아이콘 + 남색 띠
 wiz = Image.new('RGB', (164, 314), (247, 246, 242)); wiz.paste(rs(120), (22, 60), rs(120))
-dw = ImageDraw.Draw(wiz); dw.rectangle([0, 300, 164, 314], fill=(198, 97, 63))
+dw = ImageDraw.Draw(wiz); dw.rectangle([0, 300, 164, 314], fill=NAVY[:3])
 wiz.save('wizard.bmp')
 hd = Image.new('RGB', (150, 57), (255, 255, 255)); hd.paste(rs(44), (98, 6), rs(44)); hd.save('header.bmp')
 print('ok')

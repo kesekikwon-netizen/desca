@@ -98,6 +98,21 @@ static Box3 boxFrom(const json& j) {
 }
 
 bool readTmxScene(const fs::path& file3mx, TmxScene& out, std::string* err) {
+    // 3MX 장면 파일은 작은 JSON 이다. 다른 형식(특히 수 GB 의 3SM)을 통째로 메모리에 올리지 않도록 머리·크기부터 본다.
+    {
+        std::ifstream f(file3mx, std::ios::binary);
+        if (!f) { setErr(err, "파일을 읽을 수 없습니다"); return false; }
+        char head[16] = {};
+        f.read(head, 16);
+        if (f.gcount() == 16 && std::memcmp(head, "SQLite format 3\0", 16) == 0) {
+            setErr(err, "3SM(ScalableMesh, SQLite) 파일은 아직 열 수 없습니다 — ContextCapture/iTwin Capture 에서 3MX 로 내보낸 "
+                        "Production_*.3mx 를 여세요");
+            return false;
+        }
+        std::error_code ec;
+        auto n = fs::file_size(file3mx, ec);
+        if (!ec && n > (64ull << 20)) { setErr(err, "3MX 장면 파일이 아닙니다(크기 " + std::to_string(n >> 20) + " MB) — Production_*.3mx 를 여세요"); return false; }
+    }
     std::vector<uint8_t> b;
     if (!readFileBytes(file3mx, b)) { setErr(err, "파일을 읽을 수 없습니다"); return false; }
     json j;

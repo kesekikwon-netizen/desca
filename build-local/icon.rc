@@ -1,0 +1,2 @@
+// 로컬 MSVC 개발 빌드 전용: exe 에 아이콘만 넣는다(packaging/app.rc 는 매니페스트까지 넣어 MSVC 기본 매니페스트와 겹침)
+IDI_ICON1 ICON "../packaging/assets/app.ico"
