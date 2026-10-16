@@ -15,6 +15,7 @@ struct SectionStyle {
     double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기(pt, 디자인 v5 결정 L): 10 cm 선 · 50 cm(1 m 포함) 선. 내보내기는 이 값 그대로, 화면은 보이게 바닥값
     bool showBaseline = false;  // 기준선 EL(점선 + 「기준선 EL. 57.00 m」)
     double baselineEl = 0;      // 절대 표고(m)
+    bool levelsBelowGround = true;   // 레벨선은 잘린 선 아래 땅속에만(지표 위 · 파낸 수혈 속 없음 — 보고서 도면 관례, 사용자 2026-10-16). DXF 도 같음
     bool plotScaleBar = true;   // 그림 칸 안 축척 막대(도면은 표제란 띠에 따로 그림)
     QString nameA = QStringLiteral("A"), nameB = QStringLiteral("A′");   // 단면 이름의 끝 글자(B–B′ 면 B · B′) — 축 글자·거리 축 이름에(2026-10-11)
 };

@@ -338,6 +338,32 @@ double fitComboDenomStep10(const SheetSpec& spec, const std::vector<ComboSection
     return 2000;
 }
 
+void freeComboPage(ComboLayout& c, double marginMm, double titleMm) {
+    double x0 = c.planX, y0 = c.planY, x1 = c.planX + c.planW, y1 = c.planY + c.planH;
+    for (const ComboPlaced& p : c.sections)
+        for (double x : {p.areaX, p.areaX + p.areaW})
+            for (double y : {p.areaY, p.areaY + p.areaH}) {
+                double px, py;
+                p.toPaper(x, y, px, py);
+                x0 = std::min(x0, px); x1 = std::max(x1, px); y0 = std::min(y0, py); y1 = std::max(y1, py);
+            }
+    const double dx = marginMm - x0, dy = marginMm - y0;
+    c.planX += dx; c.planY += dy;
+    for (ComboPlaced& p : c.sections) { p.originX += dx; p.originY += dy; }
+    const double w = x1 - x0, h = y1 - y0;
+    SheetLayout& L = c.L;
+    L.paperW = w + 2 * marginMm;
+    L.paperH = h + 2 * marginMm + titleMm;
+    L.frameX = marginMm * 0.5; L.frameY = marginMm * 0.5;
+    L.frameW = L.paperW - marginMm; L.frameH = L.paperH - marginMm;
+    L.plotX = marginMm; L.plotY = marginMm; L.plotW = w; L.plotH = h;
+    L.titleY = marginMm + h + marginMm * 0.5;
+    L.contentW = w; L.contentH = h;
+    L.fits = true; L.cols = L.rows = 1;
+    c.contentW = w; c.contentH = h;
+    c.fits = true;
+}
+
 PlanStripArea comboPlanArea(const ComboLayout& c) {
     PlanStripArea a;
     bool first = true;

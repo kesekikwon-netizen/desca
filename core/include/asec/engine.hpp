@@ -62,9 +62,12 @@ struct SectionRequest {
     double imageRes = 0.004;   // m/px
     size_t maxImagePixels = size_t(24) << 20;
     double zMargin = 0.25;     // 표시 범위 위아래 여유
-    /// 표시 범위(result.zMin · zMax)를 잘린 선 높이만으로(± zMargin, 10 cm 단위). false = 옛 동작: 두께 띠(뒤 깊이) 안 메시 전체 높이까지 —
-    /// 뒤 10 m 배경이 있으면 단면 0.7 m 에 화면 5 m 가 되던 것(사용자 2026-10-16). 입면 영상도 이 범위만 그린다
+    /// 표시 범위(result.zMin · zMax)를 잘린 선 높이만으로(사용자 2026-10-16 「표고 여백을 너무 두지 마라」): 위 = 잘린 선 최고점
+    /// 바로 위(같거나 높은) 10 cm 레벨선, 아래 = 최저점 바로 아래 10 cm 레벨선에서 zBelowM 더. 10 cm 는 절대 표고 기준.
+    /// false = 옛 동작: 두께 띠(뒤 깊이) 안 메시 전체 높이 ± zMargin — 뒤 10 m 배경이 있으면 단면 0.7 m 에 화면 3–5 m.
+    /// 입면 영상도 이 범위만 그린다(잘린 선보다 높은 뒤쪽 벽은 잘림). 잘린 선이 없으면 옛 동작
     bool zRangeFromProfile = false;
+    double zBelowM = 0.1;
     double depthFade = 0;      // 입면 깊이 음영(0 = 끔). 먼 면일수록 옅게
     double meshRes = 0;        // >0: 미리보기 — 입면 영상은 이 해상도(m)에 충분한 거친 LOD(빠름). 0: 최고 해상도 잎(최종)
     /// 잘린 면(단면선)은 미리보기에서도 최고 해상도 잎으로 자름(단면 평면 ±1 mm 얇은 띠의 잎만 모음 — 뒤 3 m 배경과 무관).

@@ -226,6 +226,11 @@ ComboLayout layoutCombo(const SheetSpec &spec,
 double fitComboDenomStep10(const SheetSpec &spec,
                            const std::vector<ComboSection> &secs,
                            double planMarginM);
+/// 용지 없는 한 장(사용자 2026-10-16 「용지 크기는 신경 쓰지 말고 최적 크기로 배치만」): 평면 칸과 모든 단면 칸(글자
+/// 여백 포함)의 외접 상자에서 marginMm 띄우고, 아래에 titleMm 띠를 둔 종이로 옮긴다. L.paperW/H · frame · plot ·
+/// titleY 를 그 종이로 다시 채우고 fits = true. 축척 · 배치 관계는 그대로(평행 이동만)
+void freeComboPage(ComboLayout &c, double marginMm = 10.0,
+                   double titleMm = 16.0);
 /// 평면 영상을 만들 로컬 XY 외접 상자(돌린 평면 칸 네 모서리)
 PlanStripArea comboPlanArea(const ComboLayout &c);
 

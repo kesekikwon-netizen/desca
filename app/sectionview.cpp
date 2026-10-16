@@ -151,7 +151,8 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
     // 세로 과장 화면: 10 cm 선마다 숫자가 겹치지 않으면 10 cm 숫자(얕은 기복 읽기). 내보내기·1:1 은 규칙 그대로(50 cm)
     if (vex > 1.0 && lp.lineCm == 10 && 0.1 * ppmZ >= fm.height() * 1.35) lp.labelCm = 10;
     if (st_.showLevels) {
-        levels = levelLines(zVis0, zVis1, lp.lineCm);
+        // 표고 범위(r.zMin–zMax, 잘린 선 ±10 cm 선) 안에만 — 화면이 높아도 위아래로 레벨선을 늘어놓지 않음(사용자 2026-10-16 「해발선 여유폭이 너무 넓다」)
+        levels = levelLines(std::max(zVis0, r_.zMin + oz - 1e-9), std::min(zVis1, r_.zMax + oz + 1e-9), lp.lineCm);
         // 굵기(디자인 v5 결정 L): 10 cm 선 0.2 pt · 50 cm(1 m 포함) 선 0.5 pt — 종이 위 mm 를 painter 단위로(ui 는 96 dpi 기준 배율 → mm 당 ui·96/25.4).
         // 내보내기 · 도면 미리보기(forExport)는 그 값 그대로(일러스트레이터에서 0.2 / 0.5 pt). 작업 화면(ui 1)은 0.27 px 라 안 보이므로 바닥값 0.75 / 1.0 / 1.25 px 유지
         const double pxPerMm = ui * 96.0 / 25.4;
@@ -159,6 +160,10 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
         const double wMajor = forExport ? ptToMm(st_.levelMajorPt) * pxPerMm : std::max(1.0 * ui, ptToMm(st_.levelMajorPt) * pxPerMm);
         const double wMaster = forExport ? wMajor : std::max(1.25 * ui, wMajor);
         if (probe) { probe->levelMinorPx = wMinor; probe->levelMajorPx = wMajor; }
+        bool haveGround = false;   // 열린 잘린 선(지면)이 있어야 땅속만 긋기가 뜻이 있다 — 없으면 옛 동작(통째로)
+        if (st_.levelsBelowGround)
+            for (const auto& pl : r_.profile)
+                if (pl.size() >= 2 && !(pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9)) { haveGround = true; break; }
         for (auto& lv : levels) {
             double y = Y(lv.z);
             QColor c; double w;
@@ -167,7 +172,10 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
             else if (lv.cls == LevelClass::Major) { c = theme::LevelMajor; w = wMajor; }
             else { c = theme::LevelMinor; w = wMinor; }
             p.setPen(QPen(c, w));
-            p.drawLine(QPointF(pr.left(), y), QPointF(pr.right(), y));
+            if (haveGround) {
+                for (const SGap& g : levelLineSpans(r_.profile, lv.z - oz, sVis0 - 1.0, sVis1 + 1.0))
+                    p.drawLine(QPointF(std::max(pr.left(), X(g.s0)), y), QPointF(std::min(pr.right(), X(g.s1)), y));
+            } else p.drawLine(QPointF(pr.left(), y), QPointF(pr.right(), y));
         }
     }
     // 3) 입면 영상(레벨선 위)
@@ -195,7 +203,7 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
             const double x = X(t.s);
             if (x < pr.left() - 0.5 || x > pr.right() + 0.5) continue;
             p.setPen(QPen(t.major ? cMajor : cMinor, t.major ? wMajorT : wMinorT));
-            p.drawLine(QPointF(x, pr.top()), QPointF(x, pr.bottom()));
+            p.drawLine(QPointF(x, std::max(pr.top(), Y(r_.zMax + oz))), QPointF(x, std::min(pr.bottom(), Y(r_.zMin + oz))));   // 표고 범위 안만
             if (t.major) ++nMajor;
         }
         if (probe) { probe->distTickCount = int(ticks.size()); probe->distTickMajorCount = nMajor; probe->distTickStepM = dStep; probe->distTickMinorPx = wMinorT; probe->distTickMajorPx = wMajorT; }

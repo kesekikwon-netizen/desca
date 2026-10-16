@@ -129,6 +129,44 @@ struct PlanStrip {
   QImage img;
   double x0 = 0, y1 = 0, res = 0;
 };
+/// 평·단면도 한 장(2026-10-16, 사용자 「샘플 보고서 도면처럼 한 장에 축척 ·
+/// 방향을 맞춰」 · 「용지 크기는 신경 쓰지 말고 최적 크기로 배치만」): 평면(첫
+/// 단면이 가로가 되게 돌림)과 모든 단면을 같은 축척으로, 단면은 평면 단면선
+/// 가운데 화살표(바라보는 쪽) 방향에 놓는다(asec::layoutCombo). 종이 = 내용
+/// 크기(용지 맞춤 · 넘침 경고 없음). 형식 0 PDF 1 DXF 2 PNG 3 TIFF 4 SVG
+struct ComboSheetParams {
+  double denom = 30;
+  int format = 4;
+  double dpi = 300;
+  double planMarginM = 1.0; // 평면 칸: 단면선 끝에서 더 보일 거리(m)
+  bool withPlanImage = true, withSectionImage = true, withLevels = true;
+  double lineWidthPx = 2.0; // 잘린 선 굵기(화면 설정 px → 인쇄 exportLineMm)
+  double imageOpacity = 1.0;
+  double levelMinorPt = 0.2, levelMajorPt = 0.5;
+  bool depthFade = false;
+  bool smooth = false; // 잘린 선 평활(화면 설정과 같게)
+  QString title, srsLabel, date;
+};
+/// 한 단면의 입력(로컬 좌표 단면선 + 앞 · 뒤 깊이, 이름 "A–A′")
+struct ComboSecInput {
+  asec::SectionLine line;
+  QString name;
+};
+struct ComboSecAsset {
+  asec::SectionResult r;
+  QImage img; // 입면 영상(그림 칸 s 0..L · 표고 범위로 잘라 둠). 없으면 비움
+  double imgS0 = 0, imgZ1 = 0, imgRes = 0; // z 로컬
+  QString nameA, nameB;
+};
+struct ComboAssets {
+  std::vector<ComboSecAsset> secs;
+  /// 돌린 평면 영상(종이 방향): 왼쪽 위 = 돌린 좌표 (planS0, planT1), planRes
+  /// m/px. 만들 때의 평면 여유 planMarginM
+  QImage plan;
+  double planS0 = 0, planT1 = 0, planRes = 0, planMarginM = -1;
+  asec::Vec3 origin;
+  QStringList skipped; // 메시와 만나지 않는 등으로 뺀 단면(「A–A′: 까닭」)
+};
 struct PointParams {
   asec::PointFormat format = asec::PointFormat::XYZ;
   int area = 0;
@@ -267,6 +305,35 @@ public:
   };
   static SheetPreviewCounters sheetPreviewCounters();
   void dlgPlanSheet(); // 평면도 조판
+  // ---- 평·단면도 한 장(2026-10-16) ----
+  ComboSheetParams defaultComboSheetParams() const;
+  /// 단면 목록 전부(지금 단면선을 먼저 목록에 맞춤). 첫 단면이 평면 회전 기준
+  std::vector<ComboSecInput> comboInputs();
+  void dlgComboSheet();
+  /// 단면마다 잘린 선 · 입면 영상(preview = 화면 미리보기용 거친 영상)
+  static bool computeComboSections(asec::MeshSource &src,
+                                   const std::vector<ComboSecInput> &in,
+                                   const ComboSheetParams &sp, bool preview,
+                                   ComboAssets &out, QString *msg,
+                                   const std::atomic<bool> *cancel = nullptr,
+                                   const std::function<void(double)> &progress = {});
+  /// 돌린 평면 영상(out.secs 가 있어야 함). res = m/px
+  static bool renderComboPlan(asec::MeshSource &src, const ComboSheetParams &sp,
+                              double res, ComboAssets &out, QString *msg,
+                              const std::atomic<bool> *cancel = nullptr);
+  static asec::ComboLayout comboLayoutFor(const ComboAssets &a,
+                                          const ComboSheetParams &sp);
+  /// minLinePx = 화면 미리보기에서 선이 이보다 가늘지 않게(저장은 0 — 종이
+  /// 굵기 그대로)
+  static void paintComboSheet(QPainter &p, const ComboAssets &a,
+                              const ComboSheetParams &sp, double pxPerMm,
+                              double minLinePx = 0);
+  static bool exportComboSheet(asec::MeshSource &src,
+                               const std::vector<ComboSecInput> &in,
+                               const ComboSheetParams &sp, const QString &path,
+                               QString *msg,
+                               const std::atomic<bool> *cancel = nullptr,
+                               const std::function<void(double)> &progress = {});
   QDialog *buildSheetDialog(SheetParams &io,
                             bool &accepted); // 자동화(창 캡처)에서도 씀
   QDialog *buildPlanSheetDialog(PlanSheetParams &io, const QImage &preview,
@@ -417,6 +484,8 @@ private:
   QPointer<QWidget> sheetSide_;
   QPointer<class QListWidget> sheetList_;
   bool sheetIsPlan_ = false;
+  bool sheetIsCombo_ = false; // 지금 조판 = 평·단면도 한 장(목록 맨 위 줄)
+  std::shared_ptr<ComboSheetParams> lastCombo_;
   std::shared_ptr<SheetParams>
       lastSheet_; // 지금 조판의 단면도 설정(다른 단면으로 갈 때 용지·넣을
                   // 것·형식을 이어 감)

@@ -5193,7 +5193,7 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
   // 목록 하나(판에 「평면도 | 단면도」 없음) · 흙색 주 단추 하나 ·
   //    알림은 「도면 점검」 상자 안에만(warnBox 없음) · 레벨선 pt 칸 둘 · 축척
   //    격자 8 · 종이 아래 도구 줄 6칸 · 떠 있는 「도면 보기」 1 · 점검 항목 3
-  //    이상 · 목록 줄 = 평면 1 + 단면 n
+  //    이상 · 목록 줄 = 평면 1 + 단면 n(+ 평·단면도 1)
   QString sheetLine = QStringLiteral("ui-audit sheet=not-checked");
   int listsMatch = -1;
   if (src_ && section_->hasResult()) {
@@ -5239,9 +5239,12 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
           rightW = w->width();
       const int sideW = sheetSide_ ? sheetSide_->width() : -1;
       listsMatch =
-          sheetList_ && sheetList_->count() == 1 + int(sections_.size()) + 2
+          sheetList_ && sheetList_->count() ==
+                            1 + int(sections_.size()) + 2 +
+                                (sections_.empty() ? 0 : 2)
               ? 1
-              : 0; // 절 이름 줄 「평면」 「단면」 2개 포함
+              : 0; // 절 이름 줄 「평면」 「단면」 2개 포함 + 단면이 있으면
+                   // 「한 장」 절 이름 · 평·단면도 줄(2026-10-16)
       const bool sideWOk = sideW >= 160 && sheetSide_ &&
                            sheetSide_->minimumWidth() <= 200 &&
                            sheetSide_->maximumWidth() > 348;

@@ -780,8 +780,8 @@ void PlanView::paintOverlay(QPainter& p) {
         for (const OtherSection& o : others_) {
             const QPointF a = S(o.line.a), b = S(o.line.b);
             const QPointF d = b - a; const double dl = std::hypot(d.x(), d.y()); const QPointF du = dl > 0 ? d / dl : QPointF(1, 0);
-            p.setPen(QPen(QColor(255, 255, 255, 200), 4.5, Qt::SolidLine, Qt::RoundCap)); p.drawLine(a, b);
-            p.setPen(QPen(QColor(255, 0, 0, 190), 1.8, Qt::SolidLine, Qt::RoundCap)); p.drawLine(a, b);
+            p.setPen(QPen(QColor(255, 255, 255, 200), 3.0, Qt::SolidLine, Qt::RoundCap)); p.drawLine(a, b);   // 가늘게(사용자 2026-10-16 「단면선이 너무 두껍다 · 둘 다 얇게」, 옛 4.5 / 1.8)
+            p.setPen(QPen(QColor(255, 0, 0, 190), 1.2, Qt::SolidLine, Qt::RoundCap)); p.drawLine(a, b);
             QString la, lb; splitLetters(o.name, la, lb);
             auto chip = [&](QPointF c, const QString& name, QPointF away) {
                 p.setPen(QPen(Qt::white, 4)); p.setBrush(Qt::NoBrush); p.drawEllipse(c, 4.5, 4.5);
@@ -826,7 +826,7 @@ void PlanView::paintOverlay(QPainter& p) {
         QPointF nd = nTip - mid; double nl = std::hypot(nd.x(), nd.y());
         QPointF nu = nl > 1e-6 ? nd / nl : QPointF(-eu.y(), eu.x());
         QPointF a0 = mid + nu * 6, a1 = mid + nu * 22, sd(nu.y(), -nu.x());
-        QPen ap(theme::SectionRed, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin); p.setPen(ap);
+        QPen ap(theme::SectionRed, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin); p.setPen(ap);
         p.drawLine(a0, a1); p.drawLine(a1, a1 - nu * 6 + sd * 4); p.drawLine(a1, a1 - nu * 6 - sd * 4);
         if (line_.back > 1e-6 && pitch_ < 88.0) {
             double zTop = planeOn_ ? planeZ1_ : z + 0.5;
@@ -842,9 +842,9 @@ void PlanView::paintOverlay(QPainter& p) {
             p.drawPolygon(wall);
         }
     }
-    // 단면선: 흰 테 7 px 위 순수 빨강(설정, 기본 3 px)
-    const double redW = std::clamp(QSettings().value("view/planLineWidth", 3.0).toDouble(), 1.5, 5.0);
-    p.setPen(QPen(QColor(255, 255, 255), 7.0, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
+    // 단면선: 흰 테 위 순수 빨강(설정, 기본 1.5 px · 흰 테 = 빨강 + 2.5 px). 사용자 2026-10-16 「너무 두껍다 · 둘 다 얇게」(옛 기본 3 px · 흰 테 7 px)
+    const double redW = std::clamp(QSettings().value("view/planLineWidth", 1.5).toDouble(), 1.0, 5.0);
+    p.setPen(QPen(QColor(255, 255, 255), redW + 2.5, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
     p.setPen(QPen(theme::SectionRed, redW, Qt::SolidLine, Qt::RoundCap)); p.drawLine(A, B);
     const double pxLen = std::hypot(B.x() - A.x(), B.y() - A.y());
     if (hasLine_ && f.L > 0.4 && pxLen >= 80) {

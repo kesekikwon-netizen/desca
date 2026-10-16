@@ -11,6 +11,7 @@
 //   1.2: --settings DIR(설정을 DIR 의 INI 로 — 시험용) --export-pdf f / --export-sheet-png f / --export-sheet-tiff f / --export-sheet-dxf f
 //        [--paper A4L|A4P|A3L|A3P] [--sheet-scale N] [--split] --export-dialog-shot f --undo-test --ctx-shot f --ui-audit DIR --icon-sheet f.png --cursor-sheet f.png
 //        --extra-line AX AY BX BY(단면 목록에 더함, 반복 가능) --start-shot f(파일 없이: 시작 화면)
+//        --export-combo-svg|pdf|png|tiff|dxf f(평·단면도 한 장 — 단면 목록 전부, 축척 --sheet-scale) --open-sheet combo
 //   --cut-check: 잘린 면 정확도(단면선 윗면 vs 잎 연직 피킹, 미리보기 vs 최종) + 단면선이 배경 위에 순수 빨강으로 그려졌는지(화면·내보내기)
 //   --vex N: 단면 화면 세로 과장(1·2·5·10, 화면만) / 창 제목 중복 검사는 항상 로그(window-title=…)
 //   --plan-cam X Y mpp: 캡처 전에 평면 카메라를 실좌표 중심·m/px 로(평면-단면 정합 확인)
@@ -697,6 +698,14 @@ int main(int argc, char** argv) {
             SheetLayout L = layoutSheet(sp.spec, SectionFrame(d.r.line).L, d.r.zMax - d.r.zMin);
             ok = w.hasSection() && MainWindow::exportSheet(d, *src, sp, path, &m);
             m += QStringLiteral(" | sheet %1x%2 fits=%3").arg(L.cols).arg(L.rows).arg(L.fits ? 1 : 0);
+        } else if (kind.startsWith(QStringLiteral("combo-"))) {   // 평·단면도 한 장: combo-svg · combo-pdf · combo-png · combo-tiff · combo-dxf
+            ComboSheetParams sp = w.defaultComboSheetParams();
+            const QString f = kind.mid(6);
+            sp.format = f == "pdf" ? 0 : f == "dxf" ? 1 : f == "png" ? 2 : f == "tiff" ? 3 : 4;
+            if (sheetScale > 0) sp.denom = sheetScale;
+            sp.dpi = dpi;
+            const std::vector<ComboSecInput> in = w.comboInputs();
+            ok = !in.empty() && MainWindow::exportComboSheet(*src, in, sp, path, &m);
         } else m = "unknown export kind";
         log(QStringLiteral("export-%1 %2: %3").arg(kind, ok ? "ok" : "FAILED", QString(m).replace('\n', " | ")));
         if (!ok) rc = 4;
@@ -736,6 +745,7 @@ int main(int argc, char** argv) {
     }
     if (openSheet == QStringLiteral("plan")) { w.dlgPlanSheet(); processFor(500); }
     else if (openSheet == QStringLiteral("section") && w.hasSection()) { w.dlgSheet(); processFor(300); }
+    else if (openSheet == QStringLiteral("combo")) { w.dlgComboSheet(); processFor(6000); }   // 평·단면도(미리보기 영상은 작업 스레드)
     auto sheetScaleText = [&]() { QString t; for (QSpinBox* sb : w.findChildren<QSpinBox*>()) if (sb->isVisible() && sb->prefix() == QStringLiteral("1:")) t = QString::number(sb->value()); return t; };
     if (!openSheet.isEmpty() && sheetPick >= 0) {
         QListWidget* lw = nullptr;

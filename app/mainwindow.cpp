@@ -632,6 +632,7 @@ static SectionRequest makeRequest(const SectionLine &line, bool smooth,
   static const bool coarseCut =
       qEnvironmentVariableIntValue("SECTIONVIEWER_COARSE_PREVIEW_CUT") == 1;
   rq.leafProfileAlways = !coarseCut;
+  rq.zRangeFromProfile = true; // 표고 범위 = 잘린 선 ±10 cm 선(사용자 2026-10-16)
   return rq;
 }
 
@@ -796,6 +797,7 @@ bool MainWindow::exportSectionImage(const SectionDoc &doc0, MeshSource &src,
   // 1) 출력 해상도 그대로 입면 영상 다시 그리기(같은 단면선·정리 → 같은 윤곽)
   SectionRequest rq;
   rq.line = doc.r.line;
+  rq.zRangeFromProfile = true;
   rq.cleanup.smooth = false;
   rq.depthFade = doc.st.depthFade ? kDepthFade : 0.0;
   rq.imageRes = res;
@@ -896,10 +898,12 @@ bool MainWindow::exportSectionDxf(const SectionDoc &doc, MeshSource &src,
   o.scaleDenom = p.denom;
   o.levelMinorPt = clampLineWeightPt(p.levelMinorPt);
   o.levelMajorPt = clampLineWeightPt(p.levelMajorPt);
+  o.levelsBelowGround = doc.st.levelsBelowGround;
   QString pngName;
   if (p.image) {
     SectionRequest rq;
     rq.line = doc.r.line;
+    rq.zRangeFromProfile = true;
     rq.imageRes = groundResolution(p.denom, p.imageDpi);
     rq.depthFade = doc.st.depthFade ? kDepthFade : 0.0;
     rq.maxImagePixels = size_t(80) << 20;

@@ -114,11 +114,16 @@ TEST_CASE("단면 표시 높이: 잘린 선 기준이면 뒤 배경 기둥 높�
     rq.zRangeFromProfile = true;
     REQUIRE(computeSection(*s, rq, newO, &err));
     CHECK(oldO.result.zMax >= 1.5);
-    CHECK(newO.result.zMax == Approx(0.3));   // 지면 0 + 여유 0.25 → 10 cm 올림
-    CHECK(newO.result.zMin == Approx(-0.3));
+    CHECK(newO.result.zMax == Approx(0).margin(1e-9));   // 지면 0 = 10 cm 선 위 그대로
+    CHECK(newO.result.zMin == Approx(-0.1));             // 0 선에서 10 cm 더 아래
     CHECK(newO.result.zMinCut == Approx(0).margin(1e-6));
     CHECK(newO.result.zMaxCut == Approx(0).margin(1e-6));
     // 잘린 선은 같다
+    // 절대 표고 기준 10 cm: 원점 z 가 0.05 면 잘린 선 절대 0.05 → 위 0.1, 아래 0.0 − 0.1
+    s->srs.origin = Vec3(0, 0, 0.05);
+    SectionOutput offO; REQUIRE(computeSection(*s, rq, offO, &err));
+    CHECK(offO.result.zMax + 0.05 == Approx(0.1));
+    CHECK(offO.result.zMin + 0.05 == Approx(-0.1));
     REQUIRE(oldO.result.profile.size() == newO.result.profile.size());
     for (size_t i = 0; i < oldO.result.profile.size(); ++i) CHECK(oldO.result.profile[i] .size() == newO.result.profile[i].size());
 }
@@ -167,6 +172,29 @@ TEST_CASE("한 장 조판: 첫 단면이 가로(위), 위로 가는 단면은 �
     CHECK(layoutCombo(sp, secs, 1.0).fits);
     sp.denom = fit - 10;
     CHECK_FALSE(layoutCombo(sp, secs, 1.0).fits);
+}
+
+TEST_CASE("한 장 조판(용지 없음): 내용 외접 상자 + 여백으로 종이를 잡고 배치 관계는 평행 이동만", "[combo][sheet]") {
+    SheetSpec sp; sp.denom = 30;
+    std::vector<ComboSection> secs = {{0, 0, 4, 0, 1.0}, {2, -2, 2, 2, 0.8}};
+    ComboLayout c = layoutCombo(sp, secs, 1.0);
+    const double ox = c.sections[1].originX - c.planX, oy = c.sections[0].originY - c.planY;
+    freeComboPage(c, 10.0, 16.0);
+    CHECK(c.fits);
+    CHECK(c.sections[1].originX - c.planX == Approx(ox));
+    CHECK(c.sections[0].originY - c.planY == Approx(oy));
+    // 모든 칸이 [10, 종이 − 10] 안, 왼쪽 · 위 가장자리가 정확히 10 mm
+    double x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    auto add = [&](double x, double y) { x0 = std::min(x0, x); y0 = std::min(y0, y); x1 = std::max(x1, x); y1 = std::max(y1, y); };
+    add(c.planX, c.planY); add(c.planX + c.planW, c.planY + c.planH);
+    for (auto& p : c.sections)
+        for (double x : {p.areaX, p.areaX + p.areaW}) for (double y : {p.areaY, p.areaY + p.areaH}) { double px, py; p.toPaper(x, y, px, py); add(px, py); }
+    CHECK(x0 == Approx(10)); CHECK(y0 == Approx(10));
+    CHECK(c.L.paperW == Approx(x1 + 10));
+    CHECK(c.L.paperH == Approx(y1 + 10 + 16));
+    CHECK(c.L.titleY > y1);
+    // 평면은 단면 둘레 1 m · 1:30 → 6 m = 200 mm 폭: 용지 크기와 무관
+    CHECK(c.planW == Approx(6000.0 / 30));
 }
 
 TEST_CASE("한 장 조판: 첫 단면이 북쪽으로 가면 평면을 돌리고 진북은 오른쪽(90°)", "[combo][sheet]") {
