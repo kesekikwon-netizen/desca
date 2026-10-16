@@ -209,6 +209,10 @@ SheetMarks sheetMarks(const SheetLayout &L) {
 // 여섯 레이어로 다시 묶는다(아래 → 위): 0.2(10 cm 해발선 0.2 pt) · 0.5(50 cm 해발선 0.5 pt) · 이미지(평면 · 입면 영상) · 틀(테두리 ·
 // 축척 막대 · 진북 · 평면 단면선 · 눈금) · 0.8(빨간 잘린 선 0.8 pt) · 글자(7 pt). 요소마다 원래 상위 <g>(변환 · 잘림 · 불투명도)를
 // 그대로 다시 감싸 모양 · 좌표 · 굵기는 바뀌지 않는다. 그리는 순서는 해발선 → 영상 → 빨간 선 그대로
+// SVG 좌표 단위 = 1/288 인치(7 pt = 28 단위). Qt 는 글꼴을 정수 px 크기로 불러 글자 폭을 재므로 96 dpi(7 pt = 9.333 px → 9 px)면
+// 한글 · 영문 조각의 시작 x 가 3–4 % 당겨져 일러스트레이터에서 「수평EPSG」처럼 겹친다(2026-10-16 실측). 288 dpi 는 0.25 pt 마다 정수 px.
+// 종이 크기(mm) · 선 굵기(pt)는 width · height(mm)와 viewBox 로 정해져 단위와 무관하다. 그리는 함수는 PDF(300 dpi)처럼 k 만 받는다
+constexpr double kSvgDpi = 288.0;
 const char *const kSvgLayerNames[6] = {"0.2", "0.5", "이미지", "틀", "0.8", "글자"};
 enum SvgLayer { SvgL02 = 0, SvgL05, SvgLImage, SvgLFrame, SvgL08, SvgLText, SvgLDrop };
 
@@ -276,7 +280,7 @@ double svgTransformScale(const QString &t) {
 struct SvgItem {
   QString tag, xml, fill, stroke, chainKey;
   QStringList chainOpen; // 원래 상위 <g> 들(바깥 → 안)
-  double fillOpacity = 1, strokeW = 1; // 굵기는 변환 배율을 곱한 종이 단위(96 dpi px = 0.75 pt)
+  double fillOpacity = 1, strokeW = 1; // 굵기는 변환 배율을 곱한 종이 단위(viewBox 단위)
   int layer = SvgLFrame;
 };
 
@@ -286,6 +290,7 @@ QString layerSvgText(const QString &in, const QString &desc) {
   QString svgOpen, title;
   QStringList defs;
   std::vector<SvgItem> items;
+  double ptPerUnit = 0; // 종이 위 pt / viewBox 단위 = width(mm) / viewBox 너비 × 72 / 25.4
   struct Anc {
     QString open;
     int id;
@@ -305,6 +310,11 @@ QString layerSvgText(const QString &in, const QString &desc) {
     if (r.isStartElement()) {
       const QString n = r.name().toString();
       if (n == QLatin1String("svg")) {
+        const QXmlStreamAttributes at = r.attributes();
+        const QStringList vb = at.value(QLatin1String("viewBox")).toString().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        const double wMm = at.value(QLatin1String("width")).toString().remove(QStringLiteral("mm")).toDouble();
+        if (vb.size() == 4 && vb[2].toDouble() > 0)
+          ptPerUnit = wMm / vb[2].toDouble() * 72.0 / 25.4;
         svgOpen = svgOpenTag(r);
         continue;
       }
@@ -364,11 +374,11 @@ QString layerSvgText(const QString &in, const QString &desc) {
       chain.pop_back();
     }
   }
-  if (r.hasError() || svgOpen.isEmpty())
+  if (r.hasError() || svgOpen.isEmpty() || !(ptPerUnit > 0))
     return {};
 
-  // 나누기: 굵기는 종이 위 pt(96 dpi 단위 = 0.75 pt) — 0.8 pt = 1.0667, 0.5 pt = 0.6667, 0.2 pt = 0.2667
-  const double u08 = asec::kCutLinePt / 0.75, u05 = 0.5 / 0.75, u02 = 0.2 / 0.75;
+  // 나누기: 굵기를 종이 위 pt 로 바꿔 0.8 · 0.5 · 0.2 와 맞춘다(288 dpi 단위면 0.8 pt = 3.2)
+  const double u08 = asec::kCutLinePt / ptPerUnit, u05 = 0.5 / ptPerUnit, u02 = 0.2 / ptPerUnit;
   auto near = [](double a, double b) { return std::abs(a - b) <= 0.02 * std::max(1.0, b); };
   const QString red = theme::ProfileRed.name(), lvMajor = theme::LevelMajor.name(),
                 lvMinor = theme::LevelMinor.name();
@@ -1314,7 +1324,7 @@ bool MainWindow::exportPlanSheet(MeshSource &src, const PlanSheetParams &p,
     return writePlanSheetDxf(sp, img, x0, y1, res, src.srs.origin, path, msg);
   if (sp.format == 4) {
     const PlanWindow Wsvg = planWindow(sp, 0);
-    const double dpi = 96.0, k = dpi / 25.4;
+    const double dpi = kSvgDpi, k = dpi / 25.4;
     QSvgGenerator gen(QSvgGenerator::SvgVersion::Svg11);
     gen.setFileName(path);
     gen.setResolution(int(dpi));
@@ -1459,7 +1469,7 @@ bool MainWindow::exportSectionSvg(const SectionDoc &doc0, MeshSource &src,
                                  groundResolution(sp.spec.denom, 300), 30e6,
                                  strip, nullptr))
     stripPtr = &strip;
-  const double dpi = 96.0;
+  const double dpi = kSvgDpi;
   const double k = dpi / 25.4;
   QSvgGenerator gen(QSvgGenerator::SvgVersion::Svg11);
   gen.setFileName(path);
@@ -5757,10 +5767,10 @@ bool MainWindow::exportComboSheet(MeshSource &src,
     if (!writeComboDxf(c, a, sp, path, msg, &files))
       return false;
   } else if (sp.format == 4) {
-    const double k = 96.0 / 25.4;
+    const double k = kSvgDpi / 25.4;
     QSvgGenerator gen(QSvgGenerator::SvgVersion::Svg11);
     gen.setFileName(path);
-    gen.setResolution(96);
+    gen.setResolution(int(kSvgDpi));
     gen.setTitle(sp.title);
     gen.setDescription(
         QStringLiteral("Trench"));

@@ -177,13 +177,15 @@ int Ribbon::chooseLook(const QList<int>& widths, int available) {
 RibbonLook Ribbon::look() const { return looks().at(lookIndex_); }
 
 // 칩 폭은 모든 칩이 같다(사용자 2026-10-16 「전체 ui 크기와 배치 고르게」): 글자 보이는 크기는 가장 넓은 글자 + 8
-// (타일 + 6 보다 작지 않게, 글자 64 px 까지), 글자 숨김 크기는 표의 칩 폭. 칩마다 달랐을 때는 「열기」와 「프로젝트」의 폭이 달랐다
+// (타일 + 6 보다 작지 않게), 글자 숨김 크기는 표의 칩 폭. 칩마다 달랐을 때는 「열기」와 「프로젝트」의 폭이 달랐다.
+// 넓은 글자는 칩을 만들 때 12 px 까지 줄이고, 그래도 넓으면 칩이 넓어진다(글자를 자르지 않음 — 64 px 에서 자르면
+// 글꼴이 넓은 PC 에서 「GeoTIFF」가 칩 밖으로 나갔다, CI Windows 2026-10-16)
 int Ribbon::chipWidth(const RibbonLook& L, const QToolButton* b) const {
     if (!L.labels) return L.chipWidth;
     (void)b;
     int w = L.tile + 6;   // 바닥은 타일 + 6(Strata 는 + 8 — 입면 위젯까지 1920 에 들어가게 2 px 좁힘)
     for (const Chip& c : chips_)
-        if (!c.button->property("narrowOnly").toBool()) w = std::max(w, std::min(labelWidth(c.button), kMaxLabelWidth) + kLabelPad);
+        if (!c.button->property("narrowOnly").toBool()) w = std::max(w, labelWidth(c.button) + kLabelPad);
     return w;
 }
 

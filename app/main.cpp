@@ -394,9 +394,10 @@ int main(int argc, char** argv) {
         if (logOk) { logF.write(b); logF.flush(); }
         fputs(b.constData(), stdout); fflush(stdout);
     };
-    for (const QString& f : svgLayerChecks) {   // 해발선이 있는 그림(이름에 plan 이 없는 것)은 0.8 · 0.5 · 0.2 가 다 있어야
+    for (const QString& f : svgLayerChecks) {   // 해발선이 있는 그림(이름에 plan · 평면도 가 없는 것)은 0.8 · 0.5 · 0.2 가 다 있어야
         QString rep;
-        const bool ok = MainWindow::checkSvgLayers(f, &rep, !QFileInfo(f).fileName().contains(QLatin1String("plan")));
+        const QString fn = QFileInfo(f).fileName();
+        const bool ok = MainWindow::checkSvgLayers(f, &rep, !fn.contains(QLatin1String("plan")) && !fn.contains(QStringLiteral("평면도")));
         log(QStringLiteral("svg-layers %1 %2 %3").arg(QFileInfo(f).fileName(), rep, ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
         if (!ok) rc = 17;
     }

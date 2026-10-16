@@ -41,8 +41,9 @@ inline QString fontFamily() {
 // ---- 도면 글자(사용자 2026-10-16 「글자크기는 7pt 고정」): 도면 · 내보내기(SVG · PDF · PNG · DXF)의 글자는 종이 위 7 pt 하나
 constexpr double kPaperTextPt = 7.0;
 constexpr double ptMm(double pt) { return pt * 25.4 / 72.0; }   // 7 pt = 2.469 mm(글자 em)
-/// 종이 위 pt 그대로의 글꼴: pxPerMm = 장치 px / 종이 mm. 장치의 논리 dpi 로 pt 를 환산하므로(정수 px 반올림 없음)
-/// SVG(96 dpi → font-size 9.333 = 7 pt) · PDF · PNG · 화면 미리보기 어디서나 종이 위 크기가 같다
+/// 종이 위 pt 그대로의 글꼴: pxPerMm = 장치 px / 종이 mm. 장치의 논리 dpi 로 pt 를 환산하므로
+/// SVG(288 dpi → font-size 28 = 7 pt) · PDF · PNG · 화면 미리보기 어디서나 종이 위 크기가 같다.
+/// Qt 는 글자 폭을 정수 px 크기의 글꼴로 재므로 작은 px(96 dpi 의 9.333)에서는 폭이 몇 % 틀린다 — SVG 를 288 dpi 로 쓰는 까닭
 inline QFont paperFont(QFont f, double pt, double pxPerMm, const QPaintDevice* dev) {
     const double dpi = dev && dev->logicalDpiY() > 0 ? dev->logicalDpiY() : 96.0;
     f.setPointSizeF(std::max(0.25, pt * pxPerMm * 25.4 / dpi));

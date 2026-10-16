@@ -4433,7 +4433,9 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
   { // 2b′) 칩 고르게(사용자 2026-10-16 「전체 ui 크기와 배치 고르게」): 보이는 칩은
     // 모두 같은 폭 · 같은 높이, 글자가 칩 안에 다 들어감(잘림 없음), 칩끼리 겹침 없음
     int wMin = 1 << 20, wMax = 0, hMin = 1 << 20, hMax = 0, clipped = 0,
-        overlap = 0;
+        overlap = 0, widestPx = 0;
+    QString widest;
+    QStringList clippedNames;
     QList<QRect> rs;
     for (auto *b : ribbon_->chips()) {
       if (!b->isVisibleTo(ribbon_))
@@ -4442,9 +4444,15 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
       wMax = std::max(wMax, b->width());
       hMin = std::min(hMin, b->height());
       hMax = std::max(hMax, b->height());
-      if (lk.labels &&
-          QFontMetrics(b->font()).horizontalAdvance(b->text()) > b->width())
+      const int tw = QFontMetrics(b->font()).horizontalAdvance(b->text());
+      if (tw > widestPx) {
+        widestPx = tw;
+        widest = b->text();
+      }
+      if (lk.labels && tw > b->width()) {
         ++clipped;
+        clippedNames << b->text();
+      }
       const QRect r(b->mapTo(ribbon_, QPoint(0, 0)), b->size());
       for (const QRect &o : rs)
         if (o.intersects(r))
@@ -4454,7 +4462,7 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
     const bool evenOk =
         wMin == wMax && hMin == hMax && clipped == 0 && overlap == 0;
     L << QStringLiteral("ui-audit ribbon-even chips=%1 w=%2..%3 h=%4..%5 "
-                        "clipped=%6 overlap=%7%8")
+                        "clipped=%6 overlap=%7 widest=%9:%10 clipped-names=[%11]%8")
              .arg(rs.size())
              .arg(wMin)
              .arg(wMax)
@@ -4462,7 +4470,10 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
              .arg(hMax)
              .arg(clipped)
              .arg(overlap)
-             .arg(evenOk ? QString() : QStringLiteral("  FAIL"));
+             .arg(evenOk ? QString() : QStringLiteral("  FAIL"))
+             .arg(widest)
+             .arg(widestPx)
+             .arg(clippedNames.join(QLatin1Char(',')));
     ok &= evenOk;
   }
   { // 2c) 단면 문맥: 묶음 이름 흐림 0 · 입면 칸(칩 아닌 위젯)은 타일 세로
