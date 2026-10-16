@@ -274,6 +274,11 @@ void readVertical(const WktNode& v, const WktNode& wrapper, SrsDesc& d) {
         for (auto* ex : dat->children("EXTENSION")) if (ieq(ex->str(0), "PROJ4_GRIDS")) d.geoidModel = ex->str(1);
     if (d.geoidModel.empty())
         if (const WktNode* pf = findDeep(wrapper, "PARAMETERFILE")) d.geoidModel = pf->str(1);
+    // WKT1 VERT_DATUM 의 둘째 인자 2002 = 타원체(OGC 01-009 datum type). Bentley GCS: VERT_CS["Ellipsoid Height",VERT_DATUM["Ellipsoid",2002]]
+    if (dat && !d.verticalEpsg && (std::lround(dat->num(1, 0)) == 2002 || ieq(dat->str(0), "Ellipsoid"))) {
+        d.vertKind = VertKind::Ellipsoidal;
+        d.verticalName = "ellipsoidal height";
+    }
 }
 
 void readTm(const WktNode& n, SrsDesc& d) {
@@ -287,9 +292,10 @@ void readTm(const WktNode& n, SrsDesc& d) {
     for (auto* p : holder->children("PARAMETER")) {
         std::string k = norm(p->str(0));
         double v = p->num(1);
-        if (k == "latitudeofnaturalorigin" || k == "latitudeoforigin") { d.tmLat0 = v; got[0] = true; }
+        // Bentley GCS(3SM 의 SMMasterHeader.GCS 등) 는 "Origin Latitude", "Scale Reduction" 이라는 이름을 쓴다
+        if (k == "latitudeofnaturalorigin" || k == "latitudeoforigin" || k == "originlatitude") { d.tmLat0 = v; got[0] = true; }
         else if (k == "longitudeofnaturalorigin" || k == "centralmeridian") { d.tmLon0 = v; got[1] = true; }
-        else if (k == "scalefactoratnaturalorigin" || k == "scalefactor") { d.tmK0 = v; got[2] = true; }
+        else if (k == "scalefactoratnaturalorigin" || k == "scalefactor" || k == "scalereduction") { d.tmK0 = v; got[2] = true; }
         else if (k == "falseeasting") { d.tmFE = v; got[3] = true; }
         else if (k == "falsenorthing") { d.tmFN = v; got[4] = true; }
     }
@@ -348,6 +354,14 @@ void readHorizontal(const WktNode& n, SrsDesc& d) {
         if (const WktNode* rem2 = n.child("REMARK")) if (lower(rem2->str(0)).find("promoted to 3d") != std::string::npos) d.promotedTo3D = true;
         if (!e) if (auto* h = findHorizByName(d.horizontalName)) { d.horizontalEpsg = h->epsg; d.horizontalHow = "이름"; e = h->epsg; }
         if (!e && d.hasTm) for (auto& h : kHoriz) if (tmMatches(d, h)) { d.horizontalEpsg = h.epsg; d.horizontalHow = "매개변수"; e = h.epsg; break; }
+        // 이름으로 찾았는데 매개변수가 그 번호와 다르고 다른 내장 항목과 정확히 맞으면 매개변수가 우선(이름은 권위가 없음).
+        // 예: Bentley "Korea 2000 / East Belt" 인데 가산 북 600000 → 5183 이 아니라 5187
+        if (e && d.hasTm && d.horizontalHow == "이름")
+            if (auto* h0 = findHoriz(e); h0 && !tmMatches(d, *h0))
+                for (auto& h : kHoriz) if (tmMatches(d, h)) {
+                    d.warnings.push_back("WKT 이름은 EPSG:" + std::to_string(e) + " 이지만 투영 매개변수는 EPSG:" + std::to_string(h.epsg) + " 과 같아 매개변수를 따릅니다.");
+                    d.horizontalEpsg = h.epsg; d.horizontalHow = "매개변수"; e = h.epsg; break;
+                }
         if (e && d.hasTm) {
             if (auto* h = findHoriz(e)) if (!tmMatches(d, *h))
                 d.warnings.push_back("WKT 의 투영 매개변수가 EPSG:" + std::to_string(e) + " 내장 값과 다릅니다(원점·가산값 확인 필요).");
