@@ -535,6 +535,8 @@ private:
   void showWorkTab();
   void saveEmbeddedSheet();
   QWidget *startPage_ = nullptr;
+  int startPageBuilds_ = 0; // rebuildStartPage 횟수(감사: 늦게 온 결과가 홈을
+                            // 다시 그렸는지)
   QWidget *workArea_ = nullptr;
   class GuideBand *guide_ = nullptr;       // 평면 위 떠 있는 안내(그리는 동안)
   class FloatButtons *undoBtns_ = nullptr; // 안내 오른쪽 되돌리기 · 다시

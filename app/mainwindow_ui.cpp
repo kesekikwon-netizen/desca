@@ -2825,6 +2825,7 @@ void MainWindow::clearLayout(QLayout *lay) {
 void MainWindow::rebuildStartPage() {
   if (!startPage_)
     return;
+  ++startPageBuilds_;
   auto *lay = static_cast<QVBoxLayout *>(startPage_->layout());
   clearLayout(lay);
   lay->setContentsMargins(48, 24, 48, 0);
@@ -5913,16 +5914,28 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
   int homeClipped = 0, homeTip = 0, homeMinW = -1, homeStale = -1,
       homeCells = 0, homeModeBad = 0;
   QStringList homeNames, homeAt, homeModes;
+  // 홈을 띄운 뒤 잠잠해질 때까지: 앞 단계가 요청한 단면 최종 결과가 늦게 오면
+  // updateHeader → refreshSteps 가 홈을 다시 그리고, 새 위젯은 다음 이벤트에야
+  // 보인다(그 사이에 재면 이어서 작업 칸이 「none」 — CI 4K ×2 에서 가끔). 한
+  // 번의 pump 동안 다시 그리기가 없을 때까지 기다린다(많아야 20번)
+  auto settleHome = [&] {
+    for (int i = 0; i < 20; ++i) {
+      const int b0 = startPageBuilds_;
+      pump(250);
+      if (startPageBuilds_ == b0)
+        break;
+    }
+  };
   auto measureHome = [&](const QString &st, bool stale) {
     if (!startPage_)
       return;
     showStart(true);
-    pump(250);
+    settleHome();
     if (stale) { // AC14: 홈을 두 번 그린 뒤(모델이 열린 채 showStart(true) 두
                  // 번) startPage_ 의 직접 자식 중 어느 레이아웃도 관리하지 않는
                  // 보이는 위젯 = 0 — deleteLater 대기분은 먼저 비운다
       showStart(true);
-      pump(250);
+      settleHome();
       QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
       std::function<bool(QLayout *, QWidget *)> managed =
           [&managed](QLayout *l, QWidget *w) -> bool {
