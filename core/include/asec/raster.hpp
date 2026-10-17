@@ -2,6 +2,7 @@
 // 같은 (s, z) 좌표계를 쓰므로 단면선·레벨선과 정확히 겹친다.
 #pragma once
 #include <atomic>
+#include <functional>
 #include "asec/section.hpp"
 
 namespace asec {
@@ -36,6 +37,12 @@ bool renderPlan(const std::vector<MeshPtr>& meshes, double x0, double y1, double
 /// u = (ux, uy) 단위 벡터, n = (nx, ny) 그에 수직인 단위 벡터(보통 왼쪽 법선)
 bool renderPlanFrame(const std::vector<MeshPtr>& meshes, double ax, double ay, double ux, double uy, double nx, double ny, double s0, double t1,
                      double res, int W, int H, RgbaImage& out, const std::atomic<bool>* cancel = nullptr);
+/// renderPlanFrame 을 위에서부터 stripRows 행씩 가로 띠로 나눠 그림 — 깊이 버퍼가 띠 크기라 큰 평면도
+/// 메모리가 덜 든다(평·단면도 저장, 2026-10-17). 띠마다 sink(띠 첫 행, 띠 영상)를 부르고, sink 가
+/// false 를 돌려주면 멈춘다. 픽셀은 한 번에 그린 것과 같다
+bool renderPlanFrameStrips(const std::vector<MeshPtr>& meshes, double ax, double ay, double ux, double uy, double nx, double ny,
+                           double s0, double t1, double res, int W, int H, int stripRows,
+                           const std::function<bool(int, const RgbaImage&)>& sink, const std::atomic<bool>* cancel = nullptr);
 
 /// 높이 격자(로컬 XY, 균일 간격 노드). z[j*nx+i] = (x0+i*step, y0+j*step) 높이(m).
 struct HeightGrid {

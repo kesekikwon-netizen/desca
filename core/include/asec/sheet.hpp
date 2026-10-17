@@ -288,6 +288,12 @@ double fitComboDenomOnPaper(const SheetSpec &spec,
                             const ComboLayout *keepFrame = nullptr);
 /// 평면 영상을 만들 로컬 XY 외접 상자(돌린 평면 칸 네 모서리)
 PlanStripArea comboPlanArea(const ComboLayout &c);
+/// 평·단면도 저장 평면 영상의 픽셀 상한(종이 PNG · TIFF 상한과 같음)
+constexpr double kComboPlanMaxPixels = 400e6;
+/// 평·단면도 평면 영상 해상도(m/px): 요청 res 그대로, 평면 칸 wM × hM(m)이 maxPixels 를 넘을 때만 넘지 않게
+/// 거칠게. 돌리면 평면 칸이 커져도 개별 도면(600 dpi) 해상도를 지킨다(사용자 2026-10-17 「회전을 하면 평면과
+/// 단면의 화질이 낮아진다」 — 옛 상한 80 MP 에 걸려 1:20 · 12 m 단면을 45° 돌리면 23.6 → 17.1 px/mm)
+double comboPlanRes(double res, double wM, double hM, double maxPixels = kComboPlanMaxPixels);
 /// 평·단면도 진북 원 반지름(mm, 사용자 2026-10-16 「나침반도 좀더 크게」 → 1.5 배) · 원 가장자리 → 「N」 글자 가운데(mm)
 constexpr double kComboNorthRMm = 5.25;
 constexpr double kComboNorthLabelMm = 2.2;

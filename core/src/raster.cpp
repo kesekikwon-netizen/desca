@@ -278,6 +278,20 @@ bool renderPlanFrame(const std::vector<MeshPtr>& meshes, double ax, double ay, d
     return true;
 }
 
+bool renderPlanFrameStrips(const std::vector<MeshPtr>& meshes, double ax, double ay, double ux, double uy, double nx, double ny,
+                           double s0, double t1, double res, int W, int H, int stripRows,
+                           const std::function<bool(int, const RgbaImage&)>& sink, const std::atomic<bool>* cancel) {
+    if (W <= 0 || H <= 0 || res <= 0 || !sink) return false;
+    stripRows = std::max(1, stripRows);
+    for (int y0 = 0; y0 < H; y0 += stripRows) {
+        RgbaImage strip;   // 띠 위 모서리 t = t1 − y0·res: 띠의 j 행 = 전체의 y0 + j 행
+        if (!renderPlanFrame(meshes, ax, ay, ux, uy, nx, ny, s0, t1 - y0 * res, res, W, std::min(stripRows, H - y0), strip, cancel))
+            return false;
+        if (!sink(y0, strip)) return false;
+    }
+    return true;
+}
+
 bool bandZRange(const std::vector<MeshPtr>& meshes, const SectionFrame& f, double dNear, double dFar, double sMin, double sMax, double& zmin, double& zmax) {
     zmin = 1e300; zmax = -1e300;
     for (auto& mp : meshes) {

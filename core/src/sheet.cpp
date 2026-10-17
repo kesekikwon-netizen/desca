@@ -567,6 +567,14 @@ PlanStripArea comboPlanArea(const ComboLayout& c) {
     return a;
 }
 
+double comboPlanRes(double res, double wM, double hM, double maxPixels) {
+    res = std::max(1e-4, res);
+    if (!(wM > 0) || !(hM > 0)) return res;
+    const double pix = wM / res * (hM / res);
+    if (maxPixels > 0 && pix > maxPixels) res *= std::sqrt(pix / maxPixels);
+    return res;
+}
+
 std::string formatAzimuth(double az) {
     az = std::fmod(az, 360.0); if (az < 0) az += 360.0;
     char b[48];
