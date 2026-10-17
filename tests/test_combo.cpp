@@ -442,6 +442,66 @@ TEST_CASE("돌린 평면을 바로 그림: A→A′ 가 북쪽이면 판이 종�
     CHECK_FALSE(at(1.0, -4.5));   // t < −4 밖
 }
 
+TEST_CASE("돌린 평면을 띠로 나눠 그림(사용자 2026-10-17 「회전을 하면 평면과 단면의 화질이 낮아진다」): 한 번에 그린 것과 같은 픽셀", "[combo][plan]") {
+    const std::vector<MeshPtr> ms = {floorSlab()};
+    // 30° 돌린 틀: 판 모서리가 픽셀 경계와 어긋나게. 판은 s 0–4.46, t −2–1.73
+    const double r = 30.0 * 3.14159265358979323846 / 180.0;
+    const double ux = std::cos(r), uy = std::sin(r), nx = -uy, ny = ux;
+    const double res = 0.05, s0 = -0.5, t1 = 2.5;
+    const int W = 110, H = 97;
+    RgbaImage whole;
+    REQUIRE(renderPlanFrame(ms, 0, 0, ux, uy, nx, ny, s0, t1, res, W, H, whole));
+    int cover = 0;
+    for (int j = 0; j < H; ++j)
+        for (int i = 0; i < W; ++i) cover += covered(whole, i, j);
+    REQUIRE(cover > 1000);
+    RgbaImage joined;
+    joined.w = W; joined.h = H; joined.px.assign(size_t(W) * H * 4, 7);
+    int strips = 0, next = 0;
+    REQUIRE(renderPlanFrameStrips(ms, 0, 0, ux, uy, nx, ny, s0, t1, res, W, H, 10, [&](int y0, const RgbaImage& im) {
+        ++strips;
+        CHECK(y0 == next);
+        CHECK(im.w == W);
+        CHECK(im.h == std::min(10, H - y0));
+        next = y0 + im.h;
+        std::copy(im.px.begin(), im.px.end(), joined.px.begin() + std::ptrdiff_t(y0) * W * 4);
+        return true;
+    }));
+    CHECK(strips == 10);
+    CHECK(next == H);
+    CHECK(joined.px == whole.px);
+    // sink 가 false 면 멈추고 실패
+    int calls = 0;
+    CHECK_FALSE(renderPlanFrameStrips(ms, 0, 0, ux, uy, nx, ny, s0, t1, res, W, H, 10, [&](int, const RgbaImage&) { return ++calls < 2; }));
+    CHECK(calls == 2);
+}
+
+TEST_CASE("평·단면도 평면 해상도(사용자 2026-10-17 「회전을 하면 평면과 단면의 화질이 낮아진다」): 돌려 평면 칸이 커져도 개별 도면 600 dpi, 아주 크면 상한 안", "[combo][sheet][plan]") {
+    SheetSpec sp; sp.denom = 20;
+    const double want = groundResolution(20, 600);       // 개별 도면 저장 해상도
+    const double need = 1.0 / (want * 1000.0 / 20);      // 23.6 px/mm
+    // 합성 모델 표준선과 같은 12 m 동서 단면, 평면 여유 1 m. 돌리면 평면 칸이 커진다(45° 에서 10.5 m 정사각)
+    const std::vector<ComboSection> secs = {{2, 6, 14, 6, 1.5}};
+    for (double deg : {0.0, 30.0, 45.0, 60.0, 90.0}) {
+        const ComboLayout fr = comboFrameForRotation(deg, 2, 6);
+        const ComboLayout c = layoutCombo(sp, secs, 1.0, 6.0, 3.0, &fr);
+        const double res = comboPlanRes(want, c.sMax - c.sMin, c.tMax - c.tMin);
+        INFO("회전 " << deg << "° 평면 칸 " << (c.sMax - c.sMin) << " × " << (c.tMax - c.tMin) << " m");
+        CHECK(res == Approx(want));
+        CHECK(1.0 / (res * 1000.0 / sp.denom) >= need * (1 - 1e-9));
+    }
+    // 아주 큰 평면(100 m 정사각, 1:20 이면 139 억 px)은 상한까지만 거칠게
+    const double big = comboPlanRes(want, 100, 100);
+    CHECK(big > want);
+    CHECK((100 / big) * (100 / big) <= kComboPlanMaxPixels * (1 + 1e-9));
+    CHECK((100 / big) * (100 / big) >= kComboPlanMaxPixels * 0.999);
+    // 상한을 따로 주면 그 상한(화면 미리보기)
+    const double prev = comboPlanRes(want, 100, 100, 80e6);
+    CHECK((100 / prev) * (100 / prev) == Approx(80e6));
+    // 빈 칸은 요청 그대로
+    CHECK(comboPlanRes(want, 0, 5) == Approx(want));
+}
+
 TEST_CASE("표고 글자 50 cm 마다(사용자 2026-10-16 「해발선이 50cm마다 표시」): 땅속 구간이 있는 선만, A 끝에 닿으면 왼쪽 밖", "[combo]") {
     // 둔덕: 지면 0.3 → 둔덕 1.2(s 3–5) → 0.3. 원점 높이 20 → 표고 범위 19.7–21.3 의 50 cm 선 = 20.0 · 20.5 · 21.0
     std::vector<Polyline> pr = {{{0, 0.3}, {2, 0.3}, {3, 1.2}, {5, 1.2}, {6, 0.3}, {8, 0.3}}};

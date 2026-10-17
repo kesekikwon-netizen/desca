@@ -5929,12 +5929,11 @@ bool MainWindow::renderComboPlan(MeshSource &src, const ComboSheetParams &sp,
     return false;
   }
   const PlanStripArea pa = comboPlanArea(c);
-  res = std::max(1e-4, res);
   // 돌린 평면을 바로 그린다(다 그린 정사영상을 다시 돌려 표본화하면 흐려짐 —
-  // 사용자 2026-10-16 「평면이 화질저하」). 픽셀 수 상한은 단면 영상과 같은 80 MP
-  const double pix = (c.sMax - c.sMin) / res * ((c.tMax - c.tMin) / res);
-  if (pix > 80e6)
-    res *= std::sqrt(pix / 80e6);
+  // 사용자 2026-10-16 「평면이 화질저하」). 돌리면 평면 칸이 커지므로 상한은 종이와
+  // 같은 400 MP — 요청 해상도를 지킨다(사용자 2026-10-17 「회전을 하면 평면과
+  // 단면의 화질이 낮아진다」, 옛 80 MP 상한은 45° 에서 23.6 → 17.1 px/mm)
+  res = comboPlanRes(res, c.sMax - c.sMin, c.tMax - c.tMin);
   Box3 box;
   box.mn = Vec3(std::max(pa.x0, src.bounds.mn.x),
                 std::max(pa.y0, src.bounds.mn.y), src.bounds.mn.z);
@@ -5951,20 +5950,25 @@ bool MainWindow::renderComboPlan(MeshSource &src, const ComboSheetParams &sp,
   const int W = std::max(1, int(std::ceil((c.sMax - c.sMin) / res)));
   const int H = std::max(1, int(std::ceil((c.tMax - c.tMin) / res)));
   QImage rot(W, H, QImage::Format_RGB32);
-  {
-    RgbaImage img;
-    if (!renderPlanFrame(meshes, c.ax, c.ay, c.ux, c.uy, c.nx, c.ny, c.sMin,
-                         c.tMax, res, W, H, img, cancel)) {
-      if (msg)
-        *msg = QStringLiteral("평면 영상 생성 실패(취소 또는 메모리)");
-      return false;
-    }
-    for (int y = 0; y < H; ++y) { // 빈 곳(메시 없음)은 흰 종이
-      QRgb *o = reinterpret_cast<QRgb *>(rot.scanLine(y));
-      const uint8_t *q = &img.px[size_t(y) * W * 4];
-      for (int x = 0; x < W; ++x, q += 4)
-        o[x] = q[3] ? qRgb(q[0], q[1], q[2]) : qRgb(255, 255, 255);
-    }
+  // 가로 띠(약 16 MP)씩 그려 옮긴다 — 깊이 버퍼 · RGBA 사본이 띠 크기라 큰 평면도
+  // 메모리가 영상 한 장 + 띠 하나
+  if (rot.isNull() ||
+      !renderPlanFrameStrips(
+          meshes, c.ax, c.ay, c.ux, c.uy, c.nx, c.ny, c.sMin, c.tMax, res, W, H,
+          std::max(1, int(16e6 / W)),
+          [&](int y0, const RgbaImage &img) {
+            for (int y = 0; y < img.h; ++y) { // 빈 곳(메시 없음)은 흰 종이
+              QRgb *o = reinterpret_cast<QRgb *>(rot.scanLine(y0 + y));
+              const uint8_t *q = &img.px[size_t(y) * W * 4];
+              for (int x = 0; x < W; ++x, q += 4)
+                o[x] = q[3] ? qRgb(q[0], q[1], q[2]) : qRgb(255, 255, 255);
+            }
+            return true;
+          },
+          cancel)) {
+    if (msg)
+      *msg = QStringLiteral("평면 영상 생성 실패(취소 또는 메모리)");
+    return false;
   }
   out.plan = rot;
   out.planS0 = c.sMin;
@@ -6047,8 +6051,10 @@ double MainWindow::comboPreviewPlanRes(const ComboAssets &a,
                                        const ComboSheetParams &sp) {
   const ComboLayout c = comboLayoutFor(a, sp);
   const double ext = std::max(c.sMax - c.sMin, c.tMax - c.tMin);
-  // 개별 단면도 미리보기의 위치도보다 거칠지 않게
-  return std::min(std::max(0.002, ext / 2400.0), sheetPreviewPlanRes(sp.denom));
+  // 개별 단면도 미리보기의 위치도보다 거칠지 않게. 화면용이라 픽셀 수는 옛 상한 80 MP 까지만
+  return comboPlanRes(
+      std::min(std::max(0.002, ext / 2400.0), sheetPreviewPlanRes(sp.denom)),
+      c.sMax - c.sMin, c.tMax - c.tMin, 80e6);
 }
 
 bool MainWindow::exportComboSheet(MeshSource &src,
@@ -7708,6 +7714,35 @@ bool MainWindow::runComboCheck(const QString &outDir, QString *log) {
           .arg(parts.join(QLatin1Char(' ')))
           .arg(resOk ? QStringLiteral("ok") : QStringLiteral("FAIL")));
   ok = ok && resOk;
+  // ②′ 돌려도(사용자 2026-10-17 「회전을 하면 평면과 단면의 화질이 낮아진다」): 1:20 에서 평면을 첫 단면
+  // 방향에서 45° 돌린 저장 영상이 개별 도면(600 dpi)만큼. 돌리면 평면 칸이 커져 옛 80 MP 상한에 걸렸다
+  {
+    ComboSheetParams rp = sp;
+    rp.denom = 20;
+    rp.useRotation = true;
+    const SectionLine &l0 = cur.front().line;
+    rp.rotationDeg = normDeg180(
+        std::atan2(l0.b.y - l0.a.y, l0.b.x - l0.a.x) * 180.0 / 3.14159265358979323846 + 45.0);
+    ComboAssets ra;
+    QString rm;
+    const bool made = prepareComboAssets(*src_, cur, rp, ra, &rm) && !ra.secs.empty();
+    const double need = 1.0 / (groundResolution(20, 600) * 1000.0 / 20);
+    auto rpx = [](double res) { return res > 0 ? 1.0 / (res * 1000.0 / 20) : 0.0; };
+    const double planPx = made ? rpx(ra.planRes) : 0, secPx = made ? rpx(ra.secs[0].imgRes) : 0;
+    const ComboLayout rc = made ? comboLayoutFor(ra, rp) : ComboLayout();
+    const bool rotOk = made && planPx >= need * (1 - 1e-6) && secPx >= need * (1 - 1e-6) &&
+                       ra.plan.width() == int(std::ceil((rc.sMax - rc.sMin) / ra.planRes));
+    say(QStringLiteral("combo-check rot 1:20 %1° px/mm plan=%2 section=%3 need=%4 plan-image=%5x%6 %7%8")
+            .arg(rp.rotationDeg, 0, 'f', 1)
+            .arg(planPx, 0, 'f', 2)
+            .arg(secPx, 0, 'f', 2)
+            .arg(need, 0, 'f', 2)
+            .arg(ra.plan.width())
+            .arg(ra.plan.height())
+            .arg(rotOk ? QStringLiteral("ok") : QStringLiteral("FAIL"))
+            .arg(made ? QString() : QStringLiteral(" ") + rm));
+    ok = ok && rotOk;
+  }
   // ③ 용지(사용자 2026-10-16 「용지방향이안돼」 → 카드 답 「둘 다」): 기본 내용 크기, 단추를 누를 때마다
   // A4 가로 → A4 세로 → A3 가로 → A3 세로 → 내용 크기. 정한 용지면 종이가 그 크기, 안 들어가면 들어가는 축척을 알린다.
   // 저장한 SVG 도 그 용지 크기
