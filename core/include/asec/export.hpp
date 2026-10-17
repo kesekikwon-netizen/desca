@@ -12,6 +12,7 @@ struct SectionResult {
     SrsInfo srs;
     std::vector<Polyline> profile;  // (s, z로컬) 정리된 단면선
     double zMin = 0, zMax = 0;      // 로컬 z 표시 범위
+    double zMinCut = 0, zMaxCut = 0; // 잘린 선만의 로컬 z 범위(여유 없음). zMaxCut < zMinCut 이면 없음(옛 결과 · 손으로 만든 결과)
     size_t rawSegments = 0, triangles = 0, tiles = 0;
 };
 
@@ -21,9 +22,10 @@ struct DxfExportOptions {
     DxfCoordMode mode = DxfCoordMode::Drawing2D;  // 2D: X=A 기준 거리, Y=절대표고 / 3D: 실좌표(EPSG), 단면 수직면
     bool levels = true;
     int levelStepCm = 10;
+    bool levelsBelowGround = false;   // 레벨선을 땅속에만(지면 위 공기에는 없음, levelLineSpans, 2026-10-16). 기본 false = 옛 동작(통째로 한 줄)
     double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기 pt(10 cm · 50 cm = 1 m 포함) — 디자인 v5 결정 L. 레이어 370 값은 dxfLineWeight()
     double scaleDenom = 20;   // 문자 크기 계산용(1/20 → 2 mm 글자 = 0.04 m)
-    double textMm = 2.0;
+    double textMm = 7.0 * 25.4 / 72.0;   // 글자 7 pt(사용자 2026-10-16 「글자크기는 7pt 고정」)
     std::string title = "A-A'";
     // 래스터(선택)
     bool image = false;
@@ -35,6 +37,11 @@ struct DxfExportOptions {
 /// 로컬 (s,z) → 실좌표 XYZ
 Vec3 sectionToWorld(const SectionResult& r, double s, double zLocal);
 bool exportSectionDxf(const SectionResult& r, const DxfExportOptions& o, const fs::path& out, std::string* err, std::string* dxfText = nullptr);
+/// 도면 DXF 레이어 점검(--dxf-layers-check · 시험, 사용자 2026-10-16 「0.2 0.5 0.8로 레이어를 잡아 내보내기」):
+/// 레이어 표에 0.8(선 굵기 = kCutLinePt) · 0.5 · 0.2(각 pt 의 dxfLineWeight)가 있고, 옛 이름(SECTION_PROFILE ·
+/// LEVEL_10CM · LEVEL_50CM · LEVEL_1M)이 없으며, 잘린 선(폴리선)이 0.8 에 있는가. withLevels 면 해발선(LINE)이
+/// 0.5 · 0.2 에 하나 이상씩. 줄 끝 CRLF 도 읽는다. report 에 한 줄 요약
+bool checkDrawingDxfLayers(const std::string& dxfText, bool withLevels, std::string* report);
 
 /// 평면 정사영상 GeoTIFF 기준: 왼쪽 위(로컬 x0, y1) + 해상도 → 실좌표 EPSG
 GeoRef planGeoRef(const SrsInfo& srs, double x0Local, double y1Local, double res);

@@ -89,10 +89,32 @@ public:
     int tickLabelStepM() const;
     /// 감사 · 그리기 공용: 단면선 위 m 숫자 글 사각형(화면 px). 단면선이 없거나 화면 길이 < 80 px 면 빈 목록
     QVector<QRectF> tickLabelRects() const;
-    void topView();
-    void homeView();
-    QPointF compassCenter() const;                  // 나침반 자리(그리기 · 눌림 판정이 같은 값을 쓴다 — 검토 I1)
+    void topView();                                 // 위에서 보기(기울기만 되돌림 — 평면 방향은 그대로)
+    void homeView();                                // 위에서 보기 + 맞춤(평면 방향은 그대로)
+    QPointF compassCenter() const;                  // 나침반(= 방향 다이얼) 자리(그리기 · 눌림 판정이 같은 값을 쓴다 — 검토 I1)
     bool compassHit(const QPointF& p) const;
+
+    // ---- 평면 방향(사용자 2026-10-16 「다이얼을 돌리면 평면도가 돌아가게」 · 「사용자가 평면을 어떻게 놓을지」)
+    // 방향 각 = 화면에서 진북이 위에서 시계 방향으로 돈 각(−180, 180]. 표시 회전일 뿐 좌표 · Z · 단면 계산은 그대로.
+    // 오른쪽 아래 진북 표시가 다이얼: 둘레를 잡고 끌면 몇 도 단위 없이 그만큼 돌고, 두 번 누르면 북쪽 위(0°). 화면 겹침 표시라 내보내기에는 없다
+    double rotationDeg() const;
+    void setRotationDeg(double deg);                // 알림 없음(되돌리기 · 프로젝트 · 각도 칸에서 부른다)
+    std::function<void(double deg, bool final)> onRotate;   // 사용자가 돌림: final=false 끄는 중, true 놓음 · 두 번 누름 · 두 점 맞춤
+    /// 두 점 맞춤: 다음 두 번 찍은 선을 화면 가로(첫 점 → 둘째 점이 오른쪽)로 돌린다. 방금 맞춘 그대로 다시 부르면 가로 ↔ 세로
+    void startAlignTwoPoints();
+    void cancelAlign();
+    bool aligning() const { return alignStage_ >= 0; }
+    static double dialRadius() { return 28.5; }   // 1.5 배(사용자 2026-10-16 「나침반도 좀더 크게」)
+    /// 다이얼 한 칸(사용자 2026-10-16 「방향키로도 0.1도씩」): 다이얼 위 휠 · ←/→ = 0.1°, Shift = 1°(dir +1 = 시계).
+    /// 끄는 중과 같이 바로 돌고(onRotate final=false), 연달아 누르는 동안은 기다렸다가 멈춘 뒤 한 번 확정(되돌리기 한 칸)
+    void stepRotation(int dir, bool coarse);
+    static constexpr int kRotStepCommitMs = 400;
+    /// 다이얼 그리기(평면 화면 · 도면 탭 종이 바깥이 같이 쓴다). c = 가운데, rotDeg = 방향 각, hot = 마우스가 위에 · 끄는 중
+    static void paintRotationDial(QPainter& p, const QPointF& c, double r, double rotDeg, bool hot, const QString& caption);
+    /// 다이얼 가운데 → 점의 각(위 0°, 시계 방향, 도)
+    static double dialAngleAt(const QPointF& c, const QPointF& p);
+    /// 지금 그리는 중 · 손잡이를 끄는 중 붙은 스냅 이름(「A–A′ 에 직각」 · 「화면 가로」), 없으면 빈 글
+    QString snapNote() const { return snapNote_; }
     void zoomBy(double f);
     /// 현재 화면에 보이는 로컬 XY 범위(평면 기준)
     bool viewRectLocal(asec::Box3& out) const;
@@ -188,6 +210,7 @@ private:
     double zoomPending_ = 0;            // 남은 확대량(log, 음수 = 확대)
     QPointF zoomAnchor_;
     class QTimer* zoomTimer_ = nullptr;
+    class QTimer* rotStepTimer_ = nullptr;   // 휠 · 방향키 한 칸들을 멈춘 뒤 한 번 확정
     void applyZoomAt(const QPointF& at, double factor);
     QMatrix4x4 proj_, view_;
     // 단면선(로컬 XY)
@@ -223,6 +246,18 @@ private:
     void paintEmpty(QPainter& p);
     void paintLodCard(QPainter& p);
     asec::Vec2 lockAxis(const asec::Vec2& w, Qt::KeyboardModifiers m) const;
+    /// 단면선 끝 스냅(2026-10-16): fixed 에서 w 로 가는 방향을 Shift = 화면 가로 · 세로로 고정, 보조키 없으면 화면 축 · 다른 단면에
+    /// 3° 안이면 직각 · 평행으로 붙임(길이는 그대로), Ctrl = 붙이지 않음. note = 붙은 이름
+    asec::Vec2 snapEnd(const asec::Vec2& fixed, const asec::Vec2& w, Qt::KeyboardModifiers m, QString* note) const;
+    QString snapNote_;
+    // 다이얼 끌기
+    bool dialDrag_ = false, dialMoved_ = false, dialHot_ = false;
+    double dialYaw0_ = 0, dialAng0_ = 0, orbitYaw0_ = 0;
+    // 두 점 맞춤
+    int alignStage_ = -1;                   // -1 아님, 0 첫 점 기다림, 1 둘째 점 기다림
+    asec::Vec2 alignP_, alignQ_, alignMouse_;
+    bool alignValid_ = false, alignVert_ = false, alignHasMouse_ = false;
+    double alignYaw_ = 0;
     void emitLine(bool final) { if (onLineChanged && hasLine_) onLineChanged(line_, final); }
 
     QRectF lodCardRect_;

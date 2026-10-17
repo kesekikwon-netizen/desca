@@ -14,6 +14,14 @@ struct LineWeights {
   double minorPt = 0.2;
   double majorPt = 0.5;
 };
+/// 빨간 잘린 선(단면선) 인쇄 · 내보내기 굵기 = 0.8 pt 고정(사용자 2026-10-16
+/// 「단면선 빨간선은 0.8pt고정」) — SVG · PDF · PNG · DXF 모두. 화면 굵기와 무관
+constexpr double kCutLinePt = 0.8;
+/// 내보내기 레이어 이름(사용자 2026-10-16 「내보내기할때 0.2 0.5 0.8로 레이어를 잡아 내보내기」) — SVG · DXF
+/// 같은 이름. 0.8 = 빨간 잘린 선, 0.5 = 50 cm(1 m 포함) 해발선, 0.2 = 10 cm 해발선. 나머지 레이어는 형식마다 따로
+constexpr const char *kLayerCut = "0.8";
+constexpr const char *kLayerLevelMajor = "0.5";
+constexpr const char *kLayerLevelMinor = "0.2";
 /// pt → 종이 위 mm (1 pt = 25.4 / 72 mm)
 double ptToMm(double pt);
 /// 입력값을 0.05–3.0 pt 로 자른다. NaN 은 기본 0.2
@@ -174,6 +182,126 @@ PlanStripXf planStripTransform(double ax, double ay, double bx, double by,
                                double imgX0, double imgY1, double res,
                                double pageXAtS0, double pageYAtT0,
                                double mmPerM);
+
+// ---- 평·단면도 한 장 조판(2026-10-16, 사용자 요청 「샘플 도면처럼 한 장에 축척·방향을 맞춰」):
+//      첫 단면(기준)의 A→A′ 가 종이 가로(왼쪽→오른쪽)가 되게 평면을 돌린다. 단면도는 저마다
+//      「잘린 면을 바라보는 쪽」(A→A′ 의 왼쪽 법선 = 입면 뒤쪽, facingKo 와 같은 규약)에 놓는다:
+//      돌린 평면에서 A→A′ 가 →(기준과 같은 방향)이면 위, ←이면 아래, ↑이면 왼쪽(90° 돌려 A 아래 · A′ 위),
+//      ↓이면 오른쪽(A 위 · A′ 아래). 위 · 왼쪽 · 오른쪽은 평면의 A 자리와 거리(s)를 맞추고, 아래(반대 방향)는
+//      글자를 뒤집지 않으려고 보통 방향으로 두되 선의 가운데를 맞춘다. 같은 축척. 좌표 · 높이 값은 바꾸지 않는다.
+struct ComboSection {
+  double ax = 0, ay = 0, bx = 0, by = 0; // 단면선 A · A′(로컬 XY, m)
+  double heightM = 0;                    // 단면 표시 높이(m, 위아래 여유 포함)
+};
+enum class ComboSlot { Top = 0, Bottom = 1, Left = 2, Right = 3 };
+struct ComboPlaced {
+  ComboSlot slot = ComboSlot::Top;
+  int rotDeg = 0; // 0 · -90(왼쪽: 반시계 — A 아래 · A′ 위 · 높은 쪽이 왼쪽) · 90(오른쪽: 시계 — A 위 · A′ 아래 · 높은 쪽이 오른쪽)
+  double lenM = 0, heightM = 0;
+  double sA = 0, tA = 0, sB = 0, tB = 0; // 돌린 평면 좌표(m)의 A · A′
+  // 단면 자체 좌표(mm, 돌리기 전: x = 거리 s 오른쪽, y = 아래로 = 높이 낮아짐)의 그림 칸과 글자 여백.
+  // 종이에 놓을 때: translate(originX, originY) → rotate(rotDeg) → 이 좌표로 그린다
+  double originX = 0, originY = 0;
+  double plotX = 0, plotY = 0, plotW = 0, plotH = 0;
+  double areaX = 0, areaY = 0, areaW = 0, areaH = 0;
+  /// 단면 좌표(mm) → 종이(mm)
+  void toPaper(double x, double y, double &px, double &py) const;
+};
+struct ComboLayout {
+  SheetLayout L;
+  double mmPerM = 0;
+  double ux = 1, uy = 0, nx = 0, ny = 1, ax = 0, ay = 0; // 돌린 틀: 원점 = 기준 A, s 축 u(종이 오른쪽), t 축 n(종이 위)
+  double planX = 0, planY = 0, planW = 0, planH = 0;     // 평면 칸(mm)
+  double sMin = 0, sMax = 0, tMin = 0, tMax = 0;         // 평면 칸이 비추는 돌린 좌표(m)
+  double contentW = 0, contentH = 0;                     // 전체(평면 + 단면 띠 + 여백, mm)
+  bool fits = false;
+  std::vector<ComboPlaced> sections;
+  void toST(double x, double y, double &s, double &t) const {
+    s = (x - ax) * ux + (y - ay) * uy;
+    t = (x - ax) * nx + (y - ay) * ny;
+  }
+  /// 돌린 좌표 → 로컬 XY
+  void toXY(double s, double t, double &x, double &y) const {
+    x = ax + ux * s + nx * t;
+    y = ay + uy * s + ny * t;
+  }
+  double xMm(double s) const { return planX + (s - sMin) * mmPerM; }
+  double yMm(double t) const { return planY + (tMax - t) * mmPerM; }
+  /// 종이 mm → 돌린 좌표(xMm · yMm 의 거꾸로)
+  void paperToST(double mmX, double mmY, double &s, double &t) const {
+    s = sMin + (mmX - planX) / mmPerM;
+    t = tMax - (mmY - planY) / mmPerM;
+  }
+  /// 진북 화살표의 종이 각(도, 시계 방향, 0 = 위)
+  double northDeg() const;
+};
+/// 단면들(첫 것이 기준)과 평면 여유(단면선 끝에서 m)로 배치. 단면이 없으면 fits=false.
+/// keepFrame 이 있으면 돌린 틀(원점 · s · t 축)을 그것에서 그대로 가져온다 — 도면에서 단면선 끝을 끄는 동안
+/// 평면이 돌지 않게(2026-10-16 「도면 안에서 빨간선 끝단을 움직여」). 놓으면 붙들지 않고 다시 배치한다
+ComboLayout layoutCombo(const SheetSpec &spec,
+                        const std::vector<ComboSection> &secs,
+                        double planMarginM, double gapMm = 6.0,
+                        double stackGapMm = 3.0,
+                        const ComboLayout *keepFrame = nullptr);
+// ---- 평면 방향(사용자 2026-10-16 「사용자가 평면을 어떻게 놓을지 생각을 해야 단면을 만들 수 있다」 · 「다이얼을 돌리면 평면도가 돌아가게」)
+// 방향 각 rotDeg = 화면 · 종이에서 진북이 위에서 시계 방향으로 돈 각(0 = 북쪽 위). 표시 회전일 뿐 좌표 · Z · 단면 계산은 그대로
+/// 각을 (−180, 180] 으로
+double normDeg180(double deg);
+/// 평면 방향의 돌린 틀: s 축 u = (cos, sin)(종이 오른쪽) · t 축 n = (−sin, cos)(종이 위), 원점 (ax, ay).
+/// layoutCombo 의 keepFrame 으로 넘기면 첫 단면 기준 자동 회전 대신 이 방향으로 놓는다. northDeg() == normDeg180(rotDeg)
+ComboLayout comboFrameForRotation(double rotDeg, double ax = 0, double ay = 0);
+/// 다이얼 한 칸(사용자 2026-10-16 「방향키로도 0.1도씩」): dir 쪽(+ = 시계)으로 step 격자의 다음 칸.
+/// 격자 위면 정확히 step 만큼, 격자 밖(끌어서 33.63°)이면 그 방향의 가장 가까운 격자(33.7°)로. 결과는 (−180, 180]
+double rotationStep(double deg, int dir, double step = 0.1);
+/// 두 점 맞춤: p → q 가 화면 가로(오른쪽으로)가 되는 방향 각. vertical 이면 세로(위로)
+double rotationToAlign(double px, double py, double qx, double qy, bool vertical);
+/// 단면선 방향 스냅: dirDeg(동 0°, 반시계)를 refsDeg 각각의 ref + k·90° 중 tolDeg 안에서 가장 가까운 것에 붙인다.
+/// source = 붙은 refs 자리(-1 = 안 붙음), perpendicular = 그 기준과 직각(k 홀수)
+struct AngleSnap { bool snapped = false; double angleDeg = 0; int source = -1; bool perpendicular = false; };
+AngleSnap snapAngle(double dirDeg, const std::vector<double> &refsDeg, double tolDeg = 3.0);
+
+/// 한 장에 들어가는 가장 작은 10 단위 분모(fitDenomStep10 와 같은 규칙), 최대 2000
+double fitComboDenomStep10(const SheetSpec &spec,
+                           const std::vector<ComboSection> &secs,
+                           double planMarginM);
+/// 용지 없는 한 장(사용자 2026-10-16 「용지 크기는 신경 쓰지 말고 최적 크기로 배치만」): 평면 칸과 모든 단면 칸(글자
+/// 여백 포함)의 외접 상자에서 marginMm 띄우고, 아래에 titleMm 띠를 둔 종이로 옮긴다. L.paperW/H · frame · plot ·
+/// titleY 를 그 종이로 다시 채우고 fits = true. 축척 · 배치 관계는 그대로(평행 이동만)
+void freeComboPage(ComboLayout &c, double marginMm = 10.0,
+                   double titleMm = 16.0);
+/// 평·단면도 용지(사용자 2026-10-16 「용지방향이안돼」 → 카드 답 「둘 다」): 기본은 내용 크기, 단추를 누를 때마다
+/// A4 가로 → A4 세로 → A3 가로 → A3 세로 → 내용 크기
+enum class ComboPaper { Content = 0, A4Landscape, A4Portrait, A3Landscape, A3Portrait };
+ComboPaper nextComboPaper(ComboPaper p);
+/// 정한 용지의 가로 × 세로(mm). 내용 크기면 false
+bool comboPaperSize(ComboPaper p, double &wMm, double &hMm);
+/// 정한 용지에 놓기: freeComboPage 와 같은 내용 외접 상자를 paperW × paperH 종이의 여백 안(아래 titleMm 띠 위)
+/// 가운데로 평행 이동한다. 들어가면 true(fits). 안 들어가도 가운데에 놓고(넘친 곳은 종이 밖) false
+bool placeComboOnPaper(ComboLayout &c, double paperW, double paperH,
+                       double marginMm = 10.0, double titleMm = 16.0);
+/// 그 용지에 들어가는 가장 작은 10 단위 분모(최대 2000, 없으면 0). 나머지 인자는 layoutCombo 와 같음
+double fitComboDenomOnPaper(const SheetSpec &spec,
+                            const std::vector<ComboSection> &secs,
+                            double planMarginM, double paperW, double paperH,
+                            double marginMm = 10.0, double titleMm = 16.0,
+                            double gapMm = 6.0, double stackGapMm = 3.0,
+                            const ComboLayout *keepFrame = nullptr);
+/// 평면 영상을 만들 로컬 XY 외접 상자(돌린 평면 칸 네 모서리)
+PlanStripArea comboPlanArea(const ComboLayout &c);
+/// 평·단면도 저장 평면 영상의 픽셀 상한(종이 PNG · TIFF 상한과 같음)
+constexpr double kComboPlanMaxPixels = 400e6;
+/// 평·단면도 평면 영상 해상도(m/px): 요청 res 그대로, 평면 칸 wM × hM(m)이 maxPixels 를 넘을 때만 넘지 않게
+/// 거칠게. 돌리면 평면 칸이 커져도 개별 도면(600 dpi) 해상도를 지킨다(사용자 2026-10-17 「회전을 하면 평면과
+/// 단면의 화질이 낮아진다」 — 옛 상한 80 MP 에 걸려 1:20 · 12 m 단면을 45° 돌리면 23.6 → 17.1 px/mm)
+double comboPlanRes(double res, double wM, double hM, double maxPixels = kComboPlanMaxPixels);
+/// 평·단면도 진북 원 반지름(mm, 사용자 2026-10-16 「나침반도 좀더 크게」 → 1.5 배) · 원 가장자리 → 「N」 글자 가운데(mm)
+constexpr double kComboNorthRMm = 5.25;
+constexpr double kComboNorthLabelMm = 2.2;
+/// 평면 단면선 끝 → A · A′ 글자 가운데(mm, 선 방향 바깥)
+constexpr double kComboPlanLabelMm = 2.8;
+/// 진북 자리(종이 mm): 가운데 · 반지름 · 원과 「N」 을 합친 외접 상자
+struct ComboNorth { double cx = 0, cy = 0, r = 0, x0 = 0, y0 = 0, x1 = 0, y1 = 0; };
+ComboNorth comboNorthSpot(const ComboLayout &c);
 
 /// 방위각(북 0°, 시계 방향) → "N 90.4° E" (180° 넘으면 "N 45.0° W")
 std::string formatAzimuth(double azDeg);

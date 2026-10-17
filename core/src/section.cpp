@@ -427,6 +427,78 @@ double profileRelief(const std::vector<Polyline>& profile) {
     return q(0.95) - q(0.05);
 }
 
+std::vector<SGap> levelLineSpans(const std::vector<Polyline>& profile, double z, double s0, double s1) {
+    if (s1 < s0) std::swap(s0, s1);
+    // 열린 잘린 선 하나 = 지면. 그 선과 양 끝에서 곧장 아래로 내린 선으로 닫은 영역이 땅속이다
+    // (처마처럼 뒤로 기운 벽 아래 빈 곳은 밖). 높이 z 의 수평선이 그 경계와 만나는 s 를 모아 정렬하면
+    // 안 · 밖이 번갈아 나온다 — 교차 판정은 반열림(y >= z)으로 맞춰 꼭짓점에서 두 번 세지 않는다.
+    // 여러 잘린 선은 저마다 땅속 구간을 구해 합친다. 닫힌 고리(돌 · 덤불)는 지면이 아니다
+    std::vector<SGap> v;
+    std::vector<double> xs;
+    for (const auto& pl : profile) {
+        if (pl.size() < 2) continue;
+        if (pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9) continue;   // 닫힌 고리는 지면이 아님
+        xs.clear();
+        if (pl.front().y >= z) xs.push_back(pl.front().x);   // 앞 끝에서 내린 선
+        if (pl.back().y >= z) xs.push_back(pl.back().x);     // 뒤 끝에서 내린 선
+        for (size_t i = 1; i < pl.size(); ++i) {
+            const Vec2& a = pl[i - 1];
+            const Vec2& b = pl[i];
+            if ((a.y >= z) == (b.y >= z)) continue;
+            xs.push_back(a.x + (b.x - a.x) * (z - a.y) / (b.y - a.y));   // 정확한 교차점에서 끊음
+        }
+        std::sort(xs.begin(), xs.end());
+        for (size_t i = 0; i + 1 < xs.size(); i += 2) {   // 왼쪽 끝 밖에서 시작해 교차마다 안 · 밖이 바뀜
+            const double lo = std::max(s0, xs[i]), hi = std::min(s1, xs[i + 1]);
+            if (hi > lo) v.push_back({lo, hi});
+        }
+    }
+    std::sort(v.begin(), v.end(), [](const SGap& p, const SGap& q) { return p.s0 < q.s0; });
+    std::vector<SGap> out;
+    for (auto& g : v) {
+        if (!out.empty() && g.s0 <= out.back().s1 + 1e-9) out.back().s1 = std::max(out.back().s1, g.s1);
+        else out.push_back(g);
+    }
+    out.erase(std::remove_if(out.begin(), out.end(), [](const SGap& g) { return g.s1 - g.s0 <= 1e-9; }), out.end());
+    return out;
+}
+
+std::vector<LevelLabelSpot> levelLabelSpots(const std::vector<Polyline>& profile, double zMinLocal, double zMaxLocal, double oz, double L,
+                                            int everyCm) {
+    std::vector<LevelLabelSpot> out;
+    if (everyCm <= 0 || !(L > 0)) return out;
+    bool open = false;   // levelLineSpans 와 같은 지면 판정 — 닫힌 고리만 있으면 선은 통째로 그어진다
+    for (const auto& pl : profile)
+        if (pl.size() >= 2 && !(pl.size() > 3 && (pl.front() - pl.back()).len() < 1e-9)) { open = true; break; }
+    for (const LevelLine& lv : levelLines(zMinLocal + oz - 1e-9, zMaxLocal + oz + 1e-9, everyCm)) {
+        LevelLabelSpot sp;
+        sp.cm = lv.cm;
+        sp.zAbs = lv.z;
+        if (!open) { sp.atStart = true; out.push_back(sp); continue; }
+        const std::vector<SGap> g = levelLineSpans(profile, lv.z - oz, 0.0, L);
+        if (g.empty()) continue;
+        sp.s0 = g.front().s0;
+        sp.atStart = sp.s0 <= 1e-3;
+        if (sp.atStart) sp.s0 = 0;
+        out.push_back(sp);
+    }
+    return out;
+}
+
+LevelLabelFit fitLevelLabels(double gap50, double textH, bool allowAlternate, double minScale) {
+    if (!(textH > 0) || !(gap50 > 0)) return {50, false, 1.0};
+    minScale = std::clamp(minScale, 0.1, 1.0);
+    for (int cm : {50, 100, 500, 1000}) {
+        const double gap = gap50 * cm / 50.0;
+        if (gap >= textH) return {cm, false, 1.0};
+        if (gap >= textH * std::max(0.8, minScale)) return {cm, false, gap / textH};
+        if (allowAlternate && 2 * gap >= textH) return {cm, true, 1.0};
+        if (allowAlternate && 2 * gap >= textH * minScale) return {cm, true, 2 * gap / textH};
+        if (!allowAlternate && gap >= textH * minScale) return {cm, false, gap / textH};
+    }
+    return {1000, allowAlternate, minScale};
+}
+
 std::vector<SGap> profileGaps(const std::vector<Polyline>& profile, double length, double minGap) {
     // 잘린 선 하나하나가 덮는 s 범위(점 순서와 무관)를 [0, length] 안으로 자른 뒤, 정렬해 이어 붙이며 사이의 틈을 모은다
     std::vector<std::pair<double, double>> cover;

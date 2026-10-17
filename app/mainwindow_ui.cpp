@@ -27,6 +27,7 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QKeyEvent>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -55,6 +56,7 @@
 #include <QUndoStack>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <cmath>
 
 using namespace asec;
@@ -381,7 +383,7 @@ void fitHomeCells(QWidget *cells) {
   }
 }
 // 홈 「처음 쓰는 키」 줄(스펙 §7): 폭이 모자라면 뒤 키 묶음부터 숨긴다(Ctrl+Z →
-// Ctrl+P → O → H → 1–5 → S). 「처음 쓰는 키」 머리와 「모든 키 F1」은 남긴다
+// Ctrl+P → 1–6 → S). 「처음 쓰는 키」 머리와 「모든 키 F1」은 남긴다
 void fitHomeKeys(QWidget *keys) {
   QLayout *lay = keys->layout();
   if (!lay)
@@ -452,7 +454,8 @@ bool MainWindow::ViewState::operator==(const ViewState &o) const {
   return hasLine == o.hasLine && (!hasLine || eqL(line, o.line)) &&
          front == o.front && back == o.back && image == o.image &&
          profile == o.profile && levels == o.levels && ticks == o.ticks &&
-         fade == o.fade && smooth == o.smooth && current == o.current;
+         fade == o.fade && smooth == o.smooth && current == o.current &&
+         rot == o.rot && rotSet == o.rotSet;
 }
 
 QAction *MainWindow::makeAction(const QString &key, const QString &ko,
@@ -515,15 +518,14 @@ QWidget *MainWindow::buildRibbon() {
                         // 함(--ui-audit dup-icons)   // 작업 상태
                         // 파일(.trench.json) — 자동 저장은 늘, 여기는 손으로
   add("model", "close", K::Normal, "x", QStringLiteral("닫기"));
-  // ---- 단면: 긋기(도구) · 새 단면 · 반전 · 이동 ▾ · 잘린 돌(도구, F단계) ·
-  // 윤곽(도구, G단계)
+  // ---- 단면: 긋기(도구) · 새 단면 · 반전. 「이동」은 평면에서 단면선을 끄는 것 · [ ] 키와
+  // 겹쳐 뺐고(동작 · 키는 그대로), 아직 쓸 수 없는 「잘린 돌」 · 「윤곽」(H · O 도구 —
+  // 기능이 생기면 다시 단다)은 리본에서 숨겼다(사용자 2026-10-16 「이동은 중복 · 잘린돌 ·
+  // 윤곽은 뭔지 모른다」)
   ribbon_->addGroup(QStringLiteral("sec"), QStringLiteral("단면"));
   add("sec", "draw", K::Tool, "section-line", QStringLiteral("긋기"));
   add("sec", "addsec", K::Normal, "plus", QStringLiteral("새 단면"));
   add("sec", "flip", K::Normal, "flip", QStringLiteral("반전"));
-  add("sec", "move", K::Normal, "move", QStringLiteral("이동"));
-  add("sec", "hatch", K::Tool, "hatch", QStringLiteral("잘린 돌"));
-  add("sec", "outline", K::Tool, "outline", QStringLiteral("윤곽"));
   // ---- 입면: 뒤 깊이 칩(숫자키 1–6) · 뒤 m · 앞 m
   ribbon_->addGroup(QStringLiteral("elev"), QStringLiteral("입면"));
   front_ = new QDoubleSpinBox;
@@ -588,44 +590,6 @@ QWidget *MainWindow::buildRibbon() {
   }
   depthBox_->setToolTip(
       QStringLiteral("입면 배경(뒤 깊이) · 숫자키 1–6, 앞 두께"));
-  // 단면선 굵기 칩 셋(아래 줄 · 더보기 공용 모양). 어느 쪽을 눌러도
-  // setSectionLineWidth 가 모든 칩 · 설정 · 그리기를 맞춘다
-  auto lineWidthChips = [this](bool compact) {
-    auto *w = new QWidget;
-    auto *h = new QHBoxLayout(w);
-    h->setContentsMargins(0, 0, 0, 0);
-    h->setSpacing(compact ? 2 : 0);
-    const double ws[3] = {1.5, 2.0, 3.0};
-    const double cur =
-        QSettings().value("view/sectionLineWidth", 2.0).toDouble();
-    for (int i = 0; i < 3; ++i) {
-      auto *c = new QToolButton;
-      c->setObjectName("chip");
-      c->setCheckable(true);
-      c->setFocusPolicy(Qt::NoFocus);
-      c->setText(compact ? QString::number(ws[i], 'g', 2)
-                         : QStringLiteral("%1 px").arg(ws[i], 0, 'g', 2));
-      if (compact) {
-        c->setFixedSize(28, 22);
-        c->setProperty("tight", true);
-      } // 28: 아래 줄이 위 줄(깊이) 폭 안에 들어가게
-      c->setToolTip(
-          QStringLiteral("단면선 굵기 %1 px (화면만 — 인쇄는 0.35 mm)")
-              .arg(ws[i], 0, 'g', 2));
-      c->setProperty("lineWidth", ws[i]);
-      c->setChecked(std::fabs(cur - ws[i]) < 0.01);
-      if (i == 0)
-        c->setProperty("pos", "first");
-      if (i == 2)
-        c->setProperty("pos", "last");
-      const double wv = ws[i];
-      QObject::connect(c, &QToolButton::clicked, this,
-                       [this, wv] { setSectionLineWidth(wv); });
-      lineWidthChips_.push_back(c);
-      h->addWidget(c);
-    }
-    return w;
-  };
   // 입면 아래 줄(사용자 지시 2026-10-10 「더보기 안의 영상 불투명도 · 단면선
   // 굵기를 입면 밑으로」): 위 줄(깊이)은 타일 가운데 그대로, 그 밑에 단다.
   // 슬라이더는 가로 Ignored(최소 56) — 아래 줄이 위 줄보다 넓어지지 않아 리본
@@ -648,9 +612,9 @@ QWidget *MainWindow::buildRibbon() {
     h->addWidget(lab(QStringLiteral("불투명도"), "hint"));
     h->addWidget(opacity_, 1);
     h->addSpacing(2);
-    h->addWidget(lab(QStringLiteral("선 굵기"), "hint"));
-    h->addWidget(lineWidthChips(true));
-    h->addSpacing(2);
+    // 「선 굵기」 칩(1.5 · 2 · 3 px)은 뺐다: 도면 · 내보내기의 잘린 선이 0.8 pt 로 고정되어
+    // (사용자 2026-10-16 「단면선 빨간선은 0.8pt 고정」) 칩은 화면 굵기만 바꾸던 것.
+    // 화면 굵기는 설정 view/sectionLineWidth(기본 2 px) 그대로
     // 평활(T6 · 사용자 결정 「평활은 입면 아래 줄, 선 굵기 옆 켜기 · 끄기」):
     // 같은 동작 「smooth」 — 줄에서 눌러도 입면 ▾ 안에서 눌러도 하나
     auto *sm = new QToolButton;
@@ -712,15 +676,6 @@ QWidget *MainWindow::buildRibbon() {
     wa->setDefaultWidget(opw);
     mn->addAction(wa);
     opacityMenuAct_ = wa;
-    lineWidthMenu_ = lineWidthChips(false);
-    lineWidthMenu_->setObjectName("lineWidthMenu");
-    auto *lwBox =
-        rowOf({lab(QStringLiteral("선 굵기"), "hint"), lineWidthMenu_});
-    lwBox->setContentsMargins(12, 4, 12, 4);
-    auto *wa2 = new QWidgetAction(mn);
-    wa2->setDefaultWidget(lwBox);
-    mn->addAction(wa2);
-    lineWidthMenuAct_ = wa2;
     mn->addAction(action("smooth"));
     action("elevmenu")->setMenu(mn);
   }
@@ -756,14 +711,7 @@ QWidget *MainWindow::buildRibbon() {
     action("points")->setMenu(pm);
   } // 점군은 칩 하나, XYZ · LAS 는 그 메뉴 안(T6)
   add("data", "points", K::Normal, "points-xyz", QStringLiteral("점군"));
-  {
-    auto *mn = new QMenu(this);
-    mn->addAction(action("secjson"));
-    mn->addAction(action("secimport"));
-    action("seclist")->setMenu(mn);
-  }
-  add("data", "seclist", K::Normal, "sections-list",
-      QStringLiteral("목록 파일"));
+  // 「목록 파일」 칩(단면 목록 내보내기 · 가져오기 메뉴)은 뺐다(사용자 2026-10-16 「목록파일 ui삭제」 — 단추만)
   // ---- 내보내기: 도면(흙색 주 단추 — 단면 탭에서 한 화면의 유일한 흙색)
   ribbon_->addGroup(QStringLiteral("out"), QStringLiteral("내보내기"));
   sheetChip_ = add("out", "sheet", K::Primary, "sheet", QStringLiteral("도면"));
@@ -779,7 +727,6 @@ QWidget *MainWindow::buildRibbon() {
                          chipH;
         elevRow2_->setVisible(two);
         opacityMenuAct_->setVisible(!two);
-        lineWidthMenuAct_->setVisible(!two);
         elevMenuChip->setVisible(!two);
       });
   return ribbon_;
@@ -975,6 +922,23 @@ QWidget *MainWindow::buildPlanFrame() {
     QObject::connect(a, &QAction::triggered, this, fn);
     h->addWidget(iconBtn(a));
   };
+  // 평면 방향(2026-10-16): 각도 칸(진북이 위에서 시계 방향으로 돈 각) · 두 점 맞춤. 다이얼은 평면 오른쪽 아래 진북 표시
+  rotSpin_ = new QDoubleSpinBox;
+  rotSpin_->setObjectName("planRotation");
+  rotSpin_->setRange(-180.0, 180.0);
+  rotSpin_->setDecimals(1);
+  rotSpin_->setSingleStep(1.0);
+  rotSpin_->setWrapping(true);
+  rotSpin_->setSuffix(QStringLiteral("°"));
+  rotSpin_->setKeyboardTracking(false);
+  rotSpin_->setFixedWidth(70);
+  rotSpin_->setToolTip(QStringLiteral(
+      "평면 방향: 진북이 화면 위에서 시계 방향으로 돈 각(0 = 북쪽 위). 표시만 "
+      "돌리고 좌표 · 높이는 그대로입니다. 평·단면도도 이 방향으로 놓입니다."));
+  QObject::connect(rotSpin_, &QDoubleSpinBox::valueChanged, this,
+                   [this](double v) { setPlanRotation(v, true); });
+  h->addWidget(rotSpin_);
+  h->addWidget(iconBtn(action("align2")));
   h->addWidget(iconBtn(action("top"))); // v4: 위에서(T) — 제자리
   mk(theme::Ico::Fit, QStringLiteral("맞춤 (F)"), [this] { plan_->fitAll(); });
   mk(theme::Ico::ZoomIn, QStringLiteral("확대"),
@@ -1657,11 +1621,11 @@ void MainWindow::updateReadout() {
       nv += pl.size();
     setRo(RoDepth, QStringLiteral("깊이"),
           QStringLiteral("%1 m").arg(std::max(0.0, top - zLo), 0, 'f', 2));
-    setRo(RoTop, QStringLiteral("지표 EL."),
+    setRo(RoTop, QStringLiteral("지표 표고"),
           QStringLiteral("%1 – %2 m")
               .arg(std::min(zA, zB) + org.z, 0, 'f', 2)
               .arg(std::max(zA, zB) + org.z, 0, 'f', 2));
-    setRo(RoFloor, QStringLiteral("바닥 EL."),
+    setRo(RoFloor, QStringLiteral("바닥 표고"),
           QStringLiteral("%1 m").arg(zLo + org.z, 0, 'f', 2));
     setRo(RoCut, QStringLiteral("잘린 선"),
           QStringLiteral("%1줄 · %2점")
@@ -2330,7 +2294,27 @@ MainWindow::ViewState MainWindow::captureState() const {
   s.fade = action("fade")->isChecked();
   s.smooth = action("smooth")->isChecked();
   s.current = current_;
+  s.rot = plan_->rotationDeg();
+  s.rotSet = planRotSet_;
   return s;
+}
+
+void MainWindow::syncRotationUi() {
+  if (!rotSpin_)
+    return;
+  QSignalBlocker b(rotSpin_);
+  rotSpin_->setValue(plan_->rotationDeg());
+}
+
+void MainWindow::setPlanRotation(double deg, bool final) {
+  if (std::abs(asec::normDeg180(deg - plan_->rotationDeg())) > 1e-9)
+    plan_->setRotationDeg(deg);
+  planRotSet_ = true;
+  syncRotationUi();
+  if (final)
+    commitState(QStringLiteral("평면 방향 %1°").arg(plan_->rotationDeg(), 0, 'f', 1));
+  if (comboRotHook_)
+    comboRotHook_(final);
 }
 
 void MainWindow::applyState(const ViewState &s) {
@@ -2348,6 +2332,11 @@ void MainWindow::applyState(const ViewState &s) {
     action(k)->setChecked(
         v); // applyingState_ 가 되돌리기 기록을 막음(단추 동기화는 신호로)
   section_->setStyle(secStyle());
+  plan_->setRotationDeg(s.rot); // 평면 방향도 되돌린다(표시만)
+  planRotSet_ = s.rotSet;
+  syncRotationUi();
+  if (comboRotHook_)
+    comboRotHook_(true);
   current_ = (s.current >= 0 && s.current < int(sections_.size())) ? s.current
                                                                    : current_;
   if (s.hasLine) {
@@ -2381,6 +2370,158 @@ void MainWindow::commitState(const QString &text, int mergeId) {
   undo_->push(new StateCmd(this, lastState_, now, text, mergeId));
   lastState_ = now;
   saveModelState();
+}
+
+// --plan-rotate-test(종료 코드 16): 평면 방향(2026-10-16) — 다이얼을 마우스로 45° 돌리면
+// 평면 · 각도 칸 · 되돌리기가 따라가고, 화면 위쪽이 진북에서 그만큼 돈 땅 방향이며, 두 점
+// 맞춤이 찍은 두 점을 화면 가로(다시 누르면 세로)로 놓고, 다이얼 두 번 누름이 북쪽 위인지
+bool MainWindow::planRotateTest(QString *log) {
+  auto say = [&](const QString &s) {
+    if (log)
+      *log += s + "\n";
+  };
+  if (!src_ || !plan_) {
+    say("plan-rotate: 모델 없음 FAIL");
+    return false;
+  }
+  auto pump = [](int ms) {
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < ms)
+      QApplication::processEvents(QEventLoop::AllEvents, 10);
+  };
+  auto send = [&](QEvent::Type ty, QPointF q, Qt::MouseButton b,
+                  Qt::MouseButtons bs) {
+    QMouseEvent ev(ty, q, plan_->mapToGlobal(q), b, bs, Qt::NoModifier);
+    QApplication::sendEvent(plan_, &ev);
+  };
+  // 화면 방향 → 땅 방향(진북에서 시계 방향 각, 도)
+  auto groundAngle = [&](QPointF from, QPointF to, double *deg) {
+    Vec2 a, b;
+    if (!plan_->screenToLocalXYPublic(from, a) ||
+        !plan_->screenToLocalXYPublic(to, b))
+      return false;
+    *deg = std::atan2(b.x - a.x, b.y - a.y) * 180.0 / M_PI;
+    return true;
+  };
+  const QPointF m(plan_->width() / 2.0, plan_->height() / 2.0);
+  setPlanRotation(0.0, true);
+  pump(100);
+  const int undo0 = undo_->index();
+  // ① 다이얼 끌기 45°
+  const QPointF c = plan_->compassCenter();
+  const double R = PlanView::dialRadius() * 0.8;
+  auto ring = [&](double a) {
+    const double r = a * M_PI / 180.0;
+    return c + QPointF(std::sin(r), -std::cos(r)) * R;
+  };
+  send(QEvent::MouseMove, ring(0), Qt::NoButton, Qt::NoButton);
+  send(QEvent::MouseButtonPress, ring(0), Qt::LeftButton, Qt::LeftButton);
+  for (int i = 1; i <= 9; ++i) {
+    send(QEvent::MouseMove, ring(45.0 * i / 9.0), Qt::NoButton, Qt::LeftButton);
+    pump(20);
+  }
+  send(QEvent::MouseButtonRelease, ring(45.0), Qt::LeftButton, Qt::NoButton);
+  pump(100);
+  const double rot = plan_->rotationDeg();
+  const bool dialOk = std::abs(rot - 45.0) < 0.01 && planRotSet_;
+  const bool spinOk = rotSpin_ && std::abs(rotSpin_->value() - 45.0) < 0.051;
+  const bool undoOne = undo_->index() == undo0 + 1 &&
+                       undo_->text(undo_->index() - 1).contains(
+                           QStringLiteral("평면 방향"));
+  double upDeg = 0, rightDeg = 0;
+  const bool upOk = groundAngle(m, m - QPointF(0, 100), &upDeg) &&
+                    std::abs(normDeg180(upDeg + rot)) < 0.2; // 화면 위 = 진북에서 −45°
+  // ② 되돌리기 · 다시
+  undo_->undo();
+  pump(50);
+  const bool undoBack = std::abs(plan_->rotationDeg()) < 1e-9 &&
+                        rotSpin_ && std::abs(rotSpin_->value()) < 1e-9;
+  undo_->redo();
+  pump(50);
+  const bool redoOk = std::abs(plan_->rotationDeg() - 45.0) < 0.01 && planRotSet_;
+  // ③ 두 점 맞춤(가로) → 다시 누르면 세로
+  const QPointF P(plan_->width() * 0.32, plan_->height() * 0.62),
+      Q(plan_->width() * 0.68, plan_->height() * 0.41);
+  Vec2 wP, wQ;
+  bool alignH = false, alignV = false;
+  if (plan_->screenToLocalXYPublic(P, wP) &&
+      plan_->screenToLocalXYPublic(Q, wQ)) {
+    const double want = std::atan2(wQ.x - wP.x, wQ.y - wP.y) * 180.0 / M_PI;
+    action("align2")->trigger();
+    for (const QPointF &q : {P, Q}) {
+      send(QEvent::MouseMove, q, Qt::NoButton, Qt::NoButton);
+      send(QEvent::MouseButtonPress, q, Qt::LeftButton, Qt::LeftButton);
+      send(QEvent::MouseButtonRelease, q, Qt::LeftButton, Qt::NoButton);
+      pump(30);
+    }
+    alignH = groundAngle(m, m + QPointF(100, 0), &rightDeg) &&
+             std::abs(normDeg180(rightDeg - want)) < 0.2 && !plan_->aligning();
+    action("align2")->trigger(); // 방금 맞춘 그대로 → 세로
+    pump(30);
+    alignV = groundAngle(m, m - QPointF(0, 100), &upDeg) &&
+             std::abs(normDeg180(upDeg - want)) < 0.2;
+  }
+  // ④ 다이얼 두 번 = 북쪽 위
+  send(QEvent::MouseButtonDblClick, c, Qt::LeftButton, Qt::LeftButton);
+  send(QEvent::MouseButtonRelease, c, Qt::LeftButton, Qt::NoButton);
+  pump(50);
+  const bool northOk = std::abs(plan_->rotationDeg()) < 1e-9;
+  // ⑤ 한 칸 0.1°(사용자 2026-10-16 「방향키로도 0.1도씩」): 다이얼 위 휠 한 칸 +0.1 →
+  // → +0.2 → ← 세 번 −0.1 → Shift+→ 1° 격자 0.0 → Shift+→ 1.0. 멈춘 뒤 되돌리기 한 칸
+  pump(PlanView::kRotStepCommitMs + 150);
+  const int undo1 = undo_->index();
+  {
+    QWheelEvent we(c, plan_->mapToGlobal(c), QPoint(), QPoint(0, 120),
+                   Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(plan_, &we);
+  }
+  const double wheelDeg = plan_->rotationDeg();
+  auto key = [&](int k, Qt::KeyboardModifiers m) {
+    QKeyEvent ev(QEvent::KeyPress, k, m);
+    QApplication::sendEvent(plan_, &ev);
+  };
+  key(Qt::Key_Right, Qt::NoModifier);
+  const double rightDeg1 = plan_->rotationDeg();
+  for (int i = 0; i < 3; ++i)
+    key(Qt::Key_Left, Qt::NoModifier);
+  const double leftDeg3 = plan_->rotationDeg();
+  key(Qt::Key_Right, Qt::ShiftModifier);
+  key(Qt::Key_Right, Qt::ShiftModifier);
+  const double coarseDeg = plan_->rotationDeg();
+  const bool spinLive = rotSpin_ && std::abs(rotSpin_->value() - 1.0) < 1e-9;
+  pump(PlanView::kRotStepCommitMs + 200);
+  const bool stepOk = std::abs(wheelDeg - 0.1) < 1e-9 &&
+                      std::abs(rightDeg1 - 0.2) < 1e-9 &&
+                      std::abs(leftDeg3 + 0.1) < 1e-9 &&
+                      std::abs(coarseDeg - 1.0) < 1e-9 && spinLive &&
+                      undo_->index() == undo1 + 1;
+  const bool ok = dialOk && spinOk && undoOne && upOk && undoBack && redoOk &&
+                  alignH && alignV && northOk && stepOk;
+  say(QStringLiteral("plan-rotate: step wheel=%1 right=%2 left3=%3 shift2=%4 "
+                     "spin=%5 undo-one=%6 %7")
+          .arg(wheelDeg, 0, 'f', 3)
+          .arg(rightDeg1, 0, 'f', 3)
+          .arg(leftDeg3, 0, 'f', 3)
+          .arg(coarseDeg, 0, 'f', 3)
+          .arg(spinLive ? 1 : 0)
+          .arg(undo_->index() - undo1)
+          .arg(stepOk ? QStringLiteral("ok") : QStringLiteral("FAIL")));
+  say(QStringLiteral("plan-rotate: dial=%1(%2°) spin=%3 undo-one=%4 "
+                     "screen-up=%5 undo=%6 redo=%7 align-h=%8 align-v=%9 "
+                     "north-dbl=%10 %11")
+          .arg(dialOk ? 1 : 0)
+          .arg(rot, 0, 'f', 2)
+          .arg(spinOk ? 1 : 0)
+          .arg(undoOne ? 1 : 0)
+          .arg(upOk ? 1 : 0)
+          .arg(undoBack ? 1 : 0)
+          .arg(redoOk ? 1 : 0)
+          .arg(alignH ? 1 : 0)
+          .arg(alignV ? 1 : 0)
+          .arg(northOk ? 1 : 0)
+          .arg(ok ? QStringLiteral("ok") : QStringLiteral("FAIL")));
+  return ok;
 }
 
 bool MainWindow::undoTest(QString *log) {
@@ -2532,6 +2673,8 @@ void MainWindow::restoreModelState() {
   thumbs_.clear();
   current_ = -1;
   projectPath_.clear();
+  plan_->setRotationDeg(0); // 평면 방향: 모델마다(프로젝트에 있으면 아래에서)
+  planRotSet_ = false;
   // 프로젝트 파일이 있으면 그걸로(열기 대화상자·끌어놓기로 연 .trench.json →
   // 없으면 projects\ 의 자동 저장본). 없으면 설정(레지스트리)
   std::shared_ptr<ProjectDoc> pj = pendingProject_;
@@ -2561,6 +2704,7 @@ void MainWindow::restoreModelState() {
     restoreFromSettings();
   if (undo_)
     undo_->clear();
+  syncRotationUi();
   lastState_ = captureState();
   updateDepthChips();
   refreshSectionList();
@@ -2665,6 +2809,7 @@ void MainWindow::clearLayout(QLayout *lay) {
 void MainWindow::rebuildStartPage() {
   if (!startPage_)
     return;
+  ++startPageBuilds_;
   auto *lay = static_cast<QVBoxLayout *>(startPage_->layout());
   clearLayout(lay);
   lay->setContentsMargins(48, 24, 48, 0);
@@ -3127,7 +3272,7 @@ void MainWindow::rebuildStartPage() {
         {"모델 열기",
          "3MX 폴더의 .3mx 파일을 열면 평면이 위에서 본 모양으로 나옵니다."},
         {"단면선 긋기", "평면에서 A, A′를 찍으면 오른쪽에 단면이 바로 "
-                        "나옵니다. 잘린 돌은 H로 빗금."},
+                        "나옵니다."},
         {"도면 · 저장", "「도면」 탭에서 축척 · 용지를 정하고 SVG로 저장해 "
                         "일러스트레이터에서 엽니다."}};
     for (int i = 0; i < 3; ++i) {
@@ -3168,7 +3313,7 @@ void MainWindow::rebuildStartPage() {
   }
   g->addWidget(steps, 1, 2);
 
-  // ---- 처음 쓰는 키(선 위): S · 1–5 · H · O · Ctrl+P · Ctrl+Z + 오른쪽 「모든
+  // ---- 처음 쓰는 키(선 위): S · 1–6 · Ctrl+P · Ctrl+Z + 오른쪽 「모든
   // 키 F1」
   auto *keys = new QWidget;
   keys->setObjectName("homeKeys");
@@ -3184,9 +3329,10 @@ void MainWindow::rebuildStartPage() {
     kh->setSpacing(32);
     kh->addWidget(lab(QStringLiteral("처음 쓰는 키"), "sectionHead"));
     const char *kk[][2] = {
-        {"S", "단면선 긋기"},    {"1–6", "뒤 깊이 0.5 · 1 · 2 · 3 · 5 · 10 m"},
-        {"H", "잘린 돌 칠하기"}, {"O", "윤곽 따기"},
-        {"Ctrl+P", "도면"},      {"Ctrl+Z", "되돌리기 200단계"}};
+        {"S", "단면선 긋기"},
+        {"1–6", "뒤 깊이 0.5 · 1 · 2 · 3 · 5 · 10 m"},
+        {"Ctrl+P", "도면"},
+        {"Ctrl+Z", "되돌리기 200단계"}}; // H · O(잘린 돌 · 윤곽)는 도구가 생길 때 다시
     for (auto &k : kk) { // 키 묶음은 위젯 하나 — 폭이 모자라면 fitHomeKeys 가
                          // 뒤에서부터 숨긴다(스펙 §7)
       auto *grp = new QWidget;
@@ -3284,12 +3430,9 @@ void MainWindow::shiftLine(double d) {
   updateHeader();
 }
 
-// 단면선 굵기(화면만): 칩 전부(입면 아래 줄 · 더보기) · 설정 · 단면 그리기를 한
-// 번에
+// 단면선 굵기(화면만 — 도면 · 내보내기는 0.8 pt 고정): 설정 · 단면 그리기를 한 번에
 void MainWindow::setSectionLineWidth(double px) {
   QSettings().setValue("view/sectionLineWidth", px);
-  for (QToolButton *c : lineWidthChips_)
-    c->setChecked(std::fabs(c->property("lineWidth").toDouble() - px) < 0.01);
   if (section_)
     section_->setStyle(secStyle());
   notifySheetDoc();
@@ -3476,6 +3619,8 @@ MainWindow::MainWindow() {
   makeAction("fit", QStringLiteral("맞춤"), "Fit View", I::Fit, "F");
   makeAction("top", QStringLiteral("위에서"), "Top", I::Orbit,
              "T"); // 「평면」 칩(map)과 다른 아이콘(검토 UI 6)
+  makeAction("align2", QStringLiteral("두 점 맞춤"), "Align by two points",
+             I::Align2); // 평면 방향(2026-10-16): 두 점을 찍은 선이 화면 가로
   makeAction("zoomin", QStringLiteral("확대"), "Zoom In", I::ZoomIn, "+");
   makeAction("zoomout", QStringLiteral("축소"), "Zoom Out", I::ZoomOut, "-");
   makeAction("image", QStringLiteral("입면 영상"), "Image", I::Image, "I", true)
@@ -3491,7 +3636,9 @@ MainWindow::MainWindow() {
              QString(), true);
   makeAction("ticks", QStringLiteral("거리 눈금"), "Distance Ticks", I::Ticks,
              "D", true)
-      ->setChecked(QSettings().value("section/ticks", true).toBool());
+      ->setChecked(QSettings().value("section/distTicks", false).toBool());
+  // 기본 끔(사용자 2026-10-16 「단면도에 세로선은 없어도 될거같다」 — 토층을 그릴
+  // 때만 D 로 켬). 새 설정 이름이라 예전에 켜 둔 값(section/ticks)은 따르지 않음
   action("ticks")->setToolTip(QStringLiteral(
       "거리 눈금 (D) — 입면 위 세로 눈금(1 m 마다 · 5 m 굵게, 아래 거리 숫자와 "
       "같은 자리) — 토층을 그릴 자리를 m 로 읽습니다(도면 · 내보내기도 같음)"));
@@ -3837,9 +3984,18 @@ MainWindow::MainWindow() {
     section_->update();
   });
   action("top")->setToolTip(QStringLiteral(
-      "3D로 돌린 뒤 평면 제자리 (T). 왼쪽 화면 N 을 눌러도 같습니다."));
+      "3D로 기울인 뒤 위에서 보기로 · 맞춤 (T). 평면 방향은 그대로 — 북쪽 위는 "
+      "오른쪽 아래 진북 다이얼을 두 번 누릅니다."));
   QObject::connect(action("top"), &QAction::triggered, this,
                    [this] { plan_->homeView(); });
+  action("align2")->setToolTip(QStringLiteral(
+      "두 점 맞춤: 평면에서 두 점(유구 장축 · 조사 경계 등)을 찍으면 그 선이 "
+      "화면 가로가 되게 평면을 돌립니다. 바로 한 번 더 누르면 세로. Esc 취소"));
+  QObject::connect(action("align2"), &QAction::triggered, this,
+                   [this] { plan_->startAlignTwoPoints(); });
+  plan_->onRotate = [this](double deg, bool final) {
+    setPlanRotation(deg, final);
+  };
   QObject::connect(action("zoomin"), &QAction::triggered, this, [this] {
     plan_->zoomBy(1 / 1.4);
     section_->zoomBy(1.4);
@@ -3860,7 +4016,7 @@ MainWindow::MainWindow() {
     });
   }
   QObject::connect(action("ticks"), &QAction::toggled, this,
-                   [](bool on) { QSettings().setValue("section/ticks", on); });
+                   [](bool on) { QSettings().setValue("section/distTicks", on); });
   QObject::connect(opacity_, &QSlider::valueChanged, this, [this](int) {
     section_->setStyle(secStyle());
     notifySheetDoc();
@@ -4274,6 +4430,52 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
            .arg(ribOk ? QString() : QStringLiteral("  FAIL"))
            .arg(moreCount);
   L << QStringLiteral("ui-audit ribbon-widths %1").arg(ribbon_->widthReport());
+  { // 2b′) 칩 고르게(사용자 2026-10-16 「전체 ui 크기와 배치 고르게」): 보이는 칩은
+    // 모두 같은 폭 · 같은 높이, 글자가 칩 안에 다 들어감(잘림 없음), 칩끼리 겹침 없음
+    int wMin = 1 << 20, wMax = 0, hMin = 1 << 20, hMax = 0, clipped = 0,
+        overlap = 0, widestPx = 0;
+    QString widest;
+    QStringList clippedNames;
+    QList<QRect> rs;
+    for (auto *b : ribbon_->chips()) {
+      if (!b->isVisibleTo(ribbon_))
+        continue;
+      wMin = std::min(wMin, b->width());
+      wMax = std::max(wMax, b->width());
+      hMin = std::min(hMin, b->height());
+      hMax = std::max(hMax, b->height());
+      const int tw = QFontMetrics(b->font()).horizontalAdvance(b->text());
+      if (tw > widestPx) {
+        widestPx = tw;
+        widest = b->text();
+      }
+      if (lk.labels && tw > b->width()) {
+        ++clipped;
+        clippedNames << b->text();
+      }
+      const QRect r(b->mapTo(ribbon_, QPoint(0, 0)), b->size());
+      for (const QRect &o : rs)
+        if (o.intersects(r))
+          ++overlap;
+      rs << r;
+    }
+    const bool evenOk =
+        wMin == wMax && hMin == hMax && clipped == 0 && overlap == 0;
+    L << QStringLiteral("ui-audit ribbon-even chips=%1 w=%2..%3 h=%4..%5 "
+                        "clipped=%6 overlap=%7 widest=%9:%10 clipped-names=[%11]%8")
+             .arg(rs.size())
+             .arg(wMin)
+             .arg(wMax)
+             .arg(hMin)
+             .arg(hMax)
+             .arg(clipped)
+             .arg(overlap)
+             .arg(evenOk ? QString() : QStringLiteral("  FAIL"))
+             .arg(widest)
+             .arg(widestPx)
+             .arg(clippedNames.join(QLatin1Char(',')));
+    ok &= evenOk;
+  }
   { // 2c) 단면 문맥: 묶음 이름 흐림 0 · 입면 칸(칩 아닌 위젯)은 타일 세로
     // 가운데(검토 UI 2 · 14)
     int dim = 0;
@@ -4310,7 +4512,6 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
     auto *row2 = ribbon_->findChild<QWidget *>(QStringLiteral("elevRow2"));
     auto *opRow = ribbon_->findChild<QSlider *>(QStringLiteral("opacityRow"));
     QSlider *opMenu = nullptr;
-    QWidget *lwMenu = nullptr;
     int more = 0;
     bool smoothInMenu = false;
     const auto emIt = act_.find(QStringLiteral("elevmenu"));
@@ -4325,12 +4526,6 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
             if (auto *s =
                     dw->findChild<QSlider *>(QStringLiteral("opacityMenu"))) {
               opMenu = s;
-              if (a->isVisible())
-                ++more;
-            }
-            if (auto *w =
-                    dw->findChild<QWidget *>(QStringLiteral("lineWidthMenu"))) {
-              lwMenu = w;
               if (a->isVisible())
                 ++more;
             }
@@ -4351,7 +4546,7 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
              : (smoothInMenu &&
                 chipShown); // 평활은 어느 크기에서나 한 번에 닿는다
     const bool placeOk =
-        smoothOk && (wide ? (shown && more == 0) : (!shown && more == 2));
+        smoothOk && (wide ? (shown && more == 0) : (!shown && more == 1));
     // 폭: 입면 칸 전체(elevBlock)의 sizeHint 가 위 줄과 같아야(리본 폭 계산이
     // 그대로) · 아래 줄은 슬라이더 최소 폭까지 넣어도 위 줄 안
     auto *blk = ribbon_->findChild<QWidget *>(QStringLiteral("elevBlock"));
@@ -4373,7 +4568,12 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
           inside = false;
     }
     bool sync = false;
-    if (opRow && opMenu && lwMenu && row2) {
+    // 선 굵기 칩은 없어야 한다(도면 · 내보내기 0.8 pt 고정 — 사용자 2026-10-16)
+    int lwChips = 0;
+    for (auto *b : findChildren<QToolButton *>())
+      if (b->property("lineWidth").isValid())
+        ++lwChips;
+    if (opRow && opMenu && row2) {
       const int op0 = opRow->value();
       opRow->setValue(50); // 줄 → 메뉴 · 그리기 설정
       bool opOk = std::fabs(secStyle().imageOpacity - 0.5) < 1e-9 &&
@@ -4382,35 +4582,7 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
       opOk = opOk && std::fabs(secStyle().imageOpacity - 0.7) < 1e-9 &&
              opRow->value() == 70;
       opRow->setValue(op0);
-      const double lw0 =
-          QSettings()
-              .value(QStringLiteral("view/sectionLineWidth"), 2.0)
-              .toDouble();
-      auto chipOf = [](QWidget *host, double w) -> QToolButton * {
-        for (auto *b : host->findChildren<QToolButton *>())
-          if (std::fabs(b->property("lineWidth").toDouble() - w) < 0.01)
-            return b;
-        return nullptr;
-      };
-      QToolButton *r3 = chipOf(row2, 3.0), *m3 = chipOf(lwMenu, 3.0),
-                  *r15 = chipOf(row2, 1.5), *m15 = chipOf(lwMenu, 1.5);
-      const double hc = highContrast_ ? 1.5 : 1.0;
-      bool lwOk = false;
-      if (r3 && m3 && r15 && m15) {
-        r3->click(); // 줄 → 메뉴 · 그리기 설정
-        lwOk = std::fabs(secStyle().lineWidthPx - 3.0 * hc) < 1e-9 &&
-               m3->isChecked() && !m15->isChecked();
-        if (!wide) { // 메뉴 → 줄 · 그리기 설정: 메뉴 칸이 보이는
-                     // 크기에서만(넓은 창에서는 숨긴 QWidgetAction 칸의 click()
-                     // 이 먹지 않음 — 실측 2026-10-10)
-          m15->click();
-          lwOk = lwOk && std::fabs(secStyle().lineWidthPx - 1.5 * hc) < 1e-9 &&
-                 r15->isChecked() && !r3->isChecked();
-        }
-        if (QToolButton *back = chipOf(row2, lw0))
-          back->click(); // 되돌림
-      }
-      sync = opOk && lwOk;
+      sync = opOk && lwChips == 0;
     }
     const bool okr = row2 && placeOk && widthOk && inside && sync;
     L << QStringLiteral(
@@ -4747,13 +4919,14 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
 
   // 4h) 거리 눈금(T10 · 사용자 요청 「입면 토층도 그려야 할 때가 있다 — 체크
   // 표시를 볼 수 있게」): 입면 위에 세로 눈금(1 m · 5 m 굵게)을 그리고, D 키 ·
-  // 단면 머리 아이콘 · 「그릴 것 ▾」 메뉴로 켜고 끈다(기본 켬)
+  // 단면 머리 아이콘 · 「그릴 것 ▾」 메뉴로 켜고 끈다(기본 끔 — 사용자
+  // 2026-10-16 「단면도에 세로선은 없어도 될거같다」)
   {
     const auto ti = act_.find(QStringLiteral("ticks"));
     const bool act = ti != act_.end();
     const bool key =
         act && ti->second->shortcut() == QKeySequence(QStringLiteral("D"));
-    const bool on = act && ti->second->isChecked() && secStyle().showTicks;
+    const bool on = act && !ti->second->isChecked() && !secStyle().showTicks;
     bool hdr = false, menu = false;
     for (auto *b : secTitleBar_->findChildren<QToolButton *>(
              QStringLiteral("viewToggle")))
@@ -4765,7 +4938,7 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
         menu = mb->menu()->actions().contains(ti->second);
     const bool ticksOk = act && key && on && (hdr || menu);
     L << QStringLiteral(
-             "ui-audit dist-ticks action=%1 key-d=%2 on=%3 header=%4 menu=%5%6")
+             "ui-audit dist-ticks action=%1 key-d=%2 default-off=%3 header=%4 menu=%5%6")
              .arg(act ? 1 : 0)
              .arg(key ? 1 : 0)
              .arg(on ? 1 : 0)
@@ -5193,7 +5366,7 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
   // 목록 하나(판에 「평면도 | 단면도」 없음) · 흙색 주 단추 하나 ·
   //    알림은 「도면 점검」 상자 안에만(warnBox 없음) · 레벨선 pt 칸 둘 · 축척
   //    격자 8 · 종이 아래 도구 줄 6칸 · 떠 있는 「도면 보기」 1 · 점검 항목 3
-  //    이상 · 목록 줄 = 평면 1 + 단면 n
+  //    이상 · 목록 줄 = 평면 1 + 단면 n(+ 평·단면도 1)
   QString sheetLine = QStringLiteral("ui-audit sheet=not-checked");
   int listsMatch = -1;
   if (src_ && section_->hasResult()) {
@@ -5238,10 +5411,28 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
         if (w->isVisibleTo(page))
           rightW = w->width();
       const int sideW = sheetSide_ ? sheetSide_->width() : -1;
-      listsMatch =
-          sheetList_ && sheetList_->count() == 1 + int(sections_.size()) + 2
-              ? 1
-              : 0; // 절 이름 줄 「평면」 「단면」 2개 포함
+      // 절 이름 줄 「평면」 「단면」 2개 포함 + 단면이 있으면 「한 장」 절 이름 ·
+      // 평·단면도 줄 · 「따로 뽑기」 머리(2026-10-16). 평·단면도가 있으면 한 장씩 줄은
+      // 「따로 뽑기」 아래로 접힌다 — 접으면 셋만, 펼치면 다 보임
+      auto sheetRows = [&](bool open) {
+        return sections_.empty()
+                   ? 1 + 2
+                   : 3 + (open ? 1 + int(sections_.size()) + 2 : 0);
+      };
+      const bool keepOpen = sheetSeparateOpen_;
+      bool shownOk = false, closedOk = false, openOk = false;
+      if (sheetList_) {
+        shownOk = sheetList_->count() == sheetRows(sheetSeparateOpen_);
+        sheetSeparateOpen_ = false;
+        refreshSheetList();
+        closedOk = sheetList_->count() == sheetRows(false);
+        sheetSeparateOpen_ = true;
+        refreshSheetList();
+        openOk = sheetList_->count() == sheetRows(true);
+        sheetSeparateOpen_ = keepOpen;
+        refreshSheetList();
+      }
+      listsMatch = shownOk && closedOk && openOk ? 1 : 0;
       const bool sideWOk = sideW >= 160 && sheetSide_ &&
                            sheetSide_->minimumWidth() <= 200 &&
                            sheetSide_->maximumWidth() > 348;
@@ -5736,16 +5927,28 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
   int homeClipped = 0, homeTip = 0, homeMinW = -1, homeStale = -1,
       homeCells = 0, homeModeBad = 0;
   QStringList homeNames, homeAt, homeModes;
+  // 홈을 띄운 뒤 잠잠해질 때까지: 앞 단계가 요청한 단면 최종 결과가 늦게 오면
+  // updateHeader → refreshSteps 가 홈을 다시 그리고, 새 위젯은 다음 이벤트에야
+  // 보인다(그 사이에 재면 이어서 작업 칸이 「none」 — CI 4K ×2 에서 가끔). 한
+  // 번의 pump 동안 다시 그리기가 없을 때까지 기다린다(많아야 20번)
+  auto settleHome = [&] {
+    for (int i = 0; i < 20; ++i) {
+      const int b0 = startPageBuilds_;
+      pump(250);
+      if (startPageBuilds_ == b0)
+        break;
+    }
+  };
   auto measureHome = [&](const QString &st, bool stale) {
     if (!startPage_)
       return;
     showStart(true);
-    pump(250);
+    settleHome();
     if (stale) { // AC14: 홈을 두 번 그린 뒤(모델이 열린 채 showStart(true) 두
                  // 번) startPage_ 의 직접 자식 중 어느 레이아웃도 관리하지 않는
                  // 보이는 위젯 = 0 — deleteLater 대기분은 먼저 비운다
       showStart(true);
-      pump(250);
+      settleHome();
       QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
       std::function<bool(QLayout *, QWidget *)> managed =
           [&managed](QLayout *l, QWidget *w) -> bool {
@@ -6018,6 +6221,29 @@ bool MainWindow::uiAudit(const QString &dir, QString *out) {
            .arg(resized ? 1 : 0)
            .arg(narrowOk ? QString() : QStringLiteral("  FAIL"));
   ok &= narrowOk;
+
+  // SVG 레이어(사용자 2026-10-16 「단면선 빨간색은 0.8 · 해발선 0.5 · 0.2 레이어로」 · 「EL 삭제」): 평·단면도 SVG 를 실제로
+  // 저장해 맨 위 레이어 이름 · 선 굵기(종이 pt) · 「EL」 없음을 본다(CI 의 Qt 6.8 SVG 1.1 출력 — 잘림 <g> 포함 — 도 여기서 잰다)
+  if (src_ && !dir.isEmpty()) {
+    const std::vector<ComboSecInput> in = comboInputs();
+    QString rep = QStringLiteral("no-section");
+    bool svgOk = false;
+    if (!in.empty()) {
+      ComboSheetParams sp = defaultComboSheetParams();
+      sp.format = 4;
+      sp.dpi = 96; // 영상 해상도만 낮춰 빨리(레이어 · 굵기 판정과 무관)
+      const QString svg = QDir(dir).filePath(QStringLiteral("combo-layers.svg"));
+      QString m;
+      svgOk = exportComboSheet(*src_, in, sp, svg, &m);
+      if (svgOk)
+        svgOk = checkSvgLayers(svg, &rep, true);
+      else
+        rep = QStringLiteral("export-failed %1").arg(m.replace(QLatin1Char('\n'), QLatin1Char(' ')));
+    }
+    L << QStringLiteral("ui-audit svg-layers %1%2")
+             .arg(rep, svgOk ? QString() : QStringLiteral("  FAIL"));
+    ok &= svgOk;
+  }
 
   if (!dir.isEmpty())
     grab().save(QDir(dir).filePath(QStringLiteral("work.png")));

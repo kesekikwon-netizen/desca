@@ -240,6 +240,58 @@ bool renderPlan(const std::vector<MeshPtr>& meshes, double x0, double y1, double
     return true;
 }
 
+bool renderPlanFrame(const std::vector<MeshPtr>& meshes, double ax, double ay, double ux, double uy, double nx, double ny, double s0, double t1,
+                     double res, int W, int H, RgbaImage& out, const std::atomic<bool>* cancel) {
+    if (W <= 0 || H <= 0 || res <= 0) return false;
+    Raster R(W, H, out);
+    const double inv = 1.0 / res;
+    // 픽셀 = 아핀(로컬 x, y): X = (s − s0)/res, Y = (t1 − t)/res
+    const double pa = ux * inv, pb = uy * inv, pc = (-(ax * ux + ay * uy) - s0) * inv;
+    const double qa = -nx * inv, qb = -ny * inv, qc = (t1 + (ax * nx + ay * ny)) * inv;
+    PV pv[3];
+    for (auto& mp : meshes) {
+        if (cancel && cancel->load()) return false;
+        const Mesh& m = *mp;
+        if (m.bbox.valid()) {   // 상자 네 모서리를 픽셀로 옮겨 그림 밖이면 건너뜀
+            double x0 = 1e300, x1 = -1e300, y0 = 1e300, y1 = -1e300;
+            for (double x : {m.bbox.mn.x, m.bbox.mx.x})
+                for (double y : {m.bbox.mn.y, m.bbox.mx.y}) {
+                    const double X = pa * x + pb * y + pc, Y = qa * x + qb * y + qc;
+                    x0 = std::min(x0, X); x1 = std::max(x1, X); y0 = std::min(y0, Y); y1 = std::max(y1, Y);
+                }
+            if (x1 < 0 || y1 < 0 || x0 > W || y0 > H) continue;
+        }
+        const bool hasTex = m.texture && !m.texture->rgba.empty() && m.uv.size() == m.pos.size() / 3 * 2;
+        R.tex = hasTex ? &m.texture->rgba : nullptr;
+        const float* P = m.pos.data();
+        for (size_t t = 0; t < m.triangleCount(); ++t) {
+            uint32_t ix[3] = {m.idx[3 * t], m.idx[3 * t + 1], m.idx[3 * t + 2]};
+            for (int k = 0; k < 3; ++k) {
+                const float* p = P + 3 * ix[k];
+                const double x = p[0], y = p[1];
+                pv[k] = {pa * x + pb * y + pc, qa * x + qb * y + qc, -double(p[2]), hasTex ? m.uv[2 * ix[k]] : 0.0, hasTex ? m.uv[2 * ix[k] + 1] : 0.0};
+            }
+            if (!hasTex) R.shade = lambertShade(P + 3 * ix[0], P + 3 * ix[1], P + 3 * ix[2], 0.3, 0.4, 0.85);
+            R.tri(pv[0], pv[1], pv[2]);
+        }
+    }
+    return true;
+}
+
+bool renderPlanFrameStrips(const std::vector<MeshPtr>& meshes, double ax, double ay, double ux, double uy, double nx, double ny,
+                           double s0, double t1, double res, int W, int H, int stripRows,
+                           const std::function<bool(int, const RgbaImage&)>& sink, const std::atomic<bool>* cancel) {
+    if (W <= 0 || H <= 0 || res <= 0 || !sink) return false;
+    stripRows = std::max(1, stripRows);
+    for (int y0 = 0; y0 < H; y0 += stripRows) {
+        RgbaImage strip;   // 띠 위 모서리 t = t1 − y0·res: 띠의 j 행 = 전체의 y0 + j 행
+        if (!renderPlanFrame(meshes, ax, ay, ux, uy, nx, ny, s0, t1 - y0 * res, res, W, std::min(stripRows, H - y0), strip, cancel))
+            return false;
+        if (!sink(y0, strip)) return false;
+    }
+    return true;
+}
+
 bool bandZRange(const std::vector<MeshPtr>& meshes, const SectionFrame& f, double dNear, double dFar, double sMin, double sMax, double& zmin, double& zmax) {
     zmin = 1e300; zmax = -1e300;
     for (auto& mp : meshes) {

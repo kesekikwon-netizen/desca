@@ -129,6 +129,70 @@ struct PlanStrip {
   QImage img;
   double x0 = 0, y1 = 0, res = 0;
 };
+/// 평·단면도 한 장(2026-10-16, 사용자 「샘플 보고서 도면처럼 한 장에 축척 ·
+/// 방향을 맞춰」 · 「용지 크기는 신경 쓰지 말고 최적 크기로 배치만」): 평면(첫
+/// 단면이 가로가 되게 돌림)과 모든 단면을 같은 축척으로, 단면은 평면 단면선
+/// 가운데 화살표(바라보는 쪽) 방향에 놓는다(asec::layoutCombo). 종이 = 내용
+/// 크기(용지 맞춤 · 넘침 경고 없음). 형식 0 PDF 1 DXF 2 PNG 3 TIFF 4 SVG
+struct ComboSheetParams {
+  double denom = 30;
+  int format = 4;
+  double dpi = 600; // 저장 영상 dpi — 개별 도면과 같이 600 이상(prepareComboAssets 가 올림)
+  /// 용지(asec::ComboPaper): 0 = 내용 크기(기본), 1 A4 가로 · 2 A4 세로 · 3 A3 가로 · 4 A3 세로. 사용자 2026-10-16
+  /// 「용지방향이안돼」 → 카드 답 「둘 다」 — 용지 단추로 차례대로, 안 들어가면 들어가는 축척을 알림
+  int paper = 0;
+  double planMarginM = 1.0; // 평면 칸: 단면선 끝에서 더 보일 거리(m)
+  bool withPlanImage = true, withSectionImage = true, withLevels = true;
+  double lineWidthPx = 2.0; // 잘린 선 굵기(화면 설정 px → 인쇄 exportLineMm)
+  double imageOpacity = 1.0;
+  double levelMinorPt = 0.2, levelMajorPt = 0.5;
+  bool depthFade = false;
+  bool smooth = false; // 잘린 선 평활(화면 설정과 같게)
+  /// 평면 방향(2026-10-16, 사용자 「평면을 어떻게 놓을지 먼저 정한다」): 켜면 첫
+  /// 단면 기준 자동 회전 대신 rotationDeg(진북이 화면 위에서 시계 방향으로 돈
+  /// 각, PlanView::rotationDeg 와 같은 값)로 놓는다
+  bool useRotation = false;
+  double rotationDeg = 0;
+  QString title, srsLabel, date;
+};
+/// 한 단면의 입력(로컬 좌표 단면선 + 앞 · 뒤 깊이, 이름 "A–A′")
+struct ComboSecInput {
+  asec::SectionLine line;
+  QString name;
+  int index = -1; // sections_ 안 자리(도면에서 끈 단면선을 목록에 되돌려 쓸 곳)
+};
+struct ComboSecAsset {
+  asec::SectionResult r;
+  QImage img; // 입면 영상(그림 칸 s 0..L · 표고 범위로 잘라 둠). 없으면 비움
+  double imgS0 = 0, imgZ1 = 0, imgRes = 0; // z 로컬
+  QString nameA, nameB;
+  int input = -1; // 입력(ComboSecInput 목록) 안 자리 — 계산 못 한 단면은 빠지므로
+};
+struct ComboAssets {
+  std::vector<ComboSecAsset> secs;
+  /// 돌린 평면 영상(종이 방향): 왼쪽 위 = 돌린 좌표 (planS0, planT1), planRes
+  /// m/px. 만들 때의 평면 여유 planMarginM
+  QImage plan;
+  double planS0 = 0, planT1 = 0, planRes = 0, planMarginM = -1;
+  /// 평면 영상을 그린 돌린 틀(원점 · s 축 · t 축). 단면선을 끄는 동안 틀이 바뀌면
+  /// 이 틀에서 새 틀로 옮겨 그린다(놓으면 새 틀로 다시 그림)
+  double planAx = 0, planAy = 0, planUx = 1, planUy = 0, planNx = 0, planNy = 1;
+  asec::Vec3 origin;
+  QStringList skipped; // 메시와 만나지 않는 등으로 뺀 단면(「A–A′: 까닭」)
+};
+/// --combo-check: 평·단면도를 그릴 때 단면마다 그림 칸(s 0..L · 표고 범위)과
+/// 표고 글자 상자 — 그 단면 자리 좌표(종이 px, 돌리기 전)
+struct ComboPaintProbe {
+  struct Sec {
+    QRectF plot;
+    QList<QRectF> labels;
+  };
+  QList<Sec> secs;
+  QRectF plan, north; // 평면 칸 · 진북(원 + 「N」 외접 상자), 종이 px
+};
+/// 평·단면도 단면 영상의 품질: Final = 저장(dpi), Preview = 화면 미리보기(개별 도면 미리보기와 같은 해상도 · 잎),
+/// Drag = 도면에서 단면선 끝을 끄는 동안(거친 LOD — 빠르게)
+enum class ComboRes { Final, Preview, Drag };
 struct PointParams {
   asec::PointFormat format = asec::PointFormat::XYZ;
   int area = 0;
@@ -148,12 +212,29 @@ public:
       motion::kSplash; // 여는 화면 전체 길이(ms) — 한 곳. OpeningSplash::run ·
                        // --splash-live · --splash-shot 판정이 같은 값을 쓴다
                        // (T3: 1000)
+  // 여는 화면 창 크기(논리 px — 배율 150–200 % 에서는 Qt 가 그만큼 키운다). 처음
+  // 960×600 의 절반(사용자 2026-10-16 「로딩 모션그래픽 화면 50% 축소」)
+  static constexpr int kOpeningSplashW = 480, kOpeningSplashH = 300;
+  static constexpr int kSplashMinTextPx = 11; // 줄여도 글자는 이 크기 밑으로 안 내려감(앱 글자 체계의 가장 작은 11)
+  struct SplashTextProbe { // --splash-shot 이 글자 잘림 · 겹침 · 크기를 재는 기록
+    QList<QRectF> rects;   // 실제 글자 상자(논리 px)
+    QList<int> px;         // 글자 크기(px)
+    double bandTop = 0;    // 아래 띠 위 끝 — 본문 글은 이 위에
+    int bodyCount = 0;     // rects 앞쪽 bodyCount 개가 본문(띠 위) 글
+  };
+  // 둥근 모서리 반지름(논리 px, 480×300 에서) — 사용자 2026-10-16 「시작 화면 모서리 라운드로 하고 테두리를 고급스럽게」
+  static constexpr int kSplashCornerPx = 12;
+  /// 창 밖이 투명해질 수 있는 플랫폼인가(Windows 는 GPU 없이 · 원격 데스크톱에서도 층 창으로 됨).
+  /// 아니면 네모 모서리 + 같은 테두리
+  static bool splashRoundedSupported();
   static QImage renderOpeningSplash(
-      const QSize &size,
-      double t = 1.0); // t 0~1: 선 그림이 그려지는 정도(1 = 완성)
+      const QSize &size, double t = 1.0, double dpr = 1.0,
+      SplashTextProbe *probe = nullptr,
+      bool rounded = true); // t 0~1: 선 그림이 그려지는 정도(1 = 완성). size = 논리 px. rounded = 둥근 모서리(밖은 투명)
   static void paintOpeningSplash(
-      QPainter &p, const QSize &size,
-      double t); // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs, 1 초)
+      QPainter &p, const QSize &size, double t,
+      SplashTextProbe *probe = nullptr,
+      bool rounded = false); // 여는 화면 한 장면(t 0~1 = kOpeningSplashMs). rounded 면 그리는 곳이 ARGB 여야 함
   static QString resolveModelPath(
       const QString &path); // 폴더 경로면 내부 .3mx/.3sm/.obj 를 찾아 돌려줌
   static QString modelDisplayName(
@@ -267,6 +348,60 @@ public:
   };
   static SheetPreviewCounters sheetPreviewCounters();
   void dlgPlanSheet(); // 평면도 조판
+  // ---- 평·단면도 한 장(2026-10-16) ----
+  ComboSheetParams defaultComboSheetParams() const;
+  /// 단면 목록 전부(지금 단면선을 먼저 목록에 맞춤). 첫 단면이 평면 회전 기준
+  std::vector<ComboSecInput> comboInputs();
+  void dlgComboSheet();
+  /// 단면마다 잘린 선 · 입면 영상(q = 저장 · 미리보기 · 끄는 중)
+  static bool computeComboSections(asec::MeshSource &src,
+                                   const std::vector<ComboSecInput> &in,
+                                   const ComboSheetParams &sp, ComboRes q,
+                                   ComboAssets &out, QString *msg,
+                                   const std::atomic<bool> *cancel = nullptr,
+                                   const std::function<void(double)> &progress = {});
+  /// 돌린 평면 영상(out.secs 가 있어야 함). res = m/px
+  static bool renderComboPlan(asec::MeshSource &src, const ComboSheetParams &sp,
+                              double res, ComboAssets &out, QString *msg,
+                              const std::atomic<bool> *cancel = nullptr);
+  static asec::ComboLayout comboLayoutFor(const ComboAssets &a,
+                                          const ComboSheetParams &sp,
+                                          const asec::ComboLayout *keepFrame = nullptr);
+  /// minLinePx = 화면 미리보기에서 선이 이보다 가늘지 않게(저장은 0 — 종이
+  /// 굵기 그대로)
+  /// layout 을 주면 그 배치로(끄는 동안 틀을 붙든 배치), hideLine = 평면에서
+  /// 그리지 않을 단면선(끄는 중인 선 — 화면이 따로 그림)
+  static void paintComboSheet(QPainter &p, const ComboAssets &a,
+                              const ComboSheetParams &sp, double pxPerMm,
+                              double minLinePx = 0,
+                              const asec::ComboLayout *layout = nullptr,
+                              int hideLine = -1,
+                              ComboPaintProbe *probe = nullptr);
+  /// 저장할 때의 영상(입면 · 평면)을 만든다 — exportComboSheet 와 점검이 같이 씀.
+  /// sp 는 저장 때 값으로 고쳐 돌려준다(축척 정수 · dpi)
+  static bool prepareComboAssets(asec::MeshSource &src,
+                                 const std::vector<ComboSecInput> &in,
+                                 ComboSheetParams &sp, ComboAssets &a,
+                                 QString *msg,
+                                 const std::atomic<bool> *cancel = nullptr,
+                                 const std::function<void(double)> &progress = {});
+  /// 화면 미리보기의 평면 영상 해상도(m/px) — 평·단면도 미리보기가 쓴다
+  static double comboPreviewPlanRes(const ComboAssets &a,
+                                    const ComboSheetParams &sp);
+  /// --combo-check DIR(종료 코드 18): 표고 글자가 그림 칸 밖인지 · 평·단면도
+  /// 영상이 개별 도면만큼 촘촘한지(저장 · 화면 미리보기)
+  bool runComboCheck(const QString &outDir, QString *log);
+  static bool exportComboSheet(asec::MeshSource &src,
+                               const std::vector<ComboSecInput> &in,
+                               const ComboSheetParams &sp, const QString &path,
+                               QString *msg,
+                               const std::atomic<bool> *cancel = nullptr,
+                               const std::function<void(double)> &progress = {});
+  /// 저장한 SVG 의 레이어 점검(시험 장치 — --ui-audit · --sheet-check): 맨 위 <g> 가 모두 레이어(0.2 · 0.5 · 이미지 · 틀 ·
+  /// 0.8 · 글자, inkscape · 일러스트레이터 이름), 0.8 · 0.5 · 0.2 안의 선이 빨강 0.8 pt · 해발선 0.5 · 0.2 pt(종이 위), 「EL」 글자
+  /// 없음. needLevels 면 0.8 · 0.5 · 0.2 가 비면 안 된다. report 에 레이어별 개수 · 잰 pt
+  static bool checkSvgLayers(const QString &path, QString *report,
+                             bool needLevels);
   QDialog *buildSheetDialog(SheetParams &io,
                             bool &accepted); // 자동화(창 캡처)에서도 씀
   QDialog *buildPlanSheetDialog(PlanSheetParams &io, const QImage &preview,
@@ -279,6 +414,11 @@ public:
   /// 버그)
   static void clearLayout(QLayout *lay);
   bool undoTest(QString *log); // 자동화: 되돌리기/다시 점검
+  bool planRotateTest(QString *log); // 자동화: 평면 방향(다이얼 · 두 점 맞춤) 점검
+  /// 자동화(--combo-drag px, 종료 코드 14): 열린 평·단면도에서 기준 단면 A′ 끝을
+  /// 가로로 px 만큼 끌고 놓아, 단면 목록 · 되돌리기 · 다시 배치가 끈 만큼 바뀌는지
+  bool comboDragTest(double dxPx, QString *log);
+  bool comboDialTest(double deg, QString *log);
   bool uiAudit(const QString &dir,
                QString *log); // 자동화(v4 단계 1): 같은 일 단추 겹침 · 자리
                               // 규칙 잠금 시험
@@ -417,6 +557,9 @@ private:
   QPointer<QWidget> sheetSide_;
   QPointer<class QListWidget> sheetList_;
   bool sheetIsPlan_ = false;
+  bool sheetIsCombo_ = false; // 지금 조판 = 평·단면도 한 장(목록 맨 위 줄)
+  bool sheetSeparateOpen_ = false; // 평·단면도가 있을 때 「따로 뽑기」(평면 · 단면 한 장씩) 펼침
+  std::shared_ptr<ComboSheetParams> lastCombo_;
   std::shared_ptr<SheetParams>
       lastSheet_; // 지금 조판의 단면도 설정(다른 단면으로 갈 때 용지·넣을
                   // 것·형식을 이어 감)
@@ -427,6 +570,8 @@ private:
                                    // 단면) — 「n장 저장」
   std::function<void()>
       onSheetChecksChanged_; // 열린 조판 판이 「n장」 글을 고치게
+  /// 열린 평·단면도가 평면 방향을 따라가게(평면 화면 다이얼 · 각도 칸 · 되돌리기). final = 놓음
+  std::function<void(bool final)> comboRotHook_;
   QPointer<QLabel> sheetCount_;
   QPointer<QLabel> sheetDoneLabel_; // 조판 판 바닥 「n장 저장됨 · 폴더
                                     // 열기」(열린 조판의 것)
@@ -444,6 +589,8 @@ private:
   void showWorkTab();
   void saveEmbeddedSheet();
   QWidget *startPage_ = nullptr;
+  int startPageBuilds_ = 0; // rebuildStartPage 횟수(감사: 늦게 온 결과가 홈을
+                            // 다시 그렸는지)
   QWidget *workArea_ = nullptr;
   class GuideBand *guide_ = nullptr;       // 평면 위 떠 있는 안내(그리는 동안)
   class FloatButtons *undoBtns_ = nullptr; // 안내 오른쪽 되돌리기 · 다시
@@ -549,13 +696,7 @@ private:
   QWidget *elevRow2_ =
       nullptr; // 리본 입면 아래 줄: 영상 불투명도 · 단면선 굵기(사용자 지시
                // 2026-10-10 「더보기 안의 … 입면 밑으로」)
-  QWidget *lineWidthMenu_ = nullptr; // 더보기 안의 단면선 굵기 칩
-  QAction *opacityMenuAct_ = nullptr,
-          *lineWidthMenuAct_ =
-              nullptr; // 더보기 안의 두 칸(아래 줄이 보이면 숨김)
-  std::vector<QToolButton *>
-      lineWidthChips_; // 단면선 굵기 칩 전부(아래 줄 · 더보기) — 하나를 누르면
-                       // 함께 맞춤
+  QAction *opacityMenuAct_ = nullptr; // 입면 ▾ 안의 불투명도 칸(아래 줄이 보이면 숨김)
   void setSectionLineWidth(double px);
   bool drawEnded_ = false; // 방금 그리기를 마침(다음 단면 결과를 맞춤으로)
   bool highContrast_ = false;
@@ -569,6 +710,8 @@ public:
     bool image = true, profile = true, levels = true, ticks = true,
          fade = false, smooth = false;
     int current = 0;
+    double rot = 0;      // 평면 방향(진북이 화면 위에서 시계 방향으로 돈 각, 2026-10-16)
+    bool rotSet = false; // 사용자가 방향을 정함(평·단면도가 이 방향을 쓴다)
     bool operator==(const ViewState &o) const;
   };
   ViewState captureState() const;
@@ -576,7 +719,14 @@ public:
   void commitState(const QString &text, int mergeId = -1);
   QUndoStack *undoStack() const { return undo_; }
 
+  /// 평면 방향을 바꿈(다이얼 · 두 점 맞춤 · 각도 칸 · 도면 다이얼). final 이면 되돌리기 한 칸 + 프로젝트 저장
+  void setPlanRotation(double deg, bool final);
+  bool planRotationSet() const { return planRotSet_; }
+
 private:
+  bool planRotSet_ = false;               // 사용자가 평면 방향을 정함(아니면 평·단면도는 첫 단면 기준 자동)
+  QDoubleSpinBox *rotSpin_ = nullptr; // 평면 머리의 각도 칸
+  void syncRotationUi();
   ViewState lastState_;
   bool applyingState_ = false;
   // ---- 단면 목록(P1-1): 실좌표, 설정(모델 경로 키)에 저장

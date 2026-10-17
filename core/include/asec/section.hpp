@@ -115,6 +115,25 @@ double profileRelief(const std::vector<Polyline>& profile);
 /// minGap(m) 이하의 아주 짧은 틈은 버린다. 결과는 s 오름차순.
 struct SGap { double s0 = 0, s1 = 0; };
 std::vector<SGap> profileGaps(const std::vector<Polyline>& profile, double length, double minGap = 0.02);
+/// 레벨선 정리(2026-10-16, 사용자 샘플 보고서 도면 9장): 레벨선은 잘린 선(발굴된 지면) 아래 땅속에만 긋는다.
+/// 땅속 = 열린 잘린 선과 그 양 끝에서 곧장 아래로 내린 선으로 닫은 영역. 높이 z 의 선은 그 영역 안 s 구간에만 —
+/// 지면 위 공기 · 파낸 수혈 속 · 처마처럼 뒤로 기운 벽 아래 빈 곳(빨간 선 위)에는 없고, 끝점은 늘 잘린 선 위(2026-10-16 고침).
+/// 수혈 바닥보다 깊은 선은 끝까지 이어짐. 닫힌 고리(돌 · 덤불)는 보지 않는다. 잘린 선이 없는 빈 구간에도 긋지 않는다.
+/// 결과는 [s0, s1] 안, s 오름차순 · 겹침 없음
+std::vector<SGap> levelLineSpans(const std::vector<Polyline>& profile, double z, double s0, double s1);
+/// 표고 글자 자리(2026-10-16, 사용자 「해발선이 50cm마다 표시되어야 한다」): everyCm(기본 50) 배수의 레벨선마다 하나.
+/// 땅속 구간(levelLineSpans, [0, L])이 없는 선은 뺀다. 첫 땅속 구간이 단면 시작(s ≤ 1 mm)에 닿으면 atStart(글자는 A 끝 왼쪽 밖),
+/// 아니면 s0 = 그 구간 시작(글자는 그 선 위). 열린 잘린 선이 없으면(레벨선을 통째로 긋는 경우) 모두 atStart.
+/// zMinLocal · zMaxLocal = 로컬 표고 범위, oz = 원점 높이(cm 정수 산술은 절대 표고로). 결과는 낮은 선부터
+struct LevelLabelSpot { long cm = 0; double zAbs = 0; double s0 = 0; bool atStart = false; };
+std::vector<LevelLabelSpot> levelLabelSpots(const std::vector<Polyline>& profile, double zMinLocal, double zMaxLocal, double oz, double L,
+                                            int everyCm = 50);
+/// 표고 숫자 배치(사용자 2026-10-16 「0.5 m 마다 해발값은 꼭 들어가야 한다」): 숫자는 50 cm 마다가 원칙이고, 50 cm 의 간격(gap50)이
+/// 글자 한 줄 높이(textH, 여유 포함 · 같은 단위)보다 좁으면 ① 글자를 조금 줄이고(0.8 배까지) ② 그래도 모자라면 왼쪽 · 오른쪽 번갈아
+/// 쓰고(같은 쪽 간격 1 m, allowAlternate 일 때) ③ 그래도 모자라면 더 줄인다(minScale 까지). 그래도 안 들어가는 아주 작은 축척에서만
+/// 1 m → 5 m → 10 m 로 솎는다. scale = 글자 크기 배율(≤ 1), alternate = 번갈아 쓰기
+struct LevelLabelFit { int labelCm = 50; bool alternate = false; double scale = 1.0; };
+LevelLabelFit fitLevelLabels(double gap50, double textH, bool allowAlternate = true, double minScale = 0.6);
 /// 화면 세로 과장 추천(1·2·5·10): 기복이 보이는 높이 visibleZ(m, 1:1 일 때)의 15% 이상 차지하는 가장 작은 배율.
 /// 기복 없음·보이는 높이 없음이면 1. 화면 보기 전용 — 도면·내보내기는 언제나 1:1
 int suggestVerticalExaggeration(double relief, double visibleZ);

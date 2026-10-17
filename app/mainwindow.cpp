@@ -381,6 +381,9 @@ void MainWindow::updateEnabled() {
           2; // 입면 묶음은 도면 탭에서도 쓴다(조판이 따라옴 — 2026-10-11)
   for (const char *k : {"fit", "top", "zoomin", "zoomout"})
     action(k)->setEnabled(sc && !(busy && QString(k) != "fit"));
+  action("align2")->setEnabled(sc && !busy); // 평면 방향(표시만 — 계산 중에도 되지만 단면 그리기와 겹치지 않게)
+  if (rotSpin_)
+    rotSpin_->setEnabled(sc);
   action("close")->setEnabled(sc && !busy);
   for (const char *k : {"projsave", "projsaveas"})
     action(k)->setEnabled(sc && !busy);
@@ -407,8 +410,7 @@ void MainWindow::updateEnabled() {
       c->setEnabled(sc && elevCtx);
   if (depthBox_)
     depthBox_->setEnabled(sc && elevCtx);
-  for (QWidget *wd :
-       {elevRow2_, static_cast<QWidget *>(opacityMenu_), lineWidthMenu_})
+  for (QWidget *wd : {elevRow2_, static_cast<QWidget *>(opacityMenu_)})
     if (wd)
       wd->setEnabled(
           sc && elevCtx); // 입면 아래 줄 · 입면 ▾ 안의 같은 칸도 입면 칸과 같이
@@ -572,6 +574,9 @@ void MainWindow::closeScene() {
   current_ = -1;
   refreshSectionList();
   undo_->clear();
+  plan_->setRotationDeg(0); // 평면 방향은 모델마다
+  planRotSet_ = false;
+  syncRotationUi();
   setWindowTitle(QStringLiteral("Trench %1").arg(QString::fromUtf8(kVersion)));
   discardSheetTab(); // 옛 모델의 「도면」 탭 · 조판 위젯이 남지 않게(검토 I4)
   showStart(true);
@@ -632,6 +637,7 @@ static SectionRequest makeRequest(const SectionLine &line, bool smooth,
   static const bool coarseCut =
       qEnvironmentVariableIntValue("SECTIONVIEWER_COARSE_PREVIEW_CUT") == 1;
   rq.leafProfileAlways = !coarseCut;
+  rq.zRangeFromProfile = true; // 표고 범위 = 잘린 선 ±10 cm 선(사용자 2026-10-16)
   return rq;
 }
 
@@ -796,6 +802,7 @@ bool MainWindow::exportSectionImage(const SectionDoc &doc0, MeshSource &src,
   // 1) 출력 해상도 그대로 입면 영상 다시 그리기(같은 단면선·정리 → 같은 윤곽)
   SectionRequest rq;
   rq.line = doc.r.line;
+  rq.zRangeFromProfile = true;
   rq.cleanup.smooth = false;
   rq.depthFade = doc.st.depthFade ? kDepthFade : 0.0;
   rq.imageRes = res;
@@ -896,10 +903,12 @@ bool MainWindow::exportSectionDxf(const SectionDoc &doc, MeshSource &src,
   o.scaleDenom = p.denom;
   o.levelMinorPt = clampLineWeightPt(p.levelMinorPt);
   o.levelMajorPt = clampLineWeightPt(p.levelMajorPt);
+  o.levelsBelowGround = doc.st.levelsBelowGround;
   QString pngName;
   if (p.image) {
     SectionRequest rq;
     rq.line = doc.r.line;
+    rq.zRangeFromProfile = true;
     rq.imageRes = groundResolution(p.denom, p.imageDpi);
     rq.depthFade = doc.st.depthFade ? kDepthFade : 0.0;
     rq.maxImagePixels = size_t(80) << 20;
@@ -942,8 +951,8 @@ bool MainWindow::exportSectionDxf(const SectionDoc &doc, MeshSource &src,
     nv += pl.size();
   if (msg)
     *msg = QStringLiteral(
-               "%1%2\n\n%3 · 단면선 %4개(%5점), 레이어 SECTION_PROFILE = "
-               "빨강(1)\n레벨선 10 cm / 50 cm / 1 m, 표고 라벨, 축, A·A′ 표시")
+               "%1%2\n\n%3 · 단면선 %4개(%5점), 레이어 0.8 = "
+               "빨강(1)\n레벨선 레이어 0.2(10 cm) · 0.5(50 cm · 1 m), 표고 라벨, 축, A·A′ 표시")
                .arg(QFileInfo(path).fileName(),
                     pngName.isEmpty() ? QString() : ", " + pngName,
                     p.world3d ? QStringLiteral("3D 실좌표(EPSG) 배치")
@@ -1378,8 +1387,8 @@ void MainWindow::dlgSectionDxf() {
     double denom = sr.denom(), dpi = sr.dpi->value();
     calc->setText(
         QStringLiteral("문자 높이 2 mm × 1/%1 = <b>%2 m</b> · 영상 픽셀 <b>%3 "
-                       "mm</b><br>레이어: SECTION_PROFILE(빨강 1), LEVEL_10CM "
-                       "/ 50CM / 1M, LEVEL_TEXT, SECTION_AXIS, SECTION_IMAGE")
+                       "mm</b><br>레이어: 0.8(빨간 단면선), 0.5(50 cm · 1 m 레벨선), "
+                       "0.2(10 cm 레벨선), LEVEL_TEXT, SECTION_AXIS, SECTION_IMAGE")
             .arg(denom, 0, 'f', 0)
             .arg(0.002 * denom, 0, 'f', 3)
             .arg(mm(groundResolution(denom, dpi))));
@@ -1655,9 +1664,12 @@ void MainWindow::dlgInfo() {
 // 단면선이 벽면을 따라 그어지고 → 「rench」 가 들어와 Trench 가 완성된다. t 0~1
 // = 전체 길이. 시간표(t): 타일 0–.14 · 지표선 .02–.14 · 파기 .12–.50 · 단면선
 // .45–.85 · 「rench」 .55–.80 · 부제 .80–1.0 (모두 OutCubic). 값은 960×600
-// 기준을 k = 너비/960 으로 키운다. 끝 장면(t ≥ .85)의 타일은 앱 아이콘
-// 그림(kerf::appPixmap) 그대로 — 아이콘과 한 SVG 에서 나온다.
-void MainWindow::paintOpeningSplash(QPainter &p, const QSize &sz, double t) {
+// 기준을 k = 너비/960 으로 맞춘다(창은 그 절반 480×300). 글자는
+// kSplashMinTextPx 밑으로 줄지 않고, 글 줄은 실제 글자 높이만큼 내려 쌓는다
+// (줄여도 잘림 · 겹침 없음 — --splash-shot 이 잰다). 끝 장면(t ≥ .85)의 타일은 앱
+// 아이콘 그림(kerf::appPixmap) 그대로 — 아이콘과 한 SVG 에서 나온다.
+void MainWindow::paintOpeningSplash(QPainter &p, const QSize &sz, double t,
+                                    SplashTextProbe *probe, bool rounded) {
   t = std::clamp(t, 0.0, 1.0);
   // 그림 움직임은 전체 5 초 중 앞 2 초(tm 0→1)에 끝나고, 그 뒤는 끝 장면 +
   // 저작권 줄을 보인다. 진행 막대·상태 글의 시계는 t(실제 시간)
@@ -1762,57 +1774,127 @@ void MainWindow::paintOpeningSplash(QPainter &p, const QSize &sz, double t) {
                QStringLiteral("rench"));
     p.setOpacity(1.0);
   }
-  // 3) 부제(마지막 .2 초에 나타남)
+  // 글자: 960 기준 크기 × k, 하지만 kSplashMinTextPx 밑으로는 안 줄인다. 줄 높이는
+  // 디자인 높이와 실제 글자 높이 중 큰 것(480×300 에서 줄끼리 겹치지 않게)
+  auto textFont = [&](int base) {
+    return theme::uiFont(
+        std::max(kSplashMinTextPx, int(std::lround(base * k))));
+  };
+  auto lineH = [&](const QFont &f, double designH) {
+    return std::max(designH, QFontMetricsF(f).height());
+  };
+  auto text = [&](const QRectF &r, int flags, const QString &s) {
+    QRectF br;
+    p.drawText(r, flags, s, &br);
+    if (probe) {
+      probe->rects << br;
+      probe->px << p.font().pixelSize();
+    }
+  };
+  // 4) 아래 기반암 띠 높이(글자가 최소 크기로 커지면 띠도 커진다). 960 에서 72
+  const QFont fStatus = textFont(14), fFoot = textFont(12);
+  const double statusH = lineH(fStatus, 24 * k), footH = lineH(fFoot, 22 * k);
+  const double bandH = 8 * k + statusH + 2 * k + footH + 16 * k;
+  const double bandTop = im.height() - bandH;
+  // 3) 부제(마지막 .2 초에 나타남) · 저작권 · 외부 구성요소(사용자 요청
+  // 2026-10-11) — 위에서부터 쌓고, 구성요소 줄은 폭이 모자라면 줄을 바꾼다
   if (sub > 0) {
     p.setOpacity(sub);
-    p.setFont(theme::uiFont(int(std::lround(16 * k))));
+    const QFont fSub = textFont(16), fSmall = textFont(12);
+    const double hSub = lineH(fSub, 24 * k), hCopy = lineH(fSmall, 20 * k);
+    const QString parts = QStringLiteral("사용 구성요소: ") + thirdPartyLine();
+    const double wParts = im.width() - 110 * k - 24 * k;
+    const double hParts = std::max(
+        lineH(fSmall, 20 * k),
+        QFontMetricsF(fSmall)
+            .boundingRect(QRectF(0, 0, wParts, 1e4),
+                          Qt::AlignLeft | Qt::TextWordWrap, parts)
+            .height());
+    // 960 에서는 392 그대로. 글이 커져 띠에 닿으면 위로 올리되 타일 아래(340)는
+    // 넘지 않는다
+    const double bodyH = hSub + 4 * k + hCopy + hParts;
+    double y = std::max(348 * k, std::min(392 * k, bandTop - 8 * k - bodyH));
+    p.setFont(fSub);
     p.setPen(theme::Muted);
-    p.drawText(QRectF(110 * k, 392 * k, 780 * k, 24 * k),
-               Qt::AlignLeft | Qt::AlignVCenter,
-               QStringLiteral("발굴 평·단면 · 3MX · 3SM · OBJ 실사 메시 · %1")
-                   .arg(QString::fromUtf8(kVersion)));
-    // 저작권 · 가져다 쓴 외부 구성요소(사용자 요청 2026-10-11)
-    p.setFont(theme::uiFont(int(std::lround(12 * k))));
+    text(QRectF(110 * k, y, 780 * k, hSub), Qt::AlignLeft | Qt::AlignVCenter,
+         QStringLiteral("발굴 평·단면 · 3MX · 3SM · OBJ 실사 메시 · %1")
+             .arg(QString::fromUtf8(kVersion)));
+    y += hSub + 4 * k;
+    p.setFont(fSmall);
     p.setPen(theme::Faint);
-    p.drawText(QRectF(110 * k, 420 * k, 800 * k, 20 * k),
-               Qt::AlignLeft | Qt::AlignVCenter,
-               copyrightLine() + QStringLiteral(" · 모든 권리 보유"));
-    p.drawText(QRectF(110 * k, 440 * k, 800 * k, 20 * k),
-               Qt::AlignLeft | Qt::AlignVCenter,
-               QStringLiteral("사용 구성요소: ") + thirdPartyLine());
+    text(QRectF(110 * k, y, 800 * k, hCopy), Qt::AlignLeft | Qt::AlignVCenter,
+         copyrightLine() + QStringLiteral(" · 모든 권리 보유"));
+    y += hCopy;
+    text(QRectF(110 * k, y, wParts, hParts),
+         Qt::AlignLeft | Qt::AlignVCenter | Qt::TextWordWrap, parts);
     p.setOpacity(1.0);
+  }
+  if (probe) {
+    probe->bandTop = bandTop;
+    probe->bodyCount = int(probe->rects.size());
   }
   // 4) 아래 기반암 띠 + 상태 글(.30 · .85 에서 바뀜) + 진행 막대(맨 위 3 px, 1
   // 초 시계)
-  p.fillRect(QRectF(0, im.height() - 72 * k, im.width(), 72 * k),
-             QColor(0x26, 0x26, 0x24));
+  p.fillRect(QRectF(0, bandTop, im.width(), bandH), QColor(0x26, 0x26, 0x24));
   p.setPen(theme::Ground);
-  p.setFont(theme::uiFont(int(std::lround(14 * k))));
+  p.setFont(fStatus);
   const QString status = tm >= 0.85 ? QStringLiteral("준비 완료")
                          : tm >= 0.30
                              ? QStringLiteral("잠시 후 화면이 열립니다")
                              : QStringLiteral("앱을 준비하고 있습니다");
-  p.drawText(QRectF(48 * k, im.height() - 64 * k, 500 * k, 24 * k),
-             Qt::AlignLeft | Qt::AlignVCenter, status);
+  const double statusTop = bandTop + 8 * k, footTop = statusTop + statusH + 2 * k;
+  text(QRectF(48 * k, statusTop, 500 * k, statusH),
+       Qt::AlignLeft | Qt::AlignVCenter, status);
   p.setPen(theme::Edge);
-  p.setFont(theme::uiFont(int(std::lround(12 * k))));
-  p.drawText(QRectF(48 * k, im.height() - 38 * k, 700 * k, 22 * k),
-             Qt::AlignLeft | Qt::AlignVCenter,
-             QStringLiteral("원본 파일은 바꾸지 않습니다 · Esc = 건너뜀"));
-  p.drawText(
-      QRectF(im.width() - 420 * k, im.height() - 38 * k, 372 * k, 22 * k),
-      Qt::AlignRight | Qt::AlignVCenter,
-      copyrightLine() + QStringLiteral(" · Trench · Qt %1")
-                            .arg(QString::fromLatin1(qVersion())
-                                     .section(QLatin1Char('.'), 0, 1)));
-  p.fillRect(QRectF(0, im.height() - 72 * k, im.width() * t, 3 * k),
-             theme::Action);
+  p.setFont(fFoot);
+  text(QRectF(48 * k, footTop, 700 * k, footH), Qt::AlignLeft | Qt::AlignVCenter,
+       QStringLiteral("원본 파일은 바꾸지 않습니다 · Esc = 건너뜀"));
+  text(QRectF(im.width() - 420 * k, footTop, 372 * k, footH),
+       Qt::AlignRight | Qt::AlignVCenter,
+       copyrightLine() + QStringLiteral(" · Trench · Qt %1")
+                             .arg(QString::fromLatin1(qVersion())
+                                      .section(QLatin1Char('.'), 0, 1)));
+  p.fillRect(QRectF(0, bandTop, im.width() * t, 3 * k), theme::Action);
+
+  // 5) 둥근 모서리 · 테두리(사용자 2026-10-16 「시작 화면 모서리 라운드로 하고 테두리를 고급스럽게」).
+  // 모서리 밖은 부드럽게 지운다(Clear + 안티앨리어싱 — 잘라내기 경로는 계단이 생김). 테두리는 두 겹의 가는 선:
+  // 바깥 = 먹색 반투명(크림 위에서 윤곽), 안쪽 = 흰 반투명(어두운 띠 위에서 빛 받은 가장자리)
+  p.save();
+  p.setRenderHint(QPainter::Antialiasing);
+  const QRectF box(im);
+  const double R = rounded ? kSplashCornerPx * im.width() / double(kOpeningSplashW) : 0.0;
+  if (rounded) {
+    QPainterPath outside;
+    outside.setFillRule(Qt::OddEvenFill);
+    outside.addRect(box);
+    outside.addRoundedRect(box, R, R);
+    p.setCompositionMode(QPainter::CompositionMode_Clear);
+    p.fillPath(outside, Qt::black);
+    p.setCompositionMode(QPainter::CompositionMode_SourceOver);
+  }
+  p.setBrush(Qt::NoBrush);
+  p.setPen(QPen(QColor(0x14, 0x14, 0x13, 105), 1.0));
+  p.drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), std::max(0.0, R - 0.5),
+                    std::max(0.0, R - 0.5));
+  p.setPen(QPen(QColor(255, 255, 255, 80), 1.0));
+  p.drawRoundedRect(box.adjusted(1.5, 1.5, -1.5, -1.5), std::max(0.0, R - 1.5),
+                    std::max(0.0, R - 1.5));
+  p.restore();
 }
 
-QImage MainWindow::renderOpeningSplash(const QSize &size, double t) {
-  QImage im(size.isEmpty() ? QSize(960, 600) : size, QImage::Format_RGB32);
+bool MainWindow::splashRoundedSupported() {
+  return QGuiApplication::platformName() == QLatin1String("windows");
+}
+
+QImage MainWindow::renderOpeningSplash(const QSize &size, double t, double dpr,
+                                       SplashTextProbe *probe, bool rounded) {
+  const QSize logical =
+      size.isEmpty() ? QSize(kOpeningSplashW, kOpeningSplashH) : size;
+  QImage im(logical * dpr, QImage::Format_ARGB32_Premultiplied);
+  im.setDevicePixelRatio(dpr);
+  im.fill(Qt::transparent);
   QPainter p(&im);
-  paintOpeningSplash(p, im.size(), t);
+  paintOpeningSplash(p, logical, t, probe, rounded);
   return im;
 }
 

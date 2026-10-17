@@ -155,11 +155,19 @@ bool computeSection(MeshSource& src, const SectionRequest& rq, SectionOutput& ou
 
     double zmin = 1e300, zmax = -1e300;
     for (auto& pl : out.result.profile) for (auto& p : pl) { zmin = std::min(zmin, p.y); zmax = std::max(zmax, p.y); }
+    out.result.zMinCut = zmin; out.result.zMaxCut = zmax;   // 잘린 선만(없으면 zMaxCut < zMinCut)
     double bz0, bz1;
-    if (bandZRange(meshes, f, -rq.line.front, rq.line.back, 0.0, f.L, bz0, bz1)) { zmin = std::min(zmin, bz0); zmax = std::max(zmax, bz1); }
+    const bool haveBand = bandZRange(meshes, f, -rq.line.front, rq.line.back, 0.0, f.L, bz0, bz1);
+    if (haveBand && !(rq.zRangeFromProfile && zmax >= zmin)) { zmin = std::min(zmin, bz0); zmax = std::max(zmax, bz1); }
     if (zmax < zmin) { if (err) *err = "단면선이 메시와 만나지 않습니다"; return false; }
-    out.result.zMin = std::floor((zmin - rq.zMargin) * 10.0) / 10.0;
-    out.result.zMax = std::ceil((zmax + rq.zMargin) * 10.0) / 10.0;
+    if (rq.zRangeFromProfile && out.result.zMaxCut >= out.result.zMinCut) {
+        const double oz = src.srs.origin.z;   // 10 cm 레벨선은 절대 표고 기준
+        out.result.zMax = std::ceil((out.result.zMaxCut + oz) * 10.0 - 1e-6) / 10.0 - oz;
+        out.result.zMin = std::floor((out.result.zMinCut + oz) * 10.0 + 1e-6) / 10.0 - std::max(0.0, rq.zBelowM) - oz;
+    } else {
+        out.result.zMin = std::floor((zmin - rq.zMargin) * 10.0) / 10.0;
+        out.result.zMax = std::ceil((zmax + rq.zMargin) * 10.0) / 10.0;
+    }
 
     if (rq.wantImage) {
         auto t2 = clk::now();

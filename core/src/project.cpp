@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 
 #include "json.hpp"
 
@@ -90,6 +91,8 @@ std::string projectToJson(const ProjectDoc &p) {
   if (p.hasCamera)
     j["camera"] = {
         {"x", p.camX}, {"y", p.camY}, {"metersPerPixel", p.metersPerPixel}};
+  if (p.hasPlanRotation)
+    j["planRotation"] = {{"deg", p.planRotationDeg}};
   if (p.sectionSheet.present)
     j["sectionSheet"] = sheetToJson(p.sectionSheet);
   if (p.planSheet.present)
@@ -181,6 +184,14 @@ bool projectFromJson(const std::string &text, ProjectDoc &out,
     out.camY = cam.value("y", 0.0);
     out.metersPerPixel = cam.value("metersPerPixel", 0.0);
     out.hasCamera = out.metersPerPixel > 0;
+  }
+  const auto rot = j.value("planRotation", nlohmann::json::object());
+  if (rot.is_object() && rot.contains("deg") && rot["deg"].is_number()) {
+    const double d = rot["deg"].get<double>();
+    if (std::isfinite(d)) {
+      out.hasPlanRotation = true;
+      out.planRotationDeg = d;
+    }
   }
   if (j.contains("sectionSheet"))
     out.sectionSheet = sheetFromJson(j["sectionSheet"]);

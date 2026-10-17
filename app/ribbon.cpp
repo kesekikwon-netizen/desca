@@ -105,6 +105,11 @@ QToolButton* Ribbon::addAction(const QString& groupId, QAction* a, kerf::ChipKin
     while (f.pixelSize() > kMinFontPx && QFontMetrics(f).horizontalAdvance(b->text()) > kMaxLabelWidth) f.setPixelSize(f.pixelSize() - 1);
     b->setFont(f);
     if (f.pixelSize() < kFontPx) b->setStyleSheet(QStringLiteral("font-size: %1px;").arg(f.pixelSize()));
+    // 12 px 로도 넓으면 줄임표(전체 이름은 툴팁). 칩 폭은 모든 칩이 같아 글자 하나가 리본 전체를 넓히면 1920 에서 타일 50 을 잃는다.
+    // 맑은 고딕에서는 가장 넓은 「프로젝트」 · 「GeoTIFF」도 64 px 안이라 일어나지 않고, 글꼴이 없는 offscreen(CI — 글자마다
+    // 1 em 상자)에서 「GeoTIFF」 84 px 가 여기에 걸린다(2026-10-16)
+    if (QFontMetrics(f).horizontalAdvance(b->text()) > kMaxLabelWidth)
+        b->setText(QFontMetrics(f).elidedText(b->text(), Qt::ElideRight, kMaxLabelWidth));
     g.row->addWidget(b, 0, Qt::AlignLeft | Qt::AlignTop);
     chips_.append({b, kind, iconName, false, a});
     drawChip(chips_.last(), looks().at(lookIndex_));
@@ -176,9 +181,17 @@ int Ribbon::chooseLook(const QList<int>& widths, int available) {
 
 RibbonLook Ribbon::look() const { return looks().at(lookIndex_); }
 
+// 칩 폭은 모든 칩이 같다(사용자 2026-10-16 「전체 ui 크기와 배치 고르게」): 글자 보이는 크기는 가장 넓은 글자 + 8
+// (타일 + 6 보다 작지 않게), 글자 숨김 크기는 표의 칩 폭. 칩마다 달랐을 때는 「열기」와 「프로젝트」의 폭이 달랐다.
+// 넓은 글자는 칩을 만들 때 12 px 까지 줄이고 그래도 64 px 넘으면 줄임표라(addAction) 칩 폭은 글자에 꼭 맞는다 —
+// 전에는 64 px 에서 폭만 잘라 넓은 글자가 칩 밖으로 나갔다(CI Windows 「GeoTIFF」, 2026-10-16)
 int Ribbon::chipWidth(const RibbonLook& L, const QToolButton* b) const {
     if (!L.labels) return L.chipWidth;
-    return std::max(L.tile + 6, std::min(labelWidth(b), kMaxLabelWidth) + kLabelPad);   // 바닥은 타일 + 6(Strata 는 + 8 — 묶음 7 + 입면 위젯이 1920 에 들어가게 2 px 좁힘)
+    (void)b;
+    int w = L.tile + 6;   // 바닥은 타일 + 6(Strata 는 + 8 — 입면 위젯까지 1920 에 들어가게 2 px 좁힘)
+    for (const Chip& c : chips_)
+        if (!c.button->property("narrowOnly").toBool()) w = std::max(w, labelWidth(c.button) + kLabelPad);
+    return w;
 }
 
 int Ribbon::chipHeight(const RibbonLook& L) const { return L.tile + 12 + (L.labels ? lineHeight() : 0); }

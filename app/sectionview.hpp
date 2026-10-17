@@ -5,16 +5,18 @@
 #include <QWidget>
 #include <functional>
 #include "asec/engine.hpp"
+#include "asec/sheet.hpp"
 
 struct SectionStyle {
     bool showImage = true, showLine = true, showLevels = true;
     bool showTicks = true;   // 거리 눈금(세로선 · 1 m · 5 m 굵게) — 입면 위(T10, D 키)
     bool depthFade = false;  // 입면 깊이 음영(먼 면일수록 옅게) — 계산 단계에서 적용, 내보내기도 같은 설정. 기본 끔(2026-10-10)
     double imageOpacity = 1.0;
-    double lineWidthPx = 2.0;   // 화면 단면선 굵기(보기 메뉴 1.5 / 2 / 3 px). 인쇄는 0.35 mm 고정
+    double lineWidthPx = 2.0;   // 화면 단면선 굵기(설정 view/sectionLineWidth, 기본 2 px). 인쇄 · 내보내기는 0.8 pt 고정(exportLineMm)
     double levelMinorPt = 0.2, levelMajorPt = 0.5;   // 레벨선 굵기(pt, 디자인 v5 결정 L): 10 cm 선 · 50 cm(1 m 포함) 선. 내보내기는 이 값 그대로, 화면은 보이게 바닥값
-    bool showBaseline = false;  // 기준선 EL(점선 + 「기준선 EL. 57.00 m」)
+    bool showBaseline = false;  // 기준선 표고(점선 + 「기준선 57.00 m」, 「EL.」 없음 — 사용자 2026-10-16)
     double baselineEl = 0;      // 절대 표고(m)
+    bool levelsBelowGround = true;   // 레벨선은 잘린 선 아래 땅속에만(지표 위 · 파낸 수혈 속 없음 — 보고서 도면 관례, 사용자 2026-10-16). DXF 도 같음
     bool plotScaleBar = true;   // 그림 칸 안 축척 막대(도면은 표제란 띠에 따로 그림)
     QString nameA = QStringLiteral("A"), nameB = QStringLiteral("A′");   // 단면 이름의 끝 글자(B–B′ 면 B · B′) — 축 글자·거리 축 이름에(2026-10-11)
 };
@@ -23,8 +25,8 @@ struct SectionStyle {
 // 화면 단면선 그리기 허용 오차(px): 꼭짓점이 그려진 선 중심에서 이만큼 안(눈에 안 보임). 내보내기는 솎지 않음
 constexpr double kScreenProfileTolPx = 0.1;
 
-/// 인쇄·조판 단면선 굵기(mm): 화면 선 굵기 2 px 가 0.35 mm. 1.5 → 0.26, 3 → 0.53 mm(사용자 요청 2026-10-11 「조판에서도 적용」)
-inline double exportLineMm(double lineWidthPx) { return 0.35 * std::clamp(lineWidthPx, 1.0, 4.0) / 2.0; }
+/// 인쇄·조판 단면선 굵기(mm) = 0.8 pt 고정(0.282 mm, 사용자 2026-10-16 「단면선 빨간선은 0.8pt고정」 — 화면 굵기를 따르던 옛 규칙을 바꿈)
+inline double exportLineMm() { return asec::kCutLinePt * 25.4 / 72.0; }
 
 struct SectionDoc {
     asec::SectionResult r;
@@ -60,8 +62,9 @@ void paintSectionDoc(QPainter& p, const SectionDoc& d, const QRectF& area, const
                      const QString& footer, const SectionImgGeo* geo = nullptr, bool busy = false, bool titleRow = true,
                      double contentDxPx = 0, double contentDyPx = 0, double viewZoom = 1, double viewPanX = 0, double viewPanY = 0,
                      SheetPaintProbe* probe = nullptr, const QImage* prevImg = nullptr, const SectionImgGeo* prevGeo = nullptr, double newAlpha = 1.0);   // prevImg = 크로스페이드 중 아직 보이는 옛 영상(그 위에 새 영상이 newAlpha 로 섞여 들어온다)
-/// 레벨선 간격(화면 4 px / 인쇄 0.5 mm 보다 촘촘하면 솎음). ui = DPI/96
-asec::LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport);
+/// 레벨선 간격(화면 8 px / 인쇄 0.5 mm 보다 촘촘하면 10 cm 선만 솎음). 표고 숫자는 50 cm 마다가 원칙(asec::fitLevelLabels) —
+/// 숫자가 있는 50 cm 선은 언제나 긋는다. fit = 숫자 배치(글자 배율 · 번갈아). ui = DPI/96
+asec::LevelPlan sectionLevelPlan(double ppm, double ui, bool forExport, asec::LevelLabelFit* fit = nullptr);
 /// 내보내기용 크기·변환(여백 포함, 영상 픽셀 1:1 정렬)
 QSize sectionExportLayout(const SectionDoc& d, double ppm, double ui, SectionXf& xf);
 
