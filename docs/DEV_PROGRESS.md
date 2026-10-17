@@ -397,6 +397,13 @@ C:\dev\kerf-v4c\asec_tests.exe
 - **확인:** `cmake --build build-msvc` 에러 0건(exit 0) · `asec_tests.exe "~CoalescingWorker*"` 168 케이스(193,868 assertions) 통과 · `--sheet-check` `a4-plot-ratio=0.8379 RESULT ok`(exit 0) · `--ui-audit` 1080p 및 4K(배율 2) `r4-sheet-splitters`, `r4-side-panel`, `r4-floating-cards` 포함 모두 `RESULT ok`(exit 0).
 - **판정(Ruling):** `Q_OBJECT` 0건 및 C++17 호환성 유지.
 
+### 2026-10-16 · Claude Code(Fable 5.1, 클라우드) — 도면 탭 「vector 로 보내기」(사용자 「ui버튼추가 누르면 내보내기를 이앱으로 들어가게 https://github.com/kesekikwon-netizen/vector.git」 · 「아니면 내보내기 경로나 바로가기를 지정할 수 있게」)
+- **vector 는 무엇인가(저장소 읽어 확인):** VectorCraft(Rust, egui) 포크에 「Trowel 고고학 CAD 모드」를 얹는 중. Windows 실행 파일 `vectorcraft.exe`. 파일 경로를 위치 인자로 받아 그대로 연다(`apps/vectorcraft/src/main.rs` → `open_files`). SVG 는 대화 상자 없이 열리고 DXF 는 「DXF Import Options」 창이 먼저 뜬다 → Trench 는 SVG 로 넘긴다. vector 쪽은 고치지 않았다.
+- **무엇을:**
+  - core `asec/handoff.hpp` · `core/src/handoff.cpp`(Qt 없음): 파일 이름 `<도면명>_<yyyyMMdd-HHmmss>.svg`(금지 글자 `_`, UTF-8 80 바이트), 실행 파일 후보(설정값 → 앱 옆 → `vector` · `VectorCraft` · `Trowel` 폴더와 그 상위), 실행 명령(파일 하나 위치 인자 · 작업 폴더 = 실행 파일 폴더), 기본 보낼 폴더 `<앱 폴더>/exports`. 시험 `tests/test_handoff.cpp` 6건(먼저 RED → GREEN).
+  - app `sheetexport.cpp`: 단면도 · 평·단면도 조판 판에 「vector 로 보내기」 단추(저장 단추 윗줄 오른쪽)와 「vector 로 보내기」 절(실행 파일… · 보낼 폴더… · 기본 폴더 — 설정 `handoff/vectorExe` · `handoff/outDir`). 누르면 지금 설정 그대로(형식만 SVG) 보낼 폴더에 내보낸 뒤(작업 스레드) `QProcess::startDetached` 로 vector 를 그 파일과 함께 연다. 실행 파일이 없으면 처음 한 번 고르게 하고(바로가기 .lnk 는 `QFileInfo::symLinkTarget` 로 대상 실행 파일로) 설정에 저장. 실패는 상태줄에. 원본 모델 폴더에는 쓰지 않는다. 평면도 조판에는 SVG 형식이 없어 단추를 두지 않았다.
+- **확인(Linux 클라우드 컨테이너):** `cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release -DASEC_BUILD_APP=OFF && ninja -C build-linux` exit 0 · `./build-linux/asec_tests` 201 케이스(199 통과 · 2 건너뜀 `[real]`) · Qt 6.4(apt)로 app 컴파일 — 새 코드 오류 0, 기존 `QSvgGenerator::SvgVersion` · `Qt::ColorScheme`(Qt 6.5+ API) 오류만 남음(이 브랜치 이전부터). Qt 6.8 은 컨테이너에서 내려받지 못해 Windows 앱 빌드는 CI 로. **실제로 단추를 눌러 vector 가 열리는 것은 Windows PC 에서 확인하지 않았다.**
+
 ## 5. 다음 할 일 (위에서부터)
 > ### ▶ 2026-10-11 중단 · 다른 PC 에서 이어받기 (Trench 최종 디자인 구현, 계획 T1–T22 중 **T1–T12 끝**)
 > 사용자 지시로 이 PC 의 /goal 을 중지하고 다른 PC 에서 이어 한다. **새 세션은 이것만 따르면 된다:**

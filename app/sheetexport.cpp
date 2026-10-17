@@ -4,6 +4,7 @@
 #include "mainwindow.hpp"
 
 #include "asec/dxf.hpp"
+#include "asec/handoff.hpp"
 #include "asec/raster.hpp"
 #include "asec/schedule.hpp"
 #include "cursors.hpp"
@@ -41,6 +42,7 @@
 #include <QPrintPreviewDialog>
 #include <QPrinter>
 #include <QPrinterInfo>
+#include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSettings>
@@ -2280,10 +2282,11 @@ private:
 };
 QWidget *
 sideBottom(QPushButton *def, QPushButton *primary, QPushButton *secondary,
-           QLabel **done,
-           QPushButton *extra =
+           QLabel **done, QPushButton *extra = nullptr,
+           QPushButton *extra2 =
                nullptr) { // 맨 아래 Line 위: 「n장 저장됨 · 폴더 열기」(저장
-                          // 뒤) / 조용한 「☆ 기본으로」 | 보조 | 흙색 주 단추
+                          // 뒤) / 조용한 「☆ 기본으로」 | 보조 | 흙색 주 단추.
+                          // extra2 = 「vector 로 보내기」(윗줄, extra 왼쪽)
   auto *w = new QWidget;
   w->setObjectName(QStringLiteral("sideBottom"));
   w->setAttribute(Qt::WA_StyledBackground);
@@ -2304,14 +2307,17 @@ sideBottom(QPushButton *def, QPushButton *primary, QPushButton *secondary,
   auto *h = new QHBoxLayout;
   h->setContentsMargins(0, 0, 0, 0);
   h->setSpacing(6);
-  if (extra) { // 인쇄(2026-10-12): 한 줄에 넷은 320 px 판에서 「☆ 기본으로」가
-               // 눌려 잘리므로 윗줄 = 기본으로 · 인쇄, 아랫줄 = 보조 · 주 단추
+  if (extra || extra2) { // 인쇄(2026-10-12): 한 줄에 넷은 320 px 판에서 「☆ 기본으로」가
+               // 눌려 잘리므로 윗줄 = 기본으로 · (vector) · 인쇄, 아랫줄 = 보조 · 주 단추
     auto *h0 = new QHBoxLayout;
     h0->setContentsMargins(0, 0, 0, 0);
     h0->setSpacing(6);
     h0->addWidget(def);
     h0->addStretch();
-    h0->addWidget(extra);
+    if (extra2)
+      h0->addWidget(extra2);
+    if (extra)
+      h0->addWidget(extra);
     v->addLayout(h0);
     h->addStretch();
     if (secondary)
@@ -2739,6 +2745,7 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
     h->addStretch();
     v->addWidget(fmtRow);
   }
+  v->addWidget(handoffSettingsWidget());
   // 도면 점검
   v->addWidget(sideCaption(QStringLiteral("도면 점검 · 저장을 막지 않음")));
   auto *check = new SheetCheckBox;
@@ -2751,6 +2758,12 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
   bDefault->setFocusPolicy(Qt::NoFocus);
   bDefault->setToolTip(QStringLiteral(
       "이 설정(용지 · 축척 · 항목 · 형식 · 선 굵기)을 다음 도면의 기본으로"));
+  auto *bVector = new QPushButton(QStringLiteral("vector 로 보내기"));
+  bVector->setObjectName("sheetVector");
+  bVector->setFocusPolicy(Qt::NoFocus);
+  bVector->setToolTip(QStringLiteral(
+      "이 도면을 SVG 로 보낼 폴더에 내보내고 vector(VectorCraft/Trowel)를 그 "
+      "파일로 연다. 실행 파일 · 보낼 폴더는 왼쪽 「vector 로 보내기」 절에서"));
   auto *bSave = new QPushButton;
   bSave->setObjectName("primary");
   bSave->setDefault(true);
@@ -2765,11 +2778,24 @@ QDialog *MainWindow::buildSheetDialog(SheetParams &io, bool &accepted) {
       "%(줄이지 않음) — 축척이 종이에서도 맞음"));
   {
     QLabel *done = nullptr;
-    sv->addWidget(sideBottom(bDefault, bSave, bPdf, &done, bPrint));
+    sv->addWidget(sideBottom(bDefault, bSave, bPdf, &done, bPrint, bVector));
     sheetDoneLabel_ = done;
   }
   QObject::connect(bPrint, &QPushButton::clicked, d,
                    [this, docP, st] { printSectionSheet(*docP, *st); });
+  QObject::connect(bVector, &QPushButton::clicked, d, [this, st, src = src_] {
+    if (src_ != src || !ensureFinalSection())
+      return; // 모델이 바뀌었거나 최종 단면이 없으면 보내지 않음
+    const SectionDoc doc = section_->doc(); // 저장과 같은 시점의 단면
+    SheetParams sp = *st;
+    sp.format = 4; // vector 는 SVG 를 대화 상자 없이 바로 연다
+    sendSheetToVector(
+        QStringLiteral("도면을 vector 로 보내는 중"),
+        sp.title.isEmpty() ? modelDisplayName(path_) : sp.title,
+        [doc, src, sp](const QString &f, QString *m) {
+          return exportSectionSvg(doc, *src, sp, f, m);
+        });
+  });
   auto *dlgSplit = new QSplitter(Qt::Horizontal, d);
   dlgSplit->setObjectName("sheetDialogSplitter");
   dlgSplit->setHandleWidth(4);
@@ -3553,6 +3579,186 @@ void MainWindow::noteBatchDone(int n, const QString &dir) {
           .arg(n)
           .arg(QUrl::fromLocalFile(dir).toString()));
   sheetDoneLabel_->show();
+}
+
+// ---- vector(VectorCraft/Trowel)로 보내기(2026-10-16). 순수 계산(파일 이름 · 실행
+// 파일 후보 · 명령)은 core asec/handoff.hpp(tests/test_handoff.cpp). 원본 모델 폴더에는
+// 쓰지 않는다 — 보낼 폴더는 설정값 또는 projects 옆 exports
+QString MainWindow::handoffDir() const {
+  const QString set = QSettings().value("handoff/outDir").toString();
+  if (!set.isEmpty())
+    return set;
+  return qs8(handoffDefaultDir(
+      QFileInfo(projectDir()).absolutePath().toStdString()));
+}
+
+QString MainWindow::pickVectorExe() {
+  QSettings st;
+  const QString was = st.value("handoff/vectorExe").toString();
+  const QString start = was.isEmpty() ? QCoreApplication::applicationDirPath()
+                                      : QFileInfo(was).absolutePath();
+  QString f = QFileDialog::getOpenFileName(
+      this, QStringLiteral("vector 실행 파일 또는 바로가기"), start,
+#ifdef Q_OS_WIN
+      QStringLiteral("실행 파일 · 바로가기 (*.exe *.lnk);;모든 파일 (*)")
+#else
+      QStringLiteral("모든 파일 (*)")
+#endif
+  );
+  if (f.isEmpty())
+    return {};
+  const QFileInfo fi(f); // 바탕화면 바로가기(.lnk)면 가리키는 실행 파일로
+  if (fi.isShortcut() || fi.isSymLink()) {
+    const QString t = fi.symLinkTarget();
+    if (!t.isEmpty())
+      f = t;
+  }
+  st.setValue("handoff/vectorExe", f);
+  return f;
+}
+
+QString MainWindow::vectorExePath(bool ask) {
+  auto exists = [](const std::string &p) {
+    const QFileInfo fi(qs8(p));
+    return fi.exists() && fi.isFile();
+  };
+  QString exe = qs8(findVectorExe(
+      QCoreApplication::applicationDirPath().toStdString(),
+      QSettings().value("handoff/vectorExe").toString().toStdString(),
+      exists));
+  if (!exe.isEmpty()) {
+    const QFileInfo fi(exe); // 설정에 바로가기가 들어 있어도 실행 파일로
+    if (fi.isShortcut() || fi.isSymLink()) {
+      const QString t = fi.symLinkTarget();
+      if (!t.isEmpty())
+        exe = t;
+    }
+    return exe;
+  }
+  return ask ? pickVectorExe() : QString();
+}
+
+void MainWindow::sendSheetToVector(
+    const QString &what, const QString &title,
+    std::function<bool(const QString &, QString *)> exportSvg) {
+  const QString exe = vectorExePath(true);
+  if (exe.isEmpty()) {
+    showStatus(QStringLiteral("vector 를 찾지 못했습니다 — 조판 판 「vector 로 "
+                              "보내기」의 「실행 파일…」에서 고르세요"));
+    return;
+  }
+  const QString dir = handoffDir();
+  if (!QDir().mkpath(dir)) {
+    showStatus(QStringLiteral("보낼 폴더를 만들 수 없습니다: %1")
+                   .arg(QDir::toNativeSeparators(dir)));
+    return;
+  }
+  const QString file =
+      dir + "/" +
+      qs8(handoffFileName(title.toStdString(),
+                          QDateTime::currentDateTime()
+                              .toString(QStringLiteral("yyyyMMdd-HHmmss"))
+                              .toStdString(),
+                          "svg"));
+  runTask(
+      what, [exportSvg, file](QString *m) { return exportSvg(file, m); },
+      [this, exe, file, dir](bool ok, const QString &m) {
+        if (!ok) {
+          report(false, m);
+          return;
+        }
+        const HandoffCommand c =
+            vectorCommand(exe.toStdString(), file.toStdString());
+        QStringList args;
+        for (const std::string &a : c.args)
+          args << qs8(a);
+        const QString nf = QDir::toNativeSeparators(file);
+        const bool started =
+            QProcess::startDetached(qs8(c.program), args, qs8(c.workDir));
+        showStatus(started ? QStringLiteral("vector 로 보냄: %1").arg(nf)
+                           : QStringLiteral("vector 를 실행하지 못했습니다(%1) — "
+                                            "파일은 %2")
+                                 .arg(QDir::toNativeSeparators(exe), nf));
+        if (sheetDoneLabel_) {
+          sheetDoneLabel_->setText(
+              QStringLiteral("%1 · <a href=\"%2\" style=\"color:#9C4A2F\">폴더 "
+                             "열기</a>")
+                  .arg(started ? QStringLiteral("vector 로 보냄")
+                               : QStringLiteral("SVG 만 저장됨(vector 실행 실패)"))
+                  .arg(QUrl::fromLocalFile(dir).toString()));
+          sheetDoneLabel_->show();
+        }
+      });
+}
+
+QWidget *MainWindow::handoffSettingsWidget() {
+  auto *w = new QWidget;
+  auto *v = new QVBoxLayout(w);
+  v->setContentsMargins(0, 0, 0, 0);
+  v->setSpacing(4);
+  v->addWidget(sideCaption(QStringLiteral("vector 로 보내기")));
+  auto *exeLab = lbl(QString(), "hint");
+  exeLab->setWordWrap(true);
+  auto *dirLab = lbl(QString(), "hint");
+  dirLab->setWordWrap(true);
+  v->addWidget(exeLab);
+  v->addWidget(dirLab);
+  auto *row = new QWidget;
+  auto *h = new QHBoxLayout(row);
+  h->setContentsMargins(0, 0, 0, 0);
+  h->setSpacing(4);
+  auto small = [](const QString &t, const QString &tip) {
+    auto *b = new QToolButton;
+    b->setObjectName("smallRow");
+    b->setText(t);
+    b->setToolTip(tip);
+    b->setFocusPolicy(Qt::NoFocus);
+    return b;
+  };
+  auto *bExe = small(QStringLiteral("실행 파일…"),
+                     QStringLiteral("vector 실행 파일(vectorcraft.exe) 또는 "
+                                    "바탕화면 바로가기(.lnk)를 고른다 — 설정에 저장"));
+  auto *bDir = small(QStringLiteral("보낼 폴더…"),
+                     QStringLiteral("vector 로 보낼 SVG 를 둘 폴더 — 비우면 앱 "
+                                    "폴더 아래 exports"));
+  auto *bReset = small(QStringLiteral("기본 폴더"),
+                       QStringLiteral("보낼 폴더를 기본(앱 폴더 아래 exports)으로"));
+  h->addWidget(bExe);
+  h->addWidget(bDir);
+  h->addWidget(bReset);
+  h->addStretch();
+  v->addWidget(row);
+  auto refresh = [this, exeLab, dirLab, bReset] {
+    const QString exe = vectorExePath(false);
+    exeLab->setText(
+        exe.isEmpty()
+            ? QStringLiteral("실행 파일: 아직 없음 — 처음 보낼 때 고르게 됨(Trench "
+                             "옆 vector 폴더에 있으면 자동으로 찾음)")
+            : QStringLiteral("실행 파일: %1").arg(QDir::toNativeSeparators(exe)));
+    const bool custom =
+        !QSettings().value("handoff/outDir").toString().isEmpty();
+    dirLab->setText(QStringLiteral("보낼 폴더: %1%2")
+                        .arg(QDir::toNativeSeparators(handoffDir()),
+                             custom ? QString() : QStringLiteral(" (기본)")));
+    bReset->setVisible(custom);
+  };
+  QObject::connect(bExe, &QToolButton::clicked, w, [this, refresh] {
+    pickVectorExe();
+    refresh();
+  });
+  QObject::connect(bDir, &QToolButton::clicked, w, [this, refresh] {
+    const QString dir = QFileDialog::getExistingDirectory(
+        this, QStringLiteral("vector 로 보낼 폴더"), handoffDir());
+    if (!dir.isEmpty())
+      QSettings().setValue("handoff/outDir", dir);
+    refresh();
+  });
+  QObject::connect(bReset, &QToolButton::clicked, w, [refresh] {
+    QSettings().remove("handoff/outDir");
+    refresh();
+  });
+  refresh();
+  return w;
 }
 
 void MainWindow::refreshSheetList() {
@@ -6306,6 +6512,7 @@ void MainWindow::dlgComboSheet() {
     h->addStretch();
     v->addWidget(row);
   }
+  v->addWidget(handoffSettingsWidget());
   v->addWidget(sideCaption(QStringLiteral("배치 · 저장을 막지 않음")));
   auto *check = new SheetCheckBox;
   v->addWidget(check);
@@ -6317,12 +6524,18 @@ void MainWindow::dlgComboSheet() {
   bDefault->setFocusPolicy(Qt::NoFocus);
   bDefault->setToolTip(QStringLiteral(
       "이 설정(축척 · 평면 여유 · 넣을 것 · 형식)을 다음 평·단면도의 기본으로"));
+  auto *bVector = new QPushButton(QStringLiteral("vector 로 보내기"));
+  bVector->setObjectName("sheetVector");
+  bVector->setFocusPolicy(Qt::NoFocus);
+  bVector->setToolTip(QStringLiteral(
+      "이 평·단면도를 SVG 로 보낼 폴더에 내보내고 vector(VectorCraft/Trowel)를 "
+      "그 파일로 연다. 실행 파일 · 보낼 폴더는 왼쪽 「vector 로 보내기」 절에서"));
   auto *bSave = new QPushButton;
   bSave->setObjectName("primary");
   bSave->setDefault(true);
   {
     QLabel *done = nullptr;
-    sv->addWidget(sideBottom(bDefault, bSave, nullptr, &done));
+    sv->addWidget(sideBottom(bDefault, bSave, nullptr, &done, nullptr, bVector));
     sheetDoneLabel_ = done;
   }
   auto *dlgSplit = new QSplitter(Qt::Horizontal, d);
@@ -7006,6 +7219,26 @@ void MainWindow::dlgComboSheet() {
   QObject::connect(bSave, &QPushButton::clicked, d, [this] {
     saveEmbeddedSheet();
   });
+  QObject::connect(bVector, &QPushButton::clicked, d,
+                   [this, st, inputs, src = src_] {
+                     if (src_ != src)
+                       return; // 모델이 바뀌었으면 옛 도면을 보내지 않음
+                     ComboSheetParams sp = *st;
+                     sp.format = 4; // vector 는 SVG 를 대화 상자 없이 바로 연다
+                     const std::vector<ComboSecInput> in = *inputs;
+                     sendSheetToVector(
+                         QStringLiteral("평·단면도를 vector 로 보내는 중"),
+                         sp.title,
+                         [this, src, sp, in](const QString &f, QString *m) {
+                           return exportComboSheet(
+                               *src, in, sp, f, m, &cancelTask_,
+                               [this](double x) {
+                                 QMetaObject::invokeMethod(
+                                     this, [this, x] { setProgress(x); },
+                                     Qt::QueuedConnection);
+                               });
+                         });
+                   });
   (*refresh)();
   (*reload)(true);
   d->resize(1000, 690);
